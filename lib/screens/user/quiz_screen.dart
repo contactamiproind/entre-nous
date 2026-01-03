@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/progress_service.dart';
-import '../services/pathway_service.dart';
-import '../widgets/celebration_widget.dart';
-import '../widgets/card_match_question_widget.dart';
+import '../../services/progress_service.dart';
+import '../../services/pathway_service.dart';
+import '../../widgets/celebration_widget.dart';
+import '../../widgets/card_match_question_widget.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class QuizScreen extends StatefulWidget {

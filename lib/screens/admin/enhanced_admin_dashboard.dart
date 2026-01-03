@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../widgets/assign_pathways_tab.dart';
-import '../models/pathway.dart';
+import '../../widgets/assign_pathways_tab.dart';
+import '../../models/pathway.dart';
 import 'user_management_screen.dart';
 import 'question_bank_management_screen.dart';
 import 'department_management_screen.dart';

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'screens/splash_screen.dart';
-import 'screens/welcome_screen.dart';
-import 'screens/login_screen.dart';
-import 'screens/signup_screen.dart';
-import 'screens/enhanced_user_dashboard.dart';
-import 'screens/enhanced_admin_dashboard.dart';
+import 'screens/common/splash_screen.dart';
+import 'screens/common/welcome_screen.dart';
+import 'screens/common/login_screen.dart';
+import 'screens/common/signup_screen.dart';
+import 'screens/user/enhanced_user_dashboard.dart';
+import 'screens/admin/enhanced_admin_dashboard.dart';
 import 'theme/app_theme.dart';
 import 'config/supabase_config.dart';
 

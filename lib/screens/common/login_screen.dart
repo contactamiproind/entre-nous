@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/responsive_utils.dart';
+import '../../utils/responsive_utils.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -407,19 +407,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     letterSpacing: 1,
                                   ),
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      TextButton(
-                        onPressed: () {
-                           Navigator.pushNamed(context, '/signup');
-                        },
-                        child: Text(
-                          'Don\'t have an account? Sign Up',
-                           style: TextStyle(
-                              color: const Color(0xFF1A2F4B).withOpacity(0.7),
-                              fontWeight: FontWeight.w600,
-                           ),
                         ),
                       ),
                       SizedBox(height: padding),

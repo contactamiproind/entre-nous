@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/pathway.dart';
-import '../models/user_assignment.dart';
-import '../services/pathway_service.dart';
-import '../services/assignment_service.dart';
-import '../services/progress_service.dart';
+import '../../models/pathway.dart';
+import '../../models/user_assignment.dart';
+import '../../services/pathway_service.dart';
+import '../../services/assignment_service.dart';
+import '../../services/progress_service.dart';
 import 'profile_actions_screen.dart';
 import 'pathway_detail_screen.dart';
 

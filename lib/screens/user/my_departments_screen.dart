@@ -11,7 +11,6 @@ class MyDepartmentsScreen extends StatefulWidget {
 
 class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
   List<Map<String, dynamic>> _enrolledDepartments = [];
-  List<Map<String, dynamic>> _availableDepartments = [];
   bool _isLoading = true;
   String? _error;
 
@@ -35,7 +34,6 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
 
       setState(() {
         _enrolledDepartments = List<Map<String, dynamic>>.from(enrolled);
-        _availableDepartments = []; // No self-enrollment - admin assigns only
         _isLoading = false;
       });
     } catch (e) {

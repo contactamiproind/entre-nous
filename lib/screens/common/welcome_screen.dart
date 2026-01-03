@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../services/storage_service.dart';
-import '../utils/responsive_utils.dart';
+import '../../services/storage_service.dart';
+import '../../utils/responsive_utils.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});

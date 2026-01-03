@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/responsive_utils.dart';
+import '../../utils/responsive_utils.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});

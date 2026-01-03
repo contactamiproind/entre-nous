@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/pathway.dart';
-import '../services/pathway_service.dart';
+import '../../models/pathway.dart';
+import '../../services/pathway_service.dart';
 
 class AddQuestionScreen extends StatefulWidget {
   const AddQuestionScreen({super.key});
