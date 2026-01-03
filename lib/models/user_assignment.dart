@@ -45,8 +45,8 @@ class UserAssignment {
     return UserAssignment(
       id: json['id']?.toString() ?? '',
       userId: json['user_id']?.toString() ?? '',
-      pathwayId: json['pathway_id']?.toString() ?? '', // Fixed: use pathway_id not dept_id
-      assignmentName: json['assignment_name'] ?? json['pathway_name'] ?? 'Unnamed Assignment',
+      pathwayId: json['dept_id']?.toString() ?? json['pathway_id']?.toString() ?? '', // Use dept_id from usr_dept
+      assignmentName: json['dept_name'] ?? json['assignment_name'] ?? json['pathway_name'] ?? 'Unnamed Assignment',
       orientationCompleted: json['orientation_completed'] ?? false,
       marks: json['marks'] ?? 0,
       maxMarks: json['max_marks'] ?? 100,

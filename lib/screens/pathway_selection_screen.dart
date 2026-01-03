@@ -33,8 +33,8 @@ class _DepartmentSelectionScreenState extends State<DepartmentSelectionScreen> {
 
       // Only load pathways that are assigned to this user by admin
       final response = await Supabase.instance.client
-          .from('user_pathway')
-          .select('pathway_id, pathway_name, departments(*)')
+          .from('usr_dept')
+          .select('dept_id, dept_name, departments(*)')
           .eq('user_id', user.id);
 
       // Extract the departments from the response
@@ -70,10 +70,10 @@ class _DepartmentSelectionScreenState extends State<DepartmentSelectionScreen> {
 
       // Check if already enrolled
       final existing = await Supabase.instance.client
-          .from('user_pathway')
+          .from('usr_dept')
           .select()
           .eq('user_id', user.id)
-          .eq('pathway_id', pathwayId)
+          .eq('dept_id', pathwayId)
           .maybeSingle();
 
       if (existing != null) {
@@ -92,21 +92,14 @@ class _DepartmentSelectionScreenState extends State<DepartmentSelectionScreen> {
         return;
       }
 
-      // Enroll user in pathway
-      await Supabase.instance.client.from('user_pathway').insert({
-        'user_id': user.id,
-        'pathway_id': pathwayId,
-        'assigned_at': DateTime.now().toIso8601String(),
-        'is_current': true, // Set as current pathway
-        'assigned_by': user.id,
-      });
-
-      // Create initial user progress for this pathway
-      await Supabase.instance.client.from('usr_stat').insert({
-        'user_id': user.id,
-        'pathway_id': pathwayId,
-        'current_level': 1,
-      });
+      // Enroll user in pathway using RPC function
+      await Supabase.instance.client.rpc(
+        'assign_pathway_with_questions',
+        params: {
+          'p_user_id': user.id,
+          'p_dept_id': pathwayId,
+        },
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

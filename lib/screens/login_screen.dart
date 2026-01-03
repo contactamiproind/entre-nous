@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'pathway_detail_screen.dart';
-import 'no_pathways_screen.dart';
 import '../utils/responsive_utils.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -326,7 +324,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _passwordController,
                         obscureText: true,
-                         style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _login(),
                         decoration: InputDecoration(
                           labelText: 'Password',
                           filled: true,

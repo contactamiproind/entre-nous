@@ -262,7 +262,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
         // Delete pathway assignments
         await Supabase.instance.client
-            .from('user_pathway')
+            .from('usr_dept')
             .delete()
             .eq('user_id', user['user_id']);
 

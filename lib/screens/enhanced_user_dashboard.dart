@@ -45,15 +45,14 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
       _userId = user.id;
       _userEmail = user.email;
       
-      // Check orientation status first
-      final isOrientationCompleted = await _pathwayService.isOrientationCompleted(_userId!);
-      
-      if (!isOrientationCompleted && mounted) {
-        // User hasn't completed orientation, redirect them
-        setState(() => _isLoading = false);
-        _showOrientationRequiredDialog();
-        return;
-      }
+      // Skip orientation check - users can access any assigned department
+      // Orientation is optional, not mandatory
+      // final isOrientationCompleted = await _pathwayService.isOrientationCompleted(_userId!);
+      // if (!isOrientationCompleted && mounted) {
+      //   setState(() => _isLoading = false);
+      //   _showOrientationRequiredDialog();
+      //   return;
+      // }
       
       // Load data in parallel for faster performance
       Map<String, dynamic>? progress;
@@ -95,17 +94,22 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
           debugPrint('Error loading pathway from progress: $e');
         }
       } else if (assignments.isNotEmpty) {
-        // Fallback: Load from user_pathway (assignments)
+        // Fallback: Load from usr_dept (assignments)
         try {
           final firstAssignment = assignments.first;
-          if (firstAssignment.pathwayId.isNotEmpty) {
+          // Validate pathwayId is not empty and is a valid UUID format
+          if (firstAssignment.pathwayId.isNotEmpty && 
+              firstAssignment.pathwayId.length == 36 &&
+              firstAssignment.pathwayId.contains('-')) {
             currentPathway = await _pathwayService.getPathwayById(firstAssignment.pathwayId);
             if (currentPathway != null) {
               currentLevels = await _pathwayService.getPathwayLevels(currentPathway.id);
             }
+          } else {
+            debugPrint('⚠️ Invalid pathwayId: "${firstAssignment.pathwayId}"');
           }
         } catch (e) {
-          debugPrint('Error loading pathway from assignment: $e');
+          debugPrint('❌ ERROR loading pathway data: $e');
         }
       }
       

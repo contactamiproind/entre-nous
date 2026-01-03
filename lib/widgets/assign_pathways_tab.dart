@@ -37,39 +37,36 @@ class _AssignPathwaysTabState extends State<AssignPathwaysTab> {
         (p) => p.id == _selectedPathwayId,
       );
 
-      // Assign pathway (allows multiple pathways per user)
-      await Supabase.instance.client.from('user_pathway').insert({
-        'user_id': _selectedUserId,
-        'pathway_id': _selectedPathwayId,
-        'pathway_name': pathway.title,
-        'assigned_by': admin.id,
-        'assigned_at': DateTime.now().toIso8601String(),
-        'is_current': true,
-      });
+      // Check if already assigned
+    final existing = await Supabase.instance.client
+        .from('usr_dept')
+        .select()
+        .eq('user_id', _selectedUserId!)
+        .eq('dept_id', _selectedPathwayId!)
+        .maybeSingle();
 
-      // Initialize user progress for this pathway
-      try {
-        await Supabase.instance.client.from('user_progress').upsert({
-          'user_id': _selectedUserId,
-          'current_pathway_id': _selectedPathwayId,
-          'current_level': 1,
-          'completed_assignments': 0,
-          'created_at': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'user_id');
-      } catch (e) {
-        print('User progress initialization note: $e');
-      }
-
+    if (existing != null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Pathway assigned successfully!'),
-            backgroundColor: Colors.green,
+            content: Text('Department already assigned to this user'),
+            backgroundColor: Colors.orange,
           ),
         );
       }
+      setState(() => _isAssigning = false);
+      return;
+    }
 
+    // Assign pathway with questions using RPC function
+    await Supabase.instance.client.rpc(
+      'assign_pathway_with_questions',
+      params: {
+        'p_user_id': _selectedUserId,
+        'p_dept_id': _selectedPathwayId,
+        'p_assigned_by': admin.id,
+      },
+    );
       // Reset selections
       setState(() {
         _selectedUserId = null;

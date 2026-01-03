@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'pathway_detail_screen.dart';
-import 'pathway_selection_screen.dart';
 
 class MyDepartmentsScreen extends StatefulWidget {
   const MyDepartmentsScreen({super.key});
@@ -27,10 +26,10 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
-      // Load only enrolled pathways (assigned by admin)
+      // Load only enrolled departments (assigned by admin)
       final enrolled = await Supabase.instance.client
-          .from('user_pathway')
-          .select('*, departments(*)')
+          .from('usr_dept')
+          .select('id, user_id, dept_id, dept_name, is_current, total_questions, answered_questions, status, assigned_at, departments(id, title, description)')
           .eq('user_id', user.id)
           .order('assigned_at');
 
@@ -54,15 +53,15 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
 
       // Update is_current for all pathways
       await Supabase.instance.client
-          .from('user_pathway')
+          .from('usr_dept')
           .update({'is_current': false})
           .eq('user_id', user.id);
 
       await Supabase.instance.client
-          .from('user_pathway')
+          .from('usr_dept')
           .update({'is_current': true})
           .eq('user_id', user.id)
-          .eq('pathway_id', pathwayId);
+          .eq('dept_id', pathwayId);
 
       _loadDepartments();
     } catch (e) {
@@ -116,9 +115,9 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Enrolled Pathways
+                      // Enrolled Departments
                       const Text(
-                        'My Enrolled Pathways',
+                        'My Enrolled Departments',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -130,15 +129,23 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
                           child: Padding(
                             padding: EdgeInsets.all(24.0),
                             child: Center(
-                              child: Text('No pathways enrolled yet'),
+                              child: Text('No departments enrolled yet'),
                             ),
                           ),
                         )
                       else
                         ..._enrolledDepartments.map((enrollment) {
+                          // Use dept_name from usr_dept (already saved correctly)
+                          final deptId = enrollment['dept_id'];
+                          final deptName = enrollment['dept_name'] ?? 'Unknown Department';
                           final pathway = enrollment['departments'];
+                          
+                          // Use dept_name from usr_dept as primary source
+                          final deptTitle = deptName;
+                          final deptDescription = pathway?['description'] ?? 'Tap to view levels and questions';
+                          
                           final isCurrent = enrollment['is_current'] == true;
-                          final color = _getDepartmentColor(pathway['title']);
+                          final color = _getDepartmentColor(deptTitle);
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -149,8 +156,8 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => DepartmentDetailScreen(
-                                      pathwayId: pathway['id'],
-                                      pathwayName: pathway['title'],
+                                      pathwayId: deptId,
+                                      pathwayName: deptTitle,
                                     ),
                                   ),
                                 );
@@ -185,7 +192,7 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              pathway['title'],
+                                              deptTitle,
                                               style: const TextStyle(
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.bold,
@@ -193,7 +200,7 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              pathway['description'] ?? '',
+                                              deptDescription,
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color: Colors.grey[600],
@@ -226,7 +233,7 @@ class _MyDepartmentsScreenState extends State<MyDepartmentsScreen> {
                                       ),
                                       if (!isCurrent)
                                         TextButton(
-                                          onPressed: () => _switchToDepartment(pathway['id']),
+                                          onPressed: () => _switchToDepartment(deptId),
                                           child: const Text('Switch'),
                                         ),
                                       const Icon(Icons.arrow_forward_ios, size: 16),

@@ -1,4 +1,30 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class SupabaseConfig {
-  static const String supabaseUrl = 'https://svqdtryvcbnltfaqjxbf.supabase.co';
-  static const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2cWR0cnl2Y2JubHRmYXFqeGJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU5NzAyNzAsImV4cCI6MjA4MTU0NjI3MH0.XIq00j5ncuwh2Fh4nh-StvP-Q92tD4ZZjsK_suwefMs';
+  static String get supabaseUrl {
+    final url = dotenv.env['SUPABASE_URL'];
+    if (url == null || url.isEmpty) {
+      throw Exception(
+        'SUPABASE_URL is not set in .env file. '
+        'Please ensure .env file exists and contains SUPABASE_URL.',
+      );
+    }
+    return url;
+  }
+
+  static String get supabaseAnonKey {
+    final key = dotenv.env['SUPABASE_ANON_KEY'];
+    if (key == null || key.isEmpty) {
+      throw Exception(
+        'SUPABASE_ANON_KEY is not set in .env file. '
+        'Please ensure .env file exists and contains SUPABASE_ANON_KEY.',
+      );
+    }
+    return key;
+  }
+
+  static void validate() {
+    supabaseUrl;
+    supabaseAnonKey;
+  }
 }

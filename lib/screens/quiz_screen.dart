@@ -6,16 +6,17 @@ import '../services/pathway_service.dart';
 import '../widgets/celebration_widget.dart';
 import '../widgets/card_match_question_widget.dart';
 import 'package:audioplayers/audioplayers.dart';
-import '../theme/app_theme.dart';
 
 class QuizScreen extends StatefulWidget {
   final Map<String, dynamic> level;
   final String pathwayName;
+  final String pathwayId;
 
   const QuizScreen({
     super.key,
     required this.level,
     required this.pathwayName,
+    required this.pathwayId,
   });
 
   @override
@@ -54,32 +55,44 @@ class _QuizScreenState extends State<QuizScreen> {
   Future<void> _loadQuestions() async {
     try {
       
-      // Use dept_levels.id (FK constraint requires this)
-      final queryLevelId = widget.level['id'];
-      debugPrint('🔍 Loading questions for level:');
-      debugPrint('  Level ID (dept_levels.id): ${widget.level['id']}');
-      debugPrint('  Level ID (dept_levels.level_id): ${widget.level['level_id']}');
-      debugPrint('  ✅ Using for query: $queryLevelId');
-      debugPrint('  Level data: ${widget.level}');
+      // Get current user
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
       
+      // Get level number from widget
+      final levelNumber = widget.level['level_number'] ?? 1;
+      
+      debugPrint('🔍 Loading assigned questions for user ${user.id}');
+      debugPrint('  Department ID: ${widget.pathwayId}');
+      debugPrint('  Level number: $levelNumber');
+      
+      // Load questions from usr_progress (assigned questions only)
       final data = await Supabase.instance.client
-          .from('questions')
-          .select('*, quest_types(type)')
-          .eq('level_id', queryLevelId);
+          .from('usr_progress')
+          .select('id, question_id, question_text, question_type, difficulty, points, status, user_answer, is_correct')
+          .eq('user_id', user.id)
+          .eq('dept_id', widget.pathwayId)
+          .eq('level_number', levelNumber)
+          .order('created_at');
       
-      debugPrint('📊 Query returned ${data.length} questions');
+      debugPrint('📊 Found ${data.length} assigned questions for this level');
 
-      List<Map<String, dynamic>> questions = List<Map<String, dynamic>>.from(data);
+      List<Map<String, dynamic>> questions = [];
       
-      // Map DB types to UI types
-      for (var q in questions) {
-        if (q['quest_types'] != null) {
-          final dbType = q['quest_types']['type'];
-          // Map stored type to UI type
-          if (dbType == 'mcq') q['question_type'] = 'multiple_choice';
-          else if (dbType == 'match') q['question_type'] = 'match_following';
-          else q['question_type'] = dbType; // card_match, etc.
-        }
+      // Transform usr_progress data to match expected question format
+      for (var progress in data) {
+        questions.add({
+          'id': progress['question_id'],
+          'progress_id': progress['id'], // Store usr_progress ID for updates
+          'title': progress['question_text'],
+          'description': progress['question_type'],
+          'question_type': 'multiple_choice', // Default, can be enhanced
+          'difficulty': progress['difficulty'],
+          'points': progress['points'],
+          'status': progress['status'],
+          'user_answer': progress['user_answer'],
+          'is_correct': progress['is_correct'],
+        });
       }
 
       setState(() {

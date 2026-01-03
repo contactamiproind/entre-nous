@@ -8,7 +8,7 @@ class AssignmentService {
   Future<List<UserAssignment>> getUserAssignments(String userId) async {
     try {
       final response = await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .select('''
             *,
             departments!inner(title)
@@ -18,9 +18,11 @@ class AssignmentService {
 
       return (response as List)
           .map((json) {
-            // Add pathway name from the joined departments table
+            // dept_name is already in usr_dept, but keep for compatibility
             if (json['departments'] != null) {
               json['pathway_name'] = json['departments']['title'];
+            } else {
+              json['pathway_name'] = json['dept_name'];
             }
             return UserAssignment.fromJson(json);
           })
@@ -34,7 +36,7 @@ class AssignmentService {
   Future<UserAssignment?> getAssignmentById(String assignmentId) async {
     try {
       final response = await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .select()
           .eq('id', assignmentId)
           .single();
@@ -49,7 +51,7 @@ class AssignmentService {
   Future<List<UserAssignment>> getAllAssignments() async {
     try {
       final response = await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .select('''
             *,
             departments!inner(title)
@@ -58,9 +60,11 @@ class AssignmentService {
 
       return (response as List)
           .map((json) {
-            // Add pathway name from the joined departments table
+            // dept_name is already in usr_dept, but keep for compatibility
             if (json['departments'] != null) {
               json['pathway_name'] = json['departments']['title'];
+            } else {
+              json['pathway_name'] = json['dept_name'];
             }
             return UserAssignment.fromJson(json);
           })
@@ -70,7 +74,28 @@ class AssignmentService {
     }
   }
 
-  // Admin: Create a new assignment for a user
+  // Admin: Assign pathway with questions using database function
+  Future<String> assignPathwayWithQuestions({
+    required String userId,
+    required String deptId,
+    String? assignedBy,
+  }) async {
+    try {
+      final result = await _supabase.rpc(
+        'assign_pathway_with_questions',
+        params: {
+          'p_user_id': userId,
+          'p_dept_id': deptId,
+          'p_assigned_by': assignedBy ?? _supabase.auth.currentUser?.id,
+        },
+      );
+      return result as String; // Returns usr_dept_id
+    } catch (e) {
+      throw Exception('Failed to assign pathway: $e');
+    }
+  }
+
+  // Admin: Create a new assignment for a user (legacy - use assignPathwayWithQuestions instead)
   Future<UserAssignment> createAssignment({
     required String userId,
     required String assignmentName,
@@ -80,11 +105,12 @@ class AssignmentService {
   }) async {
     try {
       final response = await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .insert({
             'user_id': userId,
-            'pathway_name': assignmentName,
+            'dept_name': assignmentName,
             'is_current': true,
+            'status': 'active',
           })
           .select()
           .single();
@@ -106,10 +132,14 @@ class AssignmentService {
   }) async {
     try {
       final updateData = <String, dynamic>{};
-      if (assignmentName != null) updateData['pathway_name'] = assignmentName;
+      if (assignmentName != null) updateData['dept_name'] = assignmentName;
+      if (completedAt != null) {
+        updateData['completed_at'] = completedAt.toIso8601String();
+        updateData['status'] = 'completed';
+      }
 
       await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .update(updateData)
           .eq('id', assignmentId);
     } catch (e) {
@@ -121,9 +151,11 @@ class AssignmentService {
   Future<void> markAsCompleted(String assignmentId, int marks) async {
     try {
       await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .update({
             'is_current': false,
+            'status': 'completed',
+            'completed_at': DateTime.now().toIso8601String(),
           })
           .eq('id', assignmentId);
     } catch (e) {
@@ -135,7 +167,7 @@ class AssignmentService {
   Future<void> deleteAssignment(String assignmentId) async {
     try {
       await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .delete()
           .eq('id', assignmentId);
     } catch (e) {

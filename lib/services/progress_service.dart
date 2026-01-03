@@ -30,10 +30,10 @@ class ProgressService {
     required String departmentId,
   }) async {
     final response = await _supabase
-        .from('user_progress_summary')
+        .from('usr_dept')
         .select()
         .eq('user_id', userId)
-        .eq('department_id', departmentId)
+        .eq('dept_id', departmentId)
         .maybeSingle();
 
     return response;
@@ -72,7 +72,7 @@ class ProgressService {
   // Get user's overall statistics
   Future<Map<String, dynamic>> getUserStats(String userId) async {
     final summaries = await _supabase
-        .from('user_progress_summary')
+        .from('usr_dept')
         .select()
         .eq('user_id', userId);
 
@@ -92,7 +92,7 @@ class ProgressService {
     int totalScore = 0;
 
     for (var summary in summaryList) {
-      totalQuestions += (summary['total_questions_answered'] as int?) ?? 0;
+      totalQuestions += (summary['total_questions'] as int?) ?? 0;
       correctAnswers += (summary['correct_answers'] as int?) ?? 0;
       totalScore += (summary['total_score'] as int?) ?? 0;
     }
@@ -110,19 +110,20 @@ class ProgressService {
   // Get all user progress (for admin dashboard)
   Future<List<Map<String, dynamic>>> getAllUserProgress() async {
     final response = await _supabase
-        .from('user_progress_summary')
+        .from('usr_dept')
         .select();
 
     return List<Map<String, dynamic>>.from(response);
   }
 
-  // Get user progress (stub for compatibility)
+  // Get user progress (current department)
   Future<Map<String, dynamic>?> getUserProgress(String userId) async {
-    // Query from user_progress table (not user_progress_summary view)
+    // Query from usr_dept for current active department
     final response = await _supabase
-        .from('user_progress')
+        .from('usr_dept')
         .select()
         .eq('user_id', userId)
+        .eq('is_current', true)
         .maybeSingle();
 
     return response;

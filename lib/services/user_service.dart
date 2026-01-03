@@ -142,17 +142,21 @@ class UserService {
     }
   }
 
-  /// Assign pathway to user
-  Future<void> assignPathway({
+  /// Assign pathway to user with questions
+  Future<String> assignPathway({
     required String userId,
     required String pathwayId,
   }) async {
     try {
-      await _supabase.from('user_pathway').insert({
-        'user_id': userId,
-        'pathway_id': pathwayId,
-        'assigned_at': DateTime.now().toIso8601String(),
-      });
+      final result = await _supabase.rpc(
+        'assign_pathway_with_questions',
+        params: {
+          'p_user_id': userId,
+          'p_dept_id': pathwayId,
+          'p_assigned_by': _supabase.auth.currentUser?.id,
+        },
+      );
+      return result as String; // Returns usr_dept_id
     } catch (e) {
       throw Exception('Failed to assign pathway: $e');
     }
@@ -165,20 +169,20 @@ class UserService {
   }) async {
     try {
       await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .delete()
           .eq('user_id', userId)
-          .eq('pathway_id', pathwayId);
+          .eq('dept_id', pathwayId);
     } catch (e) {
       throw Exception('Failed to remove pathway assignment: $e');
     }
   }
 
-  /// Get user's assigned pathways
+  /// Get user pathways
   Future<List<Map<String, dynamic>>> getUserPathways(String userId) async {
     try {
       final response = await _supabase
-          .from('user_pathway')
+          .from('usr_dept')
           .select('*, departments(*)')
           .eq('user_id', userId);
 

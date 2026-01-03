@@ -34,47 +34,47 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
-      // Load levels for this pathway
-      final levelsResponse = await Supabase.instance.client
-          .from('dept_levels')
-          .select()
-          .eq('dept_id', widget.pathwayId)
-          .order('level_number', ascending: true);
+      // Load department with levels from JSONB column
+      final deptResponse = await Supabase.instance.client
+          .from('departments')
+          .select('levels')
+          .eq('id', widget.pathwayId)
+          .single();
 
-      // DEBUG: Print levels data
-      print('🔍 DEBUG: Loaded ${levelsResponse.length} levels');
-      for (var level in levelsResponse) {
-        print('  Level: ${level['title'] ?? level['level_name']} - ID: ${level['id']}');
-        print('  Fields: ${level.keys.toList()}');
-        print('  Data: $level');
+      // Extract levels from JSONB
+      List<Map<String, dynamic>> levels = [];
+      if (deptResponse['levels'] != null) {
+        final levelsJson = deptResponse['levels'] as List;
+        for (int i = 0; i < levelsJson.length; i++) {
+          final level = levelsJson[i] as Map<String, dynamic>;
+          levels.add({
+            'id': '${widget.pathwayId}_level_$i', // Generate unique ID
+            'level_number': i + 1,
+            'level_name': level['name'] ?? 'Level ${i + 1}',
+            'title': level['name'] ?? 'Level ${i + 1}',
+            'description': level['description'] ?? '',
+            'required_score': level['required_score'] ?? 0,
+          });
+        }
       }
+
+      debugPrint('🔍 Loaded ${levels.length} levels from departments.levels JSONB');
 
       // Load user progress for this specific pathway
       final progressResponse = await Supabase.instance.client
-          .from('user_progress')
+          .from('usr_dept')
           .select()
           .eq('user_id', user.id)
-          .eq('current_pathway_id', widget.pathwayId)
-          .limit(1)
+          .eq('dept_id', widget.pathwayId)
           .maybeSingle();
 
-      // Filter out duplicates (client-side fix)
-      final uniqueLevels = <int, Map<String, dynamic>>{};
-      for (var level in levelsResponse) {
-        final levelNum = level['level_number'] as int;
-        if (!uniqueLevels.containsKey(levelNum)) {
-          uniqueLevels[levelNum] = level;
-        }
-      }
-      
       setState(() {
-        _levels = uniqueLevels.values.toList()
-          ..sort((a, b) => (a['level_number'] as int).compareTo(b['level_number'] as int));
+        _levels = levels;
         _userProgress = progressResponse;
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ ERROR loading pathway data: $e');
+      debugPrint('❌ ERROR loading pathway data: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -252,6 +252,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
                                               builder: (context) => QuizScreen(
                                                 level: level,
                                                 pathwayName: widget.pathwayName,
+                                                pathwayId: widget.pathwayId,
                                               ),
                                             ),
                                           );

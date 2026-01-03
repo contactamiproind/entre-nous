@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/material.dart';
 import 'lib/config/supabase_config.dart';
 
 Future<void> main() async {

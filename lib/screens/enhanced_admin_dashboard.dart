@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'add_question_screen.dart';
 import '../widgets/assign_pathways_tab.dart';
 import '../models/pathway.dart';
 import 'user_management_screen.dart';
@@ -58,9 +57,9 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
           .from('departments')
           .select();
       
-      // Load enrolled users count (distinct users in user_pathway)
+      // Load enrolled users count (distinct users in usr_dept)
       final enrolledResponse = await Supabase.instance.client
-          .from('user_pathway')
+          .from('usr_dept')
           .select('user_id');
 
       if (mounted) {
@@ -116,6 +115,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1A2F4B),
         elevation: 0,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

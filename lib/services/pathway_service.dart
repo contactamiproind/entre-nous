@@ -43,22 +43,22 @@ class PathwayService {
 
   // Check if orientation is completed
   Future<bool> isOrientationCompleted(String userId) async {
-    // Check if user has completed orientation by looking at user_progress_summary
+    // Check if user has completed orientation by looking at usr_dept
     final orientationDept = await getOrientationPathway();
     if (orientationDept == null) return false;
     
     final response = await _supabase
-        .from('user_progress_summary')
+        .from('usr_dept')
         .select()
         .eq('user_id', userId)
-        .eq('department_id', orientationDept.id)
+        .eq('dept_id', orientationDept.id)
         .maybeSingle();
 
     if (response == null) return false;
     
-    // Consider orientation complete if they have any progress
-    final totalQuestions = response['total_questions_answered'] as int? ?? 0;
-    return totalQuestions > 0;
+    // Consider orientation complete if they have answered questions
+    final answeredQuestions = response['answered_questions'] as int? ?? 0;
+    return answeredQuestions > 0;
   }
 
   // Mark orientation as complete

@@ -41,15 +41,16 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
 
       // Load pathway assignments
       final assignmentsResponse = await Supabase.instance.client
-          .from('user_pathway')
+          .from('usr_dept')
           .select('*, departments(*)')
           .eq('user_id', widget.userId);
 
-      // Load user progress
+      // Load user progress - query from usr_dept for summary
       final progressResponse = await Supabase.instance.client
-          .from('user_progress')
+          .from('usr_dept')
           .select()
           .eq('user_id', widget.userId)
+          .eq('is_current', true)
           .maybeSingle();
 
       // Load all available pathways
@@ -76,24 +77,15 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
       final admin = Supabase.instance.client.auth.currentUser;
       if (admin == null) return;
 
-      // Assign pathway
-      await Supabase.instance.client.from('user_pathway').insert({
-        'user_id': widget.userId,
-        'pathway_id': pathwayId,
-        'pathway_name': pathwayTitle,
-        'assigned_by': admin.id,
-        'assigned_at': DateTime.now().toIso8601String(),
-        'is_current': _pathwayAssignments.isEmpty,
-      });
-
-
-      // Initialize user progress (always create/update for assigned pathway)
-      await Supabase.instance.client.from('user_progress').upsert({
-        'user_id': widget.userId,
-        'current_pathway_id': pathwayId,
-        'current_level': 1,
-        'total_score': 0,
-      }, onConflict: 'user_id');
+      // Assign pathway with questions using database function
+      await Supabase.instance.client.rpc(
+        'assign_pathway_with_questions',
+        params: {
+          'p_user_id': widget.userId,
+          'p_dept_id': pathwayId,
+          'p_assigned_by': admin.id,
+        },
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -143,10 +135,10 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
       try {
         // Delete pathway assignment
         await Supabase.instance.client
-            .from('user_pathway')
+            .from('usr_dept')
             .delete()
             .eq('user_id', widget.userId)
-            .eq('pathway_id', assignment['pathway_id']);
+            .eq('dept_id', assignment['dept_id']);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -172,10 +164,10 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
   }
 
   void _showAssignPathwayDialog() {
-    // Get pathways not yet assigned
-    final assignedPathwayIds = _pathwayAssignments.map((a) => a['pathway_id']).toSet();
+    // Get departments not yet assigned
+    final assignedDeptIds = _pathwayAssignments.map((a) => a['dept_id']).toSet();
     final unassignedPathways = _availablePathways
-        .where((p) => !assignedPathwayIds.contains(p['id']))
+        .where((p) => !assignedDeptIds.contains(p['id']))
         .toList();
 
     if (unassignedPathways.isEmpty) {
