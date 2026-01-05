@@ -96,7 +96,71 @@ class _LoginScreenState extends State<LoginScreen> {
            // if (profile['role'] != _selectedRole) { ... }
         }
 
-        // Navigate based on selected role (assuming valid)
+        // Get user's name for welcome message
+        final userName = profile['full_name'] ?? response.user!.email?.split('@')[0] ?? 'User';
+        
+        if (!mounted) return;
+        
+        // Show welcome dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(30),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6BCB9F).withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_circle,
+                        size: 50,
+                        color: Color(0xFF6BCB9F),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Welcome back,',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      userName,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A2F4B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+        
+        // Auto-dismiss after 1.5 seconds and navigate
+        await Future.delayed(const Duration(milliseconds: 1500));
+        
+        if (!mounted) return;
+        
+        // Close dialog
+        Navigator.of(context).pop();
+        
+        // Navigate based on selected role
         if (_selectedRole == 'admin') {
           Navigator.pushReplacementNamed(context, '/admin-dashboard');
         } else {

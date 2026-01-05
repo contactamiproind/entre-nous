@@ -310,7 +310,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Ready to level up?',
+                        'Welcome back, $_userName!',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.white.withOpacity(0.7),
