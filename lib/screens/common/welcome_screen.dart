@@ -62,7 +62,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final padding = ResponsiveUtils.getPagePadding(context);
-    final logoSize = ResponsiveUtils.isMobile(context) ? 80.0 : 120.0;
+    final logoSize = ResponsiveUtils.isMobile(context) ? 120.0 : 180.0;
     final titleSize = ResponsiveUtils.getH1Size(context) + 8;
     
     return Scaffold(
@@ -78,25 +78,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Illustration / Logo Area (Placeholder for now, or just the logo)
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle, // Rounded circle logo
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF1A2F4B).withOpacity(0.1),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Image.asset(
-                        'assets/logo.png',
-                        height: logoSize,
-                        fit: BoxFit.contain,
-                      ),
+                    // Logo
+                    Image.asset(
+                      'assets/logo.png',
+                      height: logoSize,
+                      width: logoSize,
+                      fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 40),
                     
