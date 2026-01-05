@@ -21,6 +21,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   final ProgressService _progressService = ProgressService();
 
   Map<String, dynamic>? _userProgress;
+  Map<String, dynamic>? _userProfile;
   List<Pathway> _pathways = [];
   List<UserAssignment> _assignments = [];
   Pathway? _currentPathway;
@@ -28,6 +29,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   bool _isLoading = true;
   String? _userId;
   String? _userEmail;
+  String _userName = 'Explorer';
+  String _userAvatar = '👤';
   int _selectedIndex = 0;
 
   @override
@@ -44,6 +47,26 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
       
       _userId = user.id;
       _userEmail = user.email;
+      
+      // Load user profile
+      Map<String, dynamic>? profile;
+      try {
+        profile = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .eq('user_id', user.id)
+            .maybeSingle();
+        
+        if (profile != null) {
+          _userName = profile['full_name'] ?? user.email?.split('@')[0] ?? 'Explorer';
+          _userAvatar = profile['avatar_url'] ?? '👤';
+        } else {
+          _userName = user.email?.split('@')[0] ?? 'Explorer';
+        }
+      } catch (e) {
+        debugPrint('Error loading profile: $e');
+        _userName = user.email?.split('@')[0] ?? 'Explorer';
+      }
       
       // Skip orientation check - users can access any assigned department
       // Orientation is optional, not mandatory
@@ -135,6 +158,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
 
       setState(() {
         _userProgress = progress;
+        _userProfile = profile;
         _assignments = assignments;
         _pathways = pathways;
         _currentPathway = currentPathway;
@@ -265,17 +289,18 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                             color: Colors.white,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.person_rounded,
-                            size: 40,
-                            color: Color(0xFF1A2F4B),
+                          child: Center(
+                            child: Text(
+                              _userAvatar,
+                              style: const TextStyle(fontSize: 40),
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 16),
                       // User Name
                       Text(
-                        _userEmail?.split('@')[0] ?? 'Explorer',
+                        _userName,
                         style: const TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w900,
@@ -938,15 +963,16 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                   color: const Color(0xFF6B5CE7).withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.person,
-                  size: 50,
-                  color: Color(0xFF6B5CE7),
+                child: Center(
+                  child: Text(
+                    _userAvatar,
+                    style: const TextStyle(fontSize: 50),
+                  ),
                 ),
               ),
               const SizedBox(height: 15),
               Text(
-                _userEmail?.split('@')[0] ?? 'User',
+                _userName,
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -967,11 +993,15 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
         _buildProfileOption(
           icon: Icons.person_outline,
           title: 'Edit Profile',
-          onTap: () {
-            Navigator.push(
+          onTap: () async {
+            final result = await Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const EditProfileScreen()),
             );
+            // Reload data if profile was updated
+            if (result == true && mounted) {
+              _loadData();
+            }
           },
         ),
         _buildProfileOption(
