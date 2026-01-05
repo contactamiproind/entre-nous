@@ -67,7 +67,7 @@ class _QuizScreenState extends State<QuizScreen> {
       debugPrint('  Level number: $levelNumber');
       
       // Load questions from usr_progress (assigned questions only)
-      final data = await Supabase.instance.client
+      final progressData = await Supabase.instance.client
           .from('usr_progress')
           .select('id, question_id, question_text, question_type, difficulty, points, status, user_answer, is_correct')
           .eq('user_id', user.id)
@@ -75,12 +75,40 @@ class _QuizScreenState extends State<QuizScreen> {
           .eq('level_number', levelNumber)
           .order('created_at');
       
-      debugPrint('📊 Found ${data.length} assigned questions for this level');
+      debugPrint('📊 Found ${progressData.length} assigned questions for this level');
 
       List<Map<String, dynamic>> questions = [];
       
-      // Transform usr_progress data to match expected question format
-      for (var progress in data) {
+      // For each progress entry, load the full question details including options
+      for (var progress in progressData) {
+        // Load full question data including options from questions table
+        final questionData = await Supabase.instance.client
+            .from('questions')
+            .select('id, title, description, options')
+            .eq('id', progress['question_id'])
+            .single();
+        
+        // Extract options from the question data
+        List<String> options = [];
+        List<Map<String, dynamic>> optionsData = [];
+        if (questionData['options'] != null) {
+          final optionsJson = questionData['options'] as List<dynamic>;
+          for (var opt in optionsJson) {
+            if (opt is Map && opt['text'] != null) {
+              options.add(opt['text'].toString());
+              optionsData.add({
+                'text': opt['text'].toString(),
+                'is_correct': opt['is_correct'] ?? false,
+              });
+            } else if (opt is String) {
+              options.add(opt);
+              optionsData.add({'text': opt, 'is_correct': false});
+            }
+          }
+        }
+        
+        debugPrint('  Question ${progress['question_id']}: loaded ${options.length} options');
+        
         questions.add({
           'id': progress['question_id'],
           'progress_id': progress['id'], // Store usr_progress ID for updates
@@ -92,6 +120,8 @@ class _QuizScreenState extends State<QuizScreen> {
           'status': progress['status'],
           'user_answer': progress['user_answer'],
           'is_correct': progress['is_correct'],
+          'options': options, // Add the loaded options
+          'options_data': optionsData, // Store full option data with is_correct flags
         });
       }
 
@@ -102,6 +132,7 @@ class _QuizScreenState extends State<QuizScreen> {
         _gameScores = {};
       });
     } catch (e) {
+      debugPrint('❌ Error loading questions: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading questions: $e')),
@@ -127,17 +158,16 @@ class _QuizScreenState extends State<QuizScreen> {
       
       if (questionType == 'multiple_choice') {
         final selectedIndex = _selectedAnswers[i];
-        final correctAnswer = question['correct_answer'] as String?;
         final options = List<String>.from(question['options'] ?? []);
+        final optionsData = List<Map<String, dynamic>>.from(question['options_data'] ?? []);
         
-        if (selectedIndex != null && selectedIndex < options.length) {
+        if (selectedIndex != null && selectedIndex < options.length && selectedIndex < optionsData.length) {
           final selectedAnswerText = options[selectedIndex];
-          final selectedAnswerLetter = String.fromCharCode(65 + selectedIndex); // 'A', 'B', 'C', 'D'
+          final isCorrectOption = optionsData[selectedIndex]['is_correct'] == true;
           
-          debugPrint('Checking Answer: "$selectedAnswerText" vs Expected: "$correctAnswer" (Letter: $selectedAnswerLetter)');
+          debugPrint('Checking Answer: "$selectedAnswerText" (Index: $selectedIndex, Is Correct: $isCorrectOption)');
           
-          // Check against both text and letter for backward compatibility
-          if (selectedAnswerText == correctAnswer || selectedAnswerLetter == correctAnswer) {
+          if (isCorrectOption) {
             debugPrint('✅ Answer Correct!');
             isCorrect = true;
           } else {
@@ -219,12 +249,11 @@ class _QuizScreenState extends State<QuizScreen> {
 
             if (questionType == 'multiple_choice') {
               final selectedIndex = _selectedAnswers[i];
-              final correctAnswer = question['correct_answer'] as String?;
               final options = List<String>.from(question['options'] ?? []);
-               if (selectedIndex != null && selectedIndex < options.length) {
+              final optionsData = List<Map<String, dynamic>>.from(question['options_data'] ?? []);
+               if (selectedIndex != null && selectedIndex < options.length && selectedIndex < optionsData.length) {
                   final selectedAnswerText = options[selectedIndex];
-                  final selectedAnswerLetter = String.fromCharCode(65 + selectedIndex);
-                  isCorrect = selectedAnswerText == correctAnswer || selectedAnswerLetter == correctAnswer;
+                  isCorrect = optionsData[selectedIndex]['is_correct'] == true;
                   userAnswer = {
                     'type': 'mcq',
                     'selected_index': selectedIndex,
@@ -324,12 +353,9 @@ class _QuizScreenState extends State<QuizScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFDF8F0), // Cream
       appBar: AppBar(
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Image.asset(
-            'assets/logo.png',
-            fit: BoxFit.contain,
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           '${widget.pathwayName} - Level ${widget.level['level_number']}',
