@@ -644,33 +644,44 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   // ============================================
   Widget _buildPathwayTab() {
     if (_assignments.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.route_outlined,
-              size: 80,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No Pathway Assigned',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              setState(() => _selectedIndex = 0); // Navigate to Home tab
+            },
+          ),
+          title: const Text('Department'),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.route_outlined,
+                size: 80,
+                color: Colors.grey[400],
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Please contact your admin to get assigned to a pathway',
-              style: TextStyle(
-                color: Colors.grey[500],
+              const SizedBox(height: 16),
+              Text(
+                'No Pathway Assigned',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[600],
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                'Please contact your admin to get assigned to a pathway',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -865,33 +876,36 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   // INFO TAB
   // ============================================
   Widget _buildInfoTab() {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text(
-          'Information',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            setState(() => _selectedIndex = 0); // Navigate to Home tab
+          },
+        ),
+        title: const Text('Information'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          _buildInfoCard(
+            icon: Icons.school,
+            title: 'About ENEPL Quiz',
+            description: 'Learn, Practice, and Excel with our comprehensive quiz platform.',
           ),
-        ),
-        const SizedBox(height: 20),
-        _buildInfoCard(
-          icon: Icons.school,
-          title: 'About ENEPL Quiz',
-          description: 'Learn, Practice, and Excel with our comprehensive quiz platform.',
-        ),
-        _buildInfoCard(
-          icon: Icons.help_outline,
-          title: 'How to Use',
-          description: 'Complete quizzes in your assigned pathway to progress through levels.',
-        ),
-        _buildInfoCard(
-          icon: Icons.emoji_events,
-          title: 'Achievements',
-          description: 'Earn ranks and badges by completing quizzes and improving your scores.',
-        ),
-      ],
+          _buildInfoCard(
+            icon: Icons.help_outline,
+            title: 'How to Use',
+            description: 'Complete quizzes in your assigned pathway to progress through levels.',
+          ),
+          _buildInfoCard(
+            icon: Icons.emoji_events,
+            title: 'Achievements',
+            description: 'Earn ranks and badges by completing quizzes and improving your scores.',
+          ),
+        ],
+      ),
     );
   }
 
@@ -949,46 +963,56 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   // PROFILE TAB
   // ============================================
   Widget _buildProfileTab() {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        // Profile Header
-        Center(
-          child: Column(
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6B5CE7).withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    _userAvatar,
-                    style: const TextStyle(fontSize: 50),
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            setState(() => _selectedIndex = 0); // Navigate to Home tab
+          },
+        ),
+        title: const Text('Profile'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          // Profile Header
+          Center(
+            child: Column(
+              children: [
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B5CE7).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      _userAvatar,
+                      style: const TextStyle(fontSize: 50),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 15),
-              Text(
-                _userName,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 15),
+                Text(
+                  _userName,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              Text(
-                _userEmail ?? '',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
+                Text(
+                  _userEmail ?? '',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 30),
+          const SizedBox(height: 30),
         // Profile Options
         _buildProfileOption(
           icon: Icons.person_outline,
@@ -1041,6 +1065,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
           isDestructive: true,
         ),
       ],
+      ),
     );
   }
 

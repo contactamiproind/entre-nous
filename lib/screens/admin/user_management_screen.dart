@@ -3,7 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'user_profile_detail_screen.dart';
 
 class UserManagementScreen extends StatefulWidget {
-  const UserManagementScreen({super.key});
+  final VoidCallback? onBack;
+  const UserManagementScreen({super.key, this.onBack});
 
   @override
   State<UserManagementScreen> createState() => _UserManagementScreenState();
@@ -307,13 +308,21 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'User Management',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A2F4B),
-                  ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: widget.onBack,
+                    ),
+                    const Text(
+                      'User Management',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A2F4B),
+                      ),
+                    ),
+                  ],
                 ),
                 Flexible(
                   child: ElevatedButton.icon(

@@ -161,11 +161,17 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
       case 0:
         return _buildHomeTab();
       case 1:
-        return const DepartmentManagementScreen();
+        return DepartmentManagementScreen(
+          onBack: () => setState(() => _selectedIndex = 0),
+        );
       case 2:
-        return const QuestionBankManagementScreen();
+        return QuestionBankManagementScreen(
+          onBack: () => setState(() => _selectedIndex = 0),
+        );
       case 3:
-        return const UserManagementScreen();
+        return UserManagementScreen(
+          onBack: () => setState(() => _selectedIndex = 0),
+        );
       default:
         return _buildHomeTab();
     }
@@ -267,7 +273,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                 () => setState(() => _selectedIndex = 3), // Navigate to Users tab
               ),
               _buildActionButton(
-                'Manage Department',
+                'Departments',
                 Icons.alt_route_rounded,
                 const Color(0xFF8B5CF6),
                 () => setState(() => _selectedIndex = 1), // Navigate to Department tab

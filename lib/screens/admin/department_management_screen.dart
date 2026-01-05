@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DepartmentManagementScreen extends StatefulWidget {
-  const DepartmentManagementScreen({super.key});
+  final VoidCallback? onBack;
+  const DepartmentManagementScreen({super.key, this.onBack});
 
   @override
   State<DepartmentManagementScreen> createState() => _DepartmentManagementScreenState();
@@ -183,13 +184,21 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Departments',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A2F4B),
-                  ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: widget.onBack,
+                    ),
+                    const Text(
+                      'Departments',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A2F4B),
+                      ),
+                    ),
+                  ],
                 ),
                 Flexible(
                   child: ElevatedButton.icon(

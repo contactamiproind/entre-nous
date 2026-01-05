@@ -3,7 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'add_question_screen.dart';
 
 class QuestionBankManagementScreen extends StatefulWidget {
-  const QuestionBankManagementScreen({super.key});
+  final VoidCallback? onBack;
+  const QuestionBankManagementScreen({super.key, this.onBack});
 
   @override
   State<QuestionBankManagementScreen> createState() => _QuestionBankManagementScreenState();
@@ -307,15 +308,21 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Expanded(
-                      child: Text(
-                        'Question Bank',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A2F4B),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          onPressed: widget.onBack,
                         ),
-                      ),
+                        const Text(
+                          'Question Bank',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A2F4B),
+                          ),
+                        ),
+                      ],
                     ),
                     ElevatedButton.icon(
                       onPressed: () async {
@@ -328,7 +335,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                         _loadQuestions();
                       },
                       icon: const Icon(Icons.add),
-                      label: const Text('Add Question'),
+                      label: const Text('Add'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF3B82F6),
                         foregroundColor: Colors.white,
