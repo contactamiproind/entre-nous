@@ -31,44 +31,95 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
   Future<void> _loadUserData() async {
     setState(() => _isLoading = true);
 
+    Map<String, dynamic>? profileResponse;
+    List<Map<String, dynamic>> assignmentsResponse = [];
+    Map<String, dynamic>? progressResponse;
+    List<Map<String, dynamic>> pathwaysResponse = [];
+
     try {
-      // Load user profile
-      final profileResponse = await Supabase.instance.client
-          .from('profiles')
-          .select()
-          .eq('user_id', widget.userId)
-          .single();
+      // Load user profile - handle errors separately
+      try {
+        profileResponse = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .eq('user_id', widget.userId)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('Error loading profile (non-fatal): $e');
+        // Continue even if profile fails
+      }
 
       // Load pathway assignments
-      final assignmentsResponse = await Supabase.instance.client
-          .from('usr_dept')
-          .select('*, departments(*)')
-          .eq('user_id', widget.userId);
+      debugPrint('Loading assignments for user: ${widget.userId}');
+      assignmentsResponse = List<Map<String, dynamic>>.from(
+        await Supabase.instance.client
+            .from('usr_dept')
+            .select('*, departments(*)')
+            .eq('user_id', widget.userId)
+      );
+      
+      debugPrint('Assignments response: $assignmentsResponse');
+      debugPrint('Assignments count: ${assignmentsResponse.length}');
 
       // Load user progress - query from usr_dept for summary
-      final progressResponse = await Supabase.instance.client
-          .from('usr_dept')
-          .select()
-          .eq('user_id', widget.userId)
-          .eq('is_current', true)
-          .maybeSingle();
+      try {
+        progressResponse = await Supabase.instance.client
+            .from('usr_dept')
+            .select()
+            .eq('user_id', widget.userId)
+            .eq('is_current', true)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('Error loading progress (non-fatal): $e');
+        // Continue even if progress fails
+      }
 
-      // Load all available pathways
-      final pathwaysResponse = await Supabase.instance.client
-          .from('departments')
-          .select()
-          .order('title');
+      // Load all available pathways - CRITICAL for assignment functionality
+      try {
+        pathwaysResponse = List<Map<String, dynamic>>.from(
+          await Supabase.instance.client
+              .from('departments')
+              .select()
+              .order('title')
+        );
+        debugPrint('Loaded ${pathwaysResponse.length} pathways');
+      } catch (e) {
+        debugPrint('Error loading pathways: $e');
+        // This is critical - show error to user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading pathways: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
 
       setState(() {
         _userProfile = profileResponse;
-        _pathwayAssignments = List<Map<String, dynamic>>.from(assignmentsResponse);
+        _pathwayAssignments = assignmentsResponse;
         _userProgress = progressResponse;
-        _availablePathways = List<Map<String, dynamic>>.from(pathwaysResponse);
+        _availablePathways = pathwaysResponse;
         _isLoading = false;
       });
-    } catch (e) {
-      print('Error loading user data: $e');
-      setState(() => _isLoading = false);
+      
+      debugPrint('State updated. Assignments: ${_pathwayAssignments.length}');
+    } catch (e, stackTrace) {
+      debugPrint('Error loading user data: $e');
+      debugPrint('Stack trace: $stackTrace');
+      
+      // Still set whatever data we managed to load
+      setState(() {
+        _userProfile = profileResponse;
+        _pathwayAssignments = assignmentsResponse;
+        _userProgress = progressResponse;
+        _availablePathways = pathwaysResponse;
+        _isLoading = false;
+      });
+      
+      // Don't show error to user if assignments loaded successfully
+      // The profile error is non-critical
     }
   }
 
@@ -96,6 +147,8 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
         );
       }
 
+      // Wait a moment for database transaction to complete
+      await Future.delayed(const Duration(milliseconds: 500));
       _loadUserData();
     } catch (e) {
       if (mounted) {
@@ -165,10 +218,17 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
 
   void _showAssignPathwayDialog() {
     // Get departments not yet assigned
+    debugPrint('Total pathways available: ${_availablePathways.length}');
+    debugPrint('Total assignments: ${_pathwayAssignments.length}');
+    
     final assignedDeptIds = _pathwayAssignments.map((a) => a['dept_id']).toSet();
+    debugPrint('Assigned dept IDs: $assignedDeptIds');
+    
     final unassignedPathways = _availablePathways
         .where((p) => !assignedDeptIds.contains(p['id']))
         .toList();
+    
+    debugPrint('Unassigned pathways: ${unassignedPathways.length}');
 
     if (unassignedPathways.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

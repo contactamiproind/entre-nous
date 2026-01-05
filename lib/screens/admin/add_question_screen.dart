@@ -4,7 +4,9 @@ import '../../models/pathway.dart';
 import '../../services/pathway_service.dart';
 
 class AddQuestionScreen extends StatefulWidget {
-  const AddQuestionScreen({super.key});
+  final String? departmentId;
+  
+  const AddQuestionScreen({super.key, this.departmentId});
 
   @override
   State<AddQuestionScreen> createState() => _AddQuestionScreenState();
@@ -81,6 +83,16 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       setState(() {
         _pathways = pathways;
         _isLoadingPathways = false;
+        
+        // Pre-select department if departmentId is provided
+        if (widget.departmentId != null) {
+          _selectedPathway = pathways.firstWhere(
+            (p) => p.id == widget.departmentId,
+            orElse: () => pathways.first,
+          );
+          // Load levels for pre-selected department
+          _loadLevels(_selectedPathway!);
+        }
       });
     } catch (e) {
       if (mounted) {

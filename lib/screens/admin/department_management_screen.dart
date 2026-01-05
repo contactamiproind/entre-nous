@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'department_questions_screen.dart';
 
 class DepartmentManagementScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -256,6 +257,17 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
                               margin: const EdgeInsets.only(bottom: 12),
                               child: ListTile(
                                 contentPadding: const EdgeInsets.all(16),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => DepartmentQuestionsScreen(
+                                        departmentId: dept['id'],
+                                        departmentName: dept['title'] ?? 'Department',
+                                      ),
+                                    ),
+                                  );
+                                },
                                 leading: CircleAvatar(
                                   backgroundColor: const Color(0xFF3B82F6),
                                   child: Text(
