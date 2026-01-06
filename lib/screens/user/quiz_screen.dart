@@ -761,10 +761,11 @@ class _QuizScreenState extends State<QuizScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Big emoji reaction based on score
-                    Text(
-                      _getScoreEmoji(correctAnswers, totalQuestions),
-                      style: const TextStyle(fontSize: 100),
+                    // Big icon reaction based on score
+                    Icon(
+                      _getScoreIcon(correctAnswers, totalQuestions),
+                      size: 100,
+                      color: _getPrimaryColor(correctAnswers, totalQuestions),
                     ),
                     const SizedBox(height: 16),
                     
@@ -913,6 +914,15 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   // Helper methods for fun UI elements
+  IconData _getScoreIcon(int correct, int total) {
+    final percentage = (correct / total) * 100;
+    if (percentage == 100) return Icons.emoji_events_rounded; // Trophy
+    if (percentage >= 90) return Icons.star_rounded; // Star
+    if (percentage >= 70) return Icons.sentiment_very_satisfied_rounded; // Happy
+    if (percentage >= 50) return Icons.thumb_up_rounded; // Thumbs up
+    return Icons.sentiment_neutral_rounded; // Neutral
+  }
+
   String _getScoreEmoji(int correct, int total) {
     final percentage = (correct / total) * 100;
     if (percentage == 100) return '🏆';

@@ -12,10 +12,12 @@ class QuestionBankManagementScreen extends StatefulWidget {
 
 class _QuestionBankManagementScreenState extends State<QuestionBankManagementScreen> {
   List<Map<String, dynamic>> _questions = [];
+  List<Map<String, dynamic>> _allQuestions = []; // Store all questions
   bool _isLoading = true;
   bool _selectionMode = false;
   Set<String> _selectedQuestions = {};
   List<Map<String, dynamic>> _departments = [];
+  String? _selectedDepartmentFilter; // Filter by department
 
   @override
   void initState() {
@@ -27,14 +29,36 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
   Future<void> _loadQuestions() async {
     setState(() => _isLoading = true);
     try {
+      // Load departments first to create a lookup map
+      final deptResponse = await Supabase.instance.client
+          .from('departments')
+          .select('id, title');
+      
+      final deptMap = <String, String>{};
+      for (var dept in deptResponse) {
+        deptMap[dept['id']] = dept['title'];
+      }
+      
+      // Load questions
       final response = await Supabase.instance.client
           .from('questions')
           .select('*, quest_types(type)')
           .order('created_at', ascending: false);
       
+      // Add department title to each question
+      for (var question in response) {
+        final deptId = question['dept_id'];
+        if (deptId != null && deptMap.containsKey(deptId)) {
+          question['department_title'] = deptMap[deptId];
+        } else {
+          question['department_title'] = 'No Dept';
+        }
+      }
+      
       if (mounted) {
         setState(() {
-          _questions = List<Map<String, dynamic>>.from(response);
+          _allQuestions = List<Map<String, dynamic>>.from(response);
+          _questions = _allQuestions; // Initially show all
           _isLoading = false;
         });
       }
@@ -61,6 +85,16 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
     } catch (e) {
       debugPrint('Error loading departments: $e');
     }
+  }
+
+  void _filterQuestions() {
+    setState(() {
+      if (_selectedDepartmentFilter == null || _selectedDepartmentFilter!.isEmpty) {
+        _questions = _allQuestions;
+      } else {
+        _questions = _allQuestions.where((q) => q['dept_id'] == _selectedDepartmentFilter).toList();
+      }
+    });
   }
 
   void _toggleSelectionMode() {
@@ -252,129 +286,311 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
     final descriptionController = TextEditingController(text: question['description']);
     final pointsController = TextEditingController(text: question['points']?.toString() ?? '10');
     
-    // Handle tags - could be List or String
-    String tagsText = '';
-    if (question['tags'] is List) {
-      tagsText = (question['tags'] as List).join(', ');
-    } else if (question['tags'] != null) {
-      tagsText = question['tags'].toString();
-    }
-    final tagsController = TextEditingController(text: tagsText);
-    
     String selectedDifficulty = question['difficulty'] ?? 'easy';
+    
+    // Parse existing options
+    List<Map<String, dynamic>> options = [];
+    if (question['options'] != null) {
+      try {
+        final optionsList = question['options'] as List;
+        for (var opt in optionsList) {
+          if (opt is Map) {
+            options.add({
+              'text': opt['text']?.toString() ?? '',
+              'is_correct': opt['is_correct'] == true,
+            });
+          } else {
+            // Handle old format (plain strings)
+            options.add({
+              'text': opt.toString(),
+              'is_correct': false,
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Error parsing options: $e');
+      }
+    }
+    
+    // If no options, add 4 empty ones for MCQ
+    if (options.isEmpty) {
+      options = List.generate(4, (index) => {'text': '', 'is_correct': false});
+    }
 
     await showDialog(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.7), // Darker overlay for more contrast
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit Question'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Title',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedDifficulty,
-                  decoration: const InputDecoration(
-                    labelText: 'Difficulty',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'easy', child: Text('Easy')),
-                    DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                    DropdownMenuItem(value: 'hard', child: Text('Hard')),
+        builder: (context, setDialogState) => Dialog(
+          insetPadding: EdgeInsets.zero,
+          backgroundColor: Colors.transparent,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Container(
+                margin: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 30,
+                      spreadRadius: 10,
+                      offset: const Offset(0, 15),
+                    ),
                   ],
-                  onChanged: (value) {
-                    setDialogState(() {
-                      selectedDifficulty = value!;
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: pointsController,
-                  decoration: const InputDecoration(
-                    labelText: 'Points',
-                    border: OutlineInputBorder(),
+                  border: Border.all(
+                    color: const Color(0xFF6BCB9F),
+                    width: 4,
                   ),
-                  keyboardType: TextInputType.number,
+                ),
+                child: SizedBox(
+                  width: constraints.maxWidth - 48,
+                  height: constraints.maxHeight - 48,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Edit Question',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1A2F4B),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 24),
+                              onPressed: () => Navigator.pop(context),
+                              color: Colors.grey[600],
+                            ),
+                          ],
+                        ),
+                        const Divider(thickness: 2),
+                        const SizedBox(height: 12),
+                        // Scrollable content
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      isDense: true,
+                    ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      isDense: true,
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedDifficulty,
+                    decoration: const InputDecoration(
+                      labelText: 'Difficulty',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'easy', child: Text('Easy')),
+                      DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                      DropdownMenuItem(value: 'hard', child: Text('Hard')),
+                    ],
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedDifficulty = value!;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: pointsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Points',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      isDense: true,
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 16),
+                  // Options section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Options (Multiple Choice)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle, color: Color(0xFF6BCB9F), size: 20),
+                        onPressed: () {
+                          setDialogState(() {
+                            options.add({'text': '', 'is_correct': false});
+                          });
+                        },
+                        tooltip: 'Add Option',
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ...List.generate(options.length, (index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 40,
+                            child: Checkbox(
+                              value: options[index]['is_correct'],
+                              onChanged: (value) {
+                                setDialogState(() {
+                                  options[index]['is_correct'] = value ?? false;
+                                });
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: TextField(
+                              decoration: InputDecoration(
+                                labelText: 'Option ${index + 1}',
+                                border: const OutlineInputBorder(),
+                                hintText: 'Enter option text',
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                isDense: true,
+                              ),
+                              controller: TextEditingController(text: options[index]['text'])
+                                ..selection = TextSelection.fromPosition(
+                                  TextPosition(offset: options[index]['text'].length),
+                                ),
+                              onChanged: (value) {
+                                options[index]['text'] = value;
+                              },
+                            ),
+                          ),
+                          if (options.length > 2)
+                            SizedBox(
+                              width: 40,
+                              child: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                onPressed: () {
+                                  setDialogState(() {
+                                    options.removeAt(index);
+                                  });
+                                },
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(8),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: tagsController,
-                  decoration: const InputDecoration(
-                    labelText: 'Tags',
-                    border: OutlineInputBorder(),
-                    hintText: 'e.g., sales, customer-service',
+                const Divider(thickness: 1),
+                const SizedBox(height: 12),
+                // Footer buttons
+                SizedBox(
+                  width: double.infinity,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            // Prepare options data
+                            final optionsData = options
+                                .where((opt) => opt['text'].toString().trim().isNotEmpty)
+                                .map((opt) => {
+                                      'text': opt['text'],
+                                      'is_correct': opt['is_correct'],
+                                    })
+                                .toList();
+
+                            await Supabase.instance.client
+                                .from('questions')
+                                .update({
+                                  'title': titleController.text,
+                                  'description': descriptionController.text,
+                                  'difficulty': selectedDifficulty,
+                                  'points': int.tryParse(pointsController.text) ?? 10,
+                                  'options': optionsData,
+                                })
+                                .eq('id', question['id']);
+
+                            if (mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Question updated successfully!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              _loadQuestions();
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3B82F6),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        ),
+                        child: const Text('Save Changes'),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  await Supabase.instance.client
-                      .from('questions')
-                      .update({
-                        'title': titleController.text,
-                        'description': descriptionController.text,
-                        'difficulty': selectedDifficulty,
-                        'points': int.tryParse(pointsController.text) ?? 10,
-                        'tags': tagsController.text,
-                      })
-                      .eq('id', question['id']);
-
-                  if (mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Question updated successfully!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                    _loadQuestions();
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3B82F6),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Save'),
-            ),
-          ],
+        ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -597,27 +813,47 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                   padding: const EdgeInsets.all(8),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
+                                     children: [
                                       // Title and action buttons row
                                       Row(
                                         crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
+                                         children: [
                                           if (_selectionMode)
                                             Checkbox(
                                               value: _selectedQuestions.contains(question['id']),
                                               onChanged: (value) {
                                                 _toggleQuestionSelection(question['id']);
                                               },
-                                            ),
+                                             ),
+                                          // Department badge removed - using filter instead
                                           Expanded(
-                                            child: Text(
-                                              question['title'] ?? 'No title',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  question['title'] ?? 'No title',
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
+                                                    color: Color(0xFF1A2F4B),
+                                                  ),
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                if (question['description'] != null && 
+                                                    question['description'].toString().isNotEmpty) ...[
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    question['description'],
+                                                    style: TextStyle(
+                                                      fontSize: 13,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ],
                                             ),
                                           ),
                                           const SizedBox(width: 4),
@@ -661,6 +897,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: typeColor,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                       ),

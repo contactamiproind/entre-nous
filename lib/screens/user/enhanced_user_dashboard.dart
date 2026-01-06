@@ -191,22 +191,33 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFDF8F0), // Cream
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          _buildHomeTab(),
-          _buildPathwayTab(),
-          _buildInfoTab(),
-          _buildProfileTab(),
-        ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFFDF8F0), // Cream
+              Color(0xFFFFF5E6), // Lighter cream
+            ],
+          ),
+        ),
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            _buildHomeTab(),
+            _buildPathwayTab(),
+            _buildInfoTab(),
+            _buildProfileTab(),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1A2F4B).withOpacity(0.05),
-              blurRadius: 20,
+              color: const Color(0xFF1A2F4B).withOpacity(0.08),
+              blurRadius: 25,
               offset: const Offset(0, -5),
             ),
           ],

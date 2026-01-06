@@ -113,67 +113,86 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     final spacing = isMobile ? 24.0 : 32.0;
     
     return Scaffold(
-      backgroundColor: const Color(0xFFFDF8F0),
-      body: Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 40),
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: ScaleTransition(
-              scale: _scaleAnimation,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset(
-                    'assets/logo.png',
-                    width: logoSize,
-                    height: logoSize,
-                    fit: BoxFit.contain,
-                  ),
-                  SizedBox(height: spacing),
-                  
-                  Text(
-                    'ENEPL Quiz',
-                    style: TextStyle(
-                      fontSize: titleSize,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF1A2F4B),
-                      letterSpacing: -1,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFDF8F0), // Cream
+              Color(0xFFFFF5E6), // Lighter cream
+              Color(0xFFFEF3E2), // Warm cream
+            ],
+          ),
+        ),
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 40),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      'assets/logo.png',
+                      width: logoSize,
+                      height: logoSize,
+                      fit: BoxFit.contain,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: isMobile ? 8 : 12),
-                  Text(
-                    'Learn • Practice • Excel',
-                    style: TextStyle(
-                      fontSize: subtitleSize,
-                      color: const Color(0xFF1A2F4B).withOpacity(0.6),
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 2,
+                    SizedBox(height: spacing),
+                    
+                    Text(
+                      'ENEPL Quiz',
+                      style: TextStyle(
+                        fontSize: titleSize,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFF1A2F4B),
+                        letterSpacing: -1,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withOpacity(0.05),
+                            offset: const Offset(0, 2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: isMobile ? 48 : 60),
-                  
-                  SizedBox(
-                    width: isMobile ? 36 : 40,
-                    height: isMobile ? 36 : 40,
-                    child: const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6BCB9F)),
-                      strokeWidth: 3,
+                    SizedBox(height: isMobile ? 8 : 12),
+                    Text(
+                      'Learn • Practice • Excel',
+                      style: TextStyle(
+                        fontSize: subtitleSize,
+                        color: const Color(0xFF1A2F4B).withOpacity(0.6),
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 2,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  SizedBox(height: isMobile ? 60 : 80),
-                  
-                  Text(
-                    'Version 1.0.0',
-                    style: TextStyle(
-                      color: const Color(0xFF1A2F4B).withOpacity(0.4),
-                      fontSize: isMobile ? 11 : 12,
-                      fontWeight: FontWeight.w500,
+                    SizedBox(height: isMobile ? 48 : 60),
+                    
+                    SizedBox(
+                      width: isMobile ? 36 : 40,
+                      height: isMobile ? 36 : 40,
+                      child: const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6BCB9F)),
+                        strokeWidth: 3.5,
+                      ),
                     ),
-                  ),
-                ],
+                    SizedBox(height: isMobile ? 60 : 80),
+                    
+                    Text(
+                      'Version 1.0.0',
+                      style: TextStyle(
+                        color: const Color(0xFF1A2F4B).withOpacity(0.4),
+                        fontSize: isMobile ? 11 : 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
