@@ -242,13 +242,16 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     };
 
     if (_questionType == 'multiple_choice') {
-      // Prepare options array
-      final options = _optionControllers.map((controller) => controller.text.trim()).toList();
-      // Use the Option text itself as the correct answer for better matching
-      final correctAnswerText = options[_correctDisplayIndex];
+      // Prepare options array with is_correct flags
+      final options = _optionControllers.asMap().entries.map((entry) {
+        return {
+          'text': entry.value.text.trim(),
+          'is_correct': entry.key == _correctDisplayIndex,
+        };
+      }).toList();
       
       questionData['options'] = options;
-      questionData['correct_answer'] = correctAnswerText;
+      questionData['correct_answer'] = _optionControllers[_correctDisplayIndex].text.trim();
     } else if (_questionType == 'match_following') {
       // Prepare match pairs
       final matchPairs = _matchPairs.map((pair) => {

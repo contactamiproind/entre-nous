@@ -84,28 +84,38 @@ class _QuizScreenState extends State<QuizScreen> {
         // Load full question data including options from questions table
         final questionData = await Supabase.instance.client
             .from('questions')
-            .select('id, title, description, options')
+            .select('id, title, description, options, correct_answer')
             .eq('id', progress['question_id'])
             .single();
         
         // Extract options from the question data
-        List<String> options = [];
-        List<Map<String, dynamic>> optionsData = [];
-        if (questionData['options'] != null) {
-          final optionsJson = questionData['options'] as List<dynamic>;
-          for (var opt in optionsJson) {
-            if (opt is Map && opt['text'] != null) {
-              options.add(opt['text'].toString());
-              optionsData.add({
-                'text': opt['text'].toString(),
-                'is_correct': opt['is_correct'] ?? false,
-              });
-            } else if (opt is String) {
-              options.add(opt);
-              optionsData.add({'text': opt, 'is_correct': false});
-            }
+      List<String> options = [];
+      List<Map<String, dynamic>> optionsData = [];
+      
+      if (questionData['options'] != null) {
+        final optionsJson = questionData['options'] as List<dynamic>;
+        final correctAnswer = questionData['correct_answer']?.toString();
+        
+        for (var opt in optionsJson) {
+          if (opt is Map && opt['text'] != null) {
+            // New format: {text: "...", is_correct: true/false}
+            final optionText = opt['text'].toString();
+            options.add(optionText);
+            optionsData.add({
+              'text': optionText,
+              'is_correct': opt['is_correct'] ?? false,
+            });
+          } else if (opt is String) {
+            // Old format: ["option1", "option2", ...]
+            // Use correct_answer field to determine which is correct
+            options.add(opt);
+            optionsData.add({
+              'text': opt,
+              'is_correct': correctAnswer != null && opt == correctAnswer,
+            });
           }
         }
+      }  
         
         debugPrint('  Question ${progress['question_id']}: loaded ${options.length} options');
         

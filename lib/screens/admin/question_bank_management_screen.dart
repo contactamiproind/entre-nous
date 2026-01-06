@@ -13,11 +13,15 @@ class QuestionBankManagementScreen extends StatefulWidget {
 class _QuestionBankManagementScreenState extends State<QuestionBankManagementScreen> {
   List<Map<String, dynamic>> _questions = [];
   bool _isLoading = true;
+  bool _selectionMode = false;
+  Set<String> _selectedQuestions = {};
+  List<Map<String, dynamic>> _departments = [];
 
   @override
   void initState() {
     super.initState();
     _loadQuestions();
+    _loadDepartments();
   }
 
   Future<void> _loadQuestions() async {
@@ -25,7 +29,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
     try {
       final response = await Supabase.instance.client
           .from('questions')
-          .select()
+          .select('*, quest_types(type)')
           .order('created_at', ascending: false);
       
       if (mounted) {
@@ -38,6 +42,139 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
       debugPrint('Error loading questions: $e');
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadDepartments() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('departments')
+          .select('id, title')
+          .order('title');
+      
+      if (mounted) {
+        setState(() {
+          _departments = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading departments: $e');
+    }
+  }
+
+  void _toggleSelectionMode() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) {
+        _selectedQuestions.clear();
+      }
+    });
+  }
+
+  void _toggleQuestionSelection(String questionId) {
+    setState(() {
+      if (_selectedQuestions.contains(questionId)) {
+        _selectedQuestions.remove(questionId);
+      } else {
+        _selectedQuestions.add(questionId);
+      }
+    });
+  }
+
+  Future<void> _showBulkAssignDialog() async {
+    String? selectedDeptId;
+    
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Assign ${_selectedQuestions.length} Questions'),
+          content: SizedBox(
+            width: 300,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Select department to assign these questions to:'),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedDeptId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Department',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _departments.map((dept) {
+                      return DropdownMenuItem<String>(
+                        value: dept['id'],
+                        child: Text(
+                          dept['title'] ?? 'Unknown',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedDeptId = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: selectedDeptId == null
+                  ? null
+                  : () async {
+                      await _bulkAssignQuestions(selectedDeptId!);
+                      if (mounted) Navigator.pop(context);
+                    },
+              child: const Text('Assign'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _bulkAssignQuestions(String deptId) async {
+    try {
+      for (String questionId in _selectedQuestions) {
+        await Supabase.instance.client
+            .from('questions')
+            .update({'dept_id': deptId})
+            .eq('id', questionId);
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${_selectedQuestions.length} questions assigned successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        setState(() {
+          _selectionMode = false;
+          _selectedQuestions.clear();
+        });
+        _loadQuestions();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error assigning questions: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -343,6 +480,33 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                if (_selectionMode)
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: _toggleSelectionMode,
+                        icon: const Icon(Icons.close),
+                        label: Text('Cancel (${_selectedQuestions.length} selected)'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: _toggleSelectionMode,
+                        icon: const Icon(Icons.checklist),
+                        label: const Text('Select Questions'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF3B82F6),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -391,8 +555,39 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                           itemCount: _questions.length,
                           itemBuilder: (context, index) {
                             final question = _questions[index];
-                            final typeId = question['type_id'];
-                            final isMultipleChoice = typeId == '90a72b93-ce01-44d9-8a93-c4ec2edd25a1';
+                            
+                            // Get the question type from the joined quest_types table
+                            String questionType = 'match'; // default
+                            if (question['quest_types'] != null && question['quest_types'] is Map) {
+                              questionType = question['quest_types']['type'] ?? 'match';
+                            }
+                            
+                            // Determine display name and color
+                            String typeName;
+                            Color typeColor;
+                            Color bgColor;
+                            
+                            switch (questionType) {
+                              case 'mcq':
+                                typeName = 'Multiple Choice';
+                                typeColor = const Color(0xFF10B981);
+                                bgColor = const Color(0xFF10B981).withOpacity(0.1);
+                                break;
+                              case 'match':
+                                typeName = 'Match Following';
+                                typeColor = const Color(0xFFEC4899);
+                                bgColor = const Color(0xFFEC4899).withOpacity(0.1);
+                                break;
+                              case 'card_match':
+                                typeName = 'Card Match';
+                                typeColor = const Color(0xFF3B82F6);
+                                bgColor = const Color(0xFF3B82F6).withOpacity(0.1);
+                                break;
+                              default:
+                                typeName = 'Unknown';
+                                typeColor = Colors.grey;
+                                bgColor = Colors.grey.withOpacity(0.1);
+                            }
                             
                             return Card(
                               margin: const EdgeInsets.only(bottom: 12),
@@ -407,6 +602,13 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                       Row(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
+                                          if (_selectionMode)
+                                            Checkbox(
+                                              value: _selectedQuestions.contains(question['id']),
+                                              onChanged: (value) {
+                                                _toggleQuestionSelection(question['id']);
+                                              },
+                                            ),
                                           Expanded(
                                             child: Text(
                                               question['title'] ?? 'No title',
@@ -451,20 +653,14 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                           vertical: 4,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: isMultipleChoice
-                                              ? const Color(0xFF10B981).withOpacity(0.1)
-                                              : const Color(0xFFEC4899).withOpacity(0.1),
+                                          color: bgColor,
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
-                                          isMultipleChoice
-                                              ? 'Multiple Choice'
-                                              : 'Match Following',
+                                          typeName,
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: isMultipleChoice
-                                                ? const Color(0xFF10B981)
-                                                : const Color(0xFFEC4899),
+                                            color: typeColor,
                                           ),
                                         ),
                                       ),
@@ -479,6 +675,14 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
           ),
         ],
       ),
+      floatingActionButton: _selectionMode && _selectedQuestions.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: _showBulkAssignDialog,
+              icon: const Icon(Icons.assignment),
+              label: Text('Assign ${_selectedQuestions.length}'),
+              backgroundColor: const Color(0xFF3B82F6),
+            )
+          : null,
     );
   }
 }
