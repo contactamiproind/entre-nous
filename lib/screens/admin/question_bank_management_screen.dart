@@ -697,6 +697,41 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                   ],
                 ),
                 const SizedBox(height: 12),
+                // Department Filter
+                DropdownButtonFormField<String>(
+                  value: _selectedDepartmentFilter,
+                  decoration: const InputDecoration(
+                    labelText: 'Department',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    isDense: true,
+                    prefixIcon: Icon(Icons.filter_list, size: 18),
+                  ),
+                  isExpanded: true,
+                  hint: const Text('All Departments'),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('All Departments'),
+                    ),
+                    ..._departments.map((dept) {
+                      return DropdownMenuItem<String>(
+                        value: dept['id'],
+                        child: Text(
+                          dept['title'] ?? 'Unknown',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedDepartmentFilter = value;
+                    });
+                    _filterQuestions();
+                  },
+                ),
+                const SizedBox(height: 12),
                 if (_selectionMode)
                   Row(
                     children: [
