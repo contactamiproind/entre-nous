@@ -243,11 +243,18 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
                                   color: color,
                                   onTap: isUnlocked
                                       ? () async {
+                                          // Add usr_dept_id to level before navigating
+                                          final levelWithUsrDeptId = {
+                                            ...level,
+                                            'usr_dept_id': _userProgress?['id'],
+                                            'dept_id': widget.pathwayId,
+                                          };
+                                          
                                           final result = await Navigator.push(
                                             context,
                                             MaterialPageRoute(
                                               builder: (context) => QuizScreen(
-                                                level: level,
+                                                level: levelWithUsrDeptId,
                                                 pathwayName: widget.pathwayName,
                                                 pathwayId: widget.pathwayId,
                                               ),

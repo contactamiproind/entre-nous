@@ -696,68 +696,75 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                // Department Filter
-                DropdownButtonFormField<String>(
-                  value: _selectedDepartmentFilter,
-                  decoration: const InputDecoration(
-                    labelText: 'Department',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    isDense: true,
-                    prefixIcon: Icon(Icons.filter_list, size: 18),
-                  ),
-                  isExpanded: true,
-                  hint: const Text('All Departments'),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('All Departments'),
+                const SizedBox(height: 4),
+                // Department Filter and Select Questions in one row
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedDepartmentFilter,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          isDense: true,
+                          prefixIcon: Icon(Icons.filter_list, size: 18),
+                        ),
+                        isExpanded: true,
+                        hint: const Text('All Departments'),
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('All Departments'),
+                          ),
+                          ..._departments.map((dept) {
+                            return DropdownMenuItem<String>(
+                              value: dept['id'],
+                              child: Text(
+                                dept['title'] ?? 'Unknown',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedDepartmentFilter = value;
+                          });
+                          _filterQuestions();
+                        },
+                      ),
                     ),
-                    ..._departments.map((dept) {
-                      return DropdownMenuItem<String>(
-                        value: dept['id'],
-                        child: Text(
-                          dept['title'] ?? 'Unknown',
-                          overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 8),
+                    if (_selectionMode)
+                      Flexible(
+                        flex: 1,
+                        child: TextButton.icon(
+                          onPressed: _toggleSelectionMode,
+                          icon: const Icon(Icons.close, size: 18),
+                          label: Text('Cancel (${_selectedQuestions.length})'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
                         ),
-                      );
-                    }).toList(),
+                      )
+                    else
+                      Flexible(
+                        flex: 1,
+                        child: TextButton.icon(
+                          onPressed: _toggleSelectionMode,
+                          icon: const Icon(Icons.checklist, size: 18),
+                          label: const Text('Select'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF3B82F6),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                        ),
+                      ),
                   ],
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedDepartmentFilter = value;
-                    });
-                    _filterQuestions();
-                  },
                 ),
-                const SizedBox(height: 12),
-                if (_selectionMode)
-                  Row(
-                    children: [
-                      TextButton.icon(
-                        onPressed: _toggleSelectionMode,
-                        icon: const Icon(Icons.close),
-                        label: Text('Cancel (${_selectedQuestions.length} selected)'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      TextButton.icon(
-                        onPressed: _toggleSelectionMode,
-                        icon: const Icon(Icons.checklist),
-                        label: const Text('Select Questions'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF3B82F6),
-                        ),
-                      ),
-                    ],
-                  ),
+                const SizedBox(height: 3),
               ],
             ),
           ),
@@ -833,6 +840,11 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                 typeName = 'Card Match';
                                 typeColor = const Color(0xFF3B82F6);
                                 bgColor = const Color(0xFF3B82F6).withOpacity(0.1);
+                                break;
+                              case 'scenario_decision':
+                                typeName = 'Scenario Decision';
+                                typeColor = const Color(0xFF9B59B6);
+                                bgColor = const Color(0xFF9B59B6).withOpacity(0.1);
                                 break;
                               default:
                                 typeName = 'Unknown';

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProgressService {
@@ -7,21 +8,23 @@ class ProgressService {
   Future<void> saveQuestionAnswer({
     required String userId,
     required String departmentId,
+    required String usrDeptId,
     required String questionId,
-    required int questionOrder,
-    required Map<String, dynamic> userAnswer,
+    required String userAnswer,
     required bool isCorrect,
-    required int pointsEarned,
+    required int scoreEarned,
   }) async {
-    await _supabase.from('usr_stat').insert({
+    await _supabase.from('usr_progress').upsert({
       'user_id': userId,
-      'department_id': departmentId,
+      'dept_id': departmentId,
+      'usr_dept_id': usrDeptId,
       'question_id': questionId,
-      'question_order': questionOrder,
       'user_answer': userAnswer,
       'is_correct': isCorrect,
-      'points_earned': pointsEarned,
-    });
+      'score_earned': scoreEarned,
+      'status': 'answered',
+      'last_attempted_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'usr_dept_id,question_id');
   }
 
   // Get user's progress summary for a department
@@ -45,11 +48,11 @@ class ProgressService {
     required String departmentId,
   }) async {
     final response = await _supabase
-        .from('usr_stat')
+        .from('usr_progress')
         .select()
         .eq('user_id', userId)
-        .eq('department_id', departmentId)
-        .order('question_order');
+        .eq('dept_id', departmentId)
+        .order('created_at');
 
     return List<Map<String, dynamic>>.from(response);
   }
@@ -60,7 +63,7 @@ class ProgressService {
     required String questionId,
   }) async {
     final response = await _supabase
-        .from('usr_stat')
+        .from('usr_progress')
         .select()
         .eq('user_id', userId)
         .eq('question_id', questionId)
@@ -118,14 +121,22 @@ class ProgressService {
 
   // Get user progress (current department)
   Future<Map<String, dynamic>?> getUserProgress(String userId) async {
-    // Query from usr_dept for current active department
-    final response = await _supabase
-        .from('usr_dept')
-        .select()
-        .eq('user_id', userId)
-        .eq('is_current', true)
-        .maybeSingle();
+    try {
+      // Query from usr_dept for current active department
+      final response = await _supabase
+          .from('usr_dept')
+          .select()
+          .eq('user_id', userId)
+          .eq('is_current', true)
+          .limit(1);
 
-    return response;
+      if (response.isNotEmpty) {
+        return response.first as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('⚠️ User progress error ignored: $e');
+      return null;
+    }
   }
 }

@@ -31,14 +31,13 @@ class _QuizScreenState extends State<QuizScreen> {
   bool _isLoading = true;
   int _currentQuestionIndex = 0;
   int _score = 0;
-  bool _isSubmitting = false;
   Map<int, int> _selectedAnswers = {}; // question_index -> answer_index
   bool _showResults = false;
   bool _showCelebration = false;
   
   Map<int, Map<String, String?>> _matchAnswers = {}; // question_index -> {left_item -> selected_right_item}
   Map<int, int> _gameScores = {}; // question_index -> score (for interactive games)
-  bool _showLevelIntro = true; // Show gamified intro logic
+// Show gamified intro logic
 
   @override
   void initState() {
@@ -88,50 +87,74 @@ class _QuizScreenState extends State<QuizScreen> {
             .eq('id', progress['question_id'])
             .single();
         
+        // Infer question type from title
+        String inferredType = 'multiple_choice'; // default
+        final title = questionData['title']?.toString().toLowerCase() ?? '';
+        if (title.contains('single tap')) {
+          inferredType = 'single_tap_choice';
+        } else if (title.contains('card match')) {
+          inferredType = 'card_match';
+        } else if (title.contains('scenario') || title.contains('decision')) {
+          inferredType = 'scenario_decision';
+        } else if (title.contains('match')) {
+          inferredType = 'match_following';
+        }
+        
+        
         // Extract options from the question data
       List<String> options = [];
       List<Map<String, dynamic>> optionsData = [];
       
       if (questionData['options'] != null) {
-        final optionsJson = questionData['options'] as List<dynamic>;
+        final optionsRaw = questionData['options'];
         final correctAnswer = questionData['correct_answer']?.toString();
         
-        for (var opt in optionsJson) {
-          if (opt is Map && opt['text'] != null) {
-            // New format: {text: "...", is_correct: true/false}
-            final optionText = opt['text'].toString();
-            options.add(optionText);
-            optionsData.add({
-              'text': optionText,
-              'is_correct': opt['is_correct'] ?? false,
-            });
-          } else if (opt is String) {
-            // Old format: ["option1", "option2", ...]
-            // Use correct_answer field to determine which is correct
-            options.add(opt);
-            optionsData.add({
-              'text': opt,
-              'is_correct': correctAnswer != null && opt == correctAnswer,
-            });
+        // Handle both List and Map formats
+        if (optionsRaw is List) {
+          // Array format: [{text: "...", is_correct: true}, ...]
+          for (var opt in optionsRaw) {
+            if (opt is Map && opt['text'] != null) {
+              // New format: {text: "...", is_correct: true/false}
+              final optionText = opt['text'].toString();
+              options.add(optionText);
+              optionsData.add({
+                'text': optionText,
+                'is_correct': opt['is_correct'] ?? false,
+              });
+            } else if (opt is String) {
+              // Old format: ["option1", "option2", ...]
+              // Use correct_answer field to determine which is correct
+              options.add(opt);
+              optionsData.add({
+                'text': opt,
+                'is_correct': opt == correctAnswer,
+              });
+            }
           }
+        } else if (optionsRaw is Map) {
+          // Object format: {cards: [...]} for card_match questions
+          // Just store it as-is for card match questions
+          debugPrint('   Options is a Map (likely card_match question)');
         }
-      }  
         
         debugPrint('  Question ${progress['question_id']}: loaded ${options.length} options');
+      }  
         
         questions.add({
           'id': progress['question_id'],
           'progress_id': progress['id'], // Store usr_progress ID for updates
           'title': progress['question_text'],
           'description': progress['question_type'],
-          'question_type': 'multiple_choice', // Default, can be enhanced
           'difficulty': progress['difficulty'],
           'points': progress['points'],
           'status': progress['status'],
           'user_answer': progress['user_answer'],
           'is_correct': progress['is_correct'],
-          'options': options, // Add the loaded options
+          'options': inferredType == 'card_match' ? questionData['options'] : options, // Keep Map for card_match, use List for others
           'options_data': optionsData, // Store full option data with is_correct flags
+          'correct_answer': questionData['correct_answer'], // CRITICAL: Add for validation
+          'question_type': inferredType, // Use inferred type
+          'card_pairs': questionData['options'], // For Card Match questions
         });
       }
 
@@ -153,7 +176,6 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _submitQuiz() async {
-    setState(() => _isSubmitting = true);
 
     int correctCount = 0;
     int totalScore = 0;
@@ -166,16 +188,27 @@ class _QuizScreenState extends State<QuizScreen> {
       
       bool isCorrect = false;
       
-      if (questionType == 'multiple_choice') {
+      if (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision') {
         final selectedIndex = _selectedAnswers[i];
         final options = List<String>.from(question['options'] ?? []);
-        final optionsData = List<Map<String, dynamic>>.from(question['options_data'] ?? []);
+        
+        // Get options_data which contains is_correct flags
+        final optionsDataRaw = question['options_data'];
+        List<Map<String, dynamic>> optionsData = [];
+        if (optionsDataRaw is List) {
+          optionsData = optionsDataRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+        
+        debugPrint('📝 Question $i: ${options.length} options');
+        debugPrint('   Selected index: $selectedIndex');
+        debugPrint('   Options data: $optionsData');
         
         if (selectedIndex != null && selectedIndex < options.length && selectedIndex < optionsData.length) {
           final selectedAnswerText = options[selectedIndex];
           final isCorrectOption = optionsData[selectedIndex]['is_correct'] == true;
           
-          debugPrint('Checking Answer: "$selectedAnswerText" (Index: $selectedIndex, Is Correct: $isCorrectOption)');
+          debugPrint('Checking Answer: "$selectedAnswerText" (Index: $selectedIndex)');
+          debugPrint('   is_correct flag: $isCorrectOption');
           
           if (isCorrectOption) {
             debugPrint('✅ Answer Correct!');
@@ -226,7 +259,6 @@ class _QuizScreenState extends State<QuizScreen> {
     setState(() {
       _score = totalScore;
       _showResults = true;
-      _isSubmitting = false;
       
       if (percentage >= 70) {
         debugPrint('🎉 Triggering celebration!');
@@ -287,11 +319,11 @@ class _QuizScreenState extends State<QuizScreen> {
           await _progressService.saveQuestionAnswer(
             userId: user.id,
             departmentId: widget.level['department_id'] ?? widget.level['pathway_id'] ?? widget.level['dept_id'] ?? '',
+            usrDeptId: widget.level['usr_dept_id'] ?? '',
             questionId: question['id'],
-            questionOrder: i + 1,
-            userAnswer: userAnswer,
+            userAnswer: userAnswer.toString(),
             isCorrect: isCorrect,
-            pointsEarned: isCorrect ? questionValue : 0,
+            scoreEarned: isCorrect ? questionValue : 0,
           );
         }
 
@@ -307,11 +339,12 @@ class _QuizScreenState extends State<QuizScreen> {
             
             debugPrint('🔓 Unlocking next level: $nextLevelNumber');
             
-            // Update user_progress to unlock next level
+            // Update usr_dept to unlock next level
             await Supabase.instance.client
-                .from('user_progress')
+                .from('usr_dept')
                 .update({'current_level': nextLevelNumber})
-                .eq('user_id', user.id);
+                .eq('user_id', user.id)
+                .eq('dept_id', widget.pathwayId);
             
             debugPrint('✅ Next level unlocked successfully!');
           } catch (e) {
@@ -349,6 +382,8 @@ class _QuizScreenState extends State<QuizScreen> {
 
     final question = _questions[_currentQuestionIndex];
     final questionType = question['question_type'] ?? 'multiple_choice';
+    debugPrint('🔍 QUESTION TYPE = "$questionType"');
+    debugPrint('   Question data: ${question.keys.toList()}');
     
     // Determine if current question is answered
     bool isAnswered = false;
@@ -439,26 +474,30 @@ class _QuizScreenState extends State<QuizScreen> {
               ],
             const SizedBox(height: 32),
             
-            // Question Content (Multiple Choice, Match, or Card Match)
+            // Question Content (Scrollable)
             Expanded(
-              child: questionType == 'card_match'
-                  ? CardMatchQuestionWidget(
-                      questionData: question,
-                      onAnswerSubmitted: (score, isCorrect) {
-                        setState(() {
-                          _gameScores[_currentQuestionIndex] = score;
-                          if (_currentQuestionIndex < _questions.length - 1) {
-                            _currentQuestionIndex++;
-                          } else {
-                            _submitQuiz();
-                          }
-                        });
-                      },
-                    )
-                  : questionType == 'multiple_choice'
-                      ? _buildMultipleChoiceOptions(question)
-                      : _buildMatchTheFollowing(question),
+              child: SingleChildScrollView(
+                child: questionType == 'card_match'
+                    ? CardMatchQuestionWidget(
+                        questionData: question,
+                        onAnswerSubmitted: (score, isCorrect) {
+                          setState(() {
+                            _gameScores[_currentQuestionIndex] = score;
+                            if (_currentQuestionIndex < _questions.length - 1) {
+                              _currentQuestionIndex++;
+                            } else {
+                              _submitQuiz();
+                            }
+                          });
+                        },
+                      )
+                    : (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision')
+                        ? _buildMultipleChoiceOptions(question)
+                        : _buildMatchTheFollowing(question),
+              ),
             ),
+            
+            const SizedBox(height: 12),
             
             // Navigation Buttons
             Row(
@@ -513,88 +552,97 @@ class _QuizScreenState extends State<QuizScreen> {
       const Color(0xFF74C0D9), // Light Blue
     ];
     
-    return ListView.separated(
-      itemCount: options.length,
-      separatorBuilder: (c, i) => const SizedBox(height: 16),
-      itemBuilder: (context, index) {
+    if (options.isEmpty) {
+      return const Center(
+        child: Text('No options available'),
+      );
+    }
+    
+    return Column(
+      children: options.asMap().entries.map((entry) {
+        final index = entry.key;
+        final option = entry.value;
         final isSelected = _selectedAnswers[_currentQuestionIndex] == index;
         final optionColor = optionColors[index % optionColors.length];
         
-        return InkWell(
-          onTap: () {
-            setState(() {
-              _selectedAnswers[_currentQuestionIndex] = index;
-            });
-          },
-          borderRadius: BorderRadius.circular(20),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            decoration: BoxDecoration(
-              color: isSelected ? optionColor : Colors.white,
-              border: Border.all(
-                color: isSelected ? optionColor : const Color(0xFFE0E0E0),
-                width: isSelected ? 3 : 2,
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _selectedAnswers[_currentQuestionIndex] = index;
+              });
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+              decoration: BoxDecoration(
+                color: isSelected ? optionColor : Colors.white,
+                border: Border.all(
+                  color: isSelected ? optionColor : const Color(0xFFE0E0E0),
+                  width: isSelected ? 3 : 2,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: optionColor.withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
               ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: optionColor.withOpacity(0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected ? Colors.white.withOpacity(0.2) : optionColor.withOpacity(0.1),
+                    ),
+                    child: Center(
+                      child: Text(
+                        String.fromCharCode(65 + index), // A, B, C, D
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: isSelected ? Colors.white : optionColor,
+                          fontSize: 18,
+                        ),
                       ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected ? Colors.white.withOpacity(0.2) : optionColor.withOpacity(0.1),
+                    ),
                   ),
-                  child: Center(
+                  const SizedBox(width: 16),
+                  Expanded(
                     child: Text(
-                      String.fromCharCode(65 + index), // A, B, C, D
+                      option.toString(),
                       style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: isSelected ? Colors.white : optionColor,
                         fontSize: 18,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected ? Colors.white : const Color(0xFF1A2F4B),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    options[index],
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                      color: isSelected ? Colors.white : const Color(0xFF1A2F4B), // Navy
+                  if (isSelected)
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.white,
+                      size: 28,
                     ),
-                  ),
-                ),
-                if (isSelected)
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         );
-      },
+      }).toList(),
     );
   }
 
@@ -617,132 +665,134 @@ class _QuizScreenState extends State<QuizScreen> {
       const Color(0xFFFF9A76), // Orange
     ];
 
-    return ListView.separated(
-      itemCount: pairs.length,
-      separatorBuilder: (c, i) => const SizedBox(height: 20),
-      itemBuilder: (context, index) {
+    return Column(
+      children: pairs.asMap().entries.map((entry) {
+        final index = entry.key;
         final pair = pairs[index];
         final leftItem = pair['left'] as String;
         final selectedRight = userMatches[leftItem];
         final pairColor = pairColors[index % pairColors.length];
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(color: pairColor.withOpacity(0.5), width: 2),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Left Item (Question)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: pairColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: pairColor, width: 1.5),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: pairColor, width: 2),
-                        ),
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: pairColor,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          leftItem,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A2F4B), // Navy
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Icon(Icons.arrow_downward_rounded, color: Colors.grey),
-                ),
-
-                // Right Item Dropdown (Answer)
-                Container(
-                  decoration: BoxDecoration(
-                    color: selectedRight != null ? pairColor.withOpacity(0.1) : Colors.grey[50],
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: selectedRight != null ? pairColor : Colors.grey[300]!,
-                      width: 2,
-                    ),
-                  ),
-                  child: DropdownButtonFormField<String>(
-                    value: selectedRight,
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      border: InputBorder.none,
-                      hintText: 'Select Match',
-                      hintStyle: TextStyle(color: Colors.grey[400], fontSize: 16, fontWeight: FontWeight.bold),
-                      prefixIcon: Icon(
-                        selectedRight != null ? Icons.link : Icons.link_off,
-                        color: selectedRight != null ? pairColor : Colors.grey[400],
-                      ),
-                    ),
-                    dropdownColor: Colors.white,
-                    icon: Icon(Icons.arrow_drop_down_circle, color: pairColor),
-                    items: rightItemsWithIndex.map((itemWithIndex) {
-                      final displayValue = itemWithIndex.split('|')[0];
-                      return DropdownMenuItem(
-                        value: itemWithIndex,
-                        child: Text(
-                          displayValue,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: const Color(0xFF1A2F4B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        if (_matchAnswers[_currentQuestionIndex] == null) {
-                          _matchAnswers[_currentQuestionIndex] = {};
-                        }
-                        _matchAnswers[_currentQuestionIndex]![leftItem] = value;
-                      });
-                    },
-                  ),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
                 ),
               ],
+              border: Border.all(color: pairColor.withOpacity(0.5), width: 2),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // Left Item (Question)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: pairColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: pairColor, width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: pairColor, width: 2),
+                          ),
+                          child: Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: pairColor,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            leftItem,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A2F4B), // Navy
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Icon(Icons.arrow_downward_rounded, color: Colors.grey),
+                  ),
+
+                  // Right Item Dropdown (Answer)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: selectedRight != null ? pairColor.withOpacity(0.1) : Colors.grey[50],
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: selectedRight != null ? pairColor : Colors.grey[300]!,
+                        width: 2,
+                      ),
+                    ),
+                    child: DropdownButtonFormField<String>(
+                      value: selectedRight,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        border: InputBorder.none,
+                        hintText: 'Select Match',
+                        hintStyle: TextStyle(color: Colors.grey[400], fontSize: 16, fontWeight: FontWeight.bold),
+                        prefixIcon: Icon(
+                          selectedRight != null ? Icons.link : Icons.link_off,
+                          color: selectedRight != null ? pairColor : Colors.grey[400],
+                        ),
+                      ),
+                      dropdownColor: Colors.white,
+                      icon: Icon(Icons.arrow_drop_down_circle, color: pairColor),
+                      items: rightItemsWithIndex.map((itemWithIndex) {
+                        final displayValue = itemWithIndex.split('|')[0];
+                        return DropdownMenuItem(
+                          value: itemWithIndex,
+                          child: Text(
+                            displayValue,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: const Color(0xFF1A2F4B),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          if (_matchAnswers[_currentQuestionIndex] == null) {
+                            _matchAnswers[_currentQuestionIndex] = {};
+                          }
+                          _matchAnswers[_currentQuestionIndex]![leftItem] = value;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
-      },
+      }).toList(),
     );
   }
 

@@ -123,7 +123,7 @@ class UserService {
   Future<void> deleteUser(String userId, {bool deleteAuth = false}) async {
     try {
       // Delete user progress
-      await _supabase.from('usr_stat').delete().eq('user_id', userId);
+      await _supabase.from('usr_progress').delete().eq('user_id', userId);
 
       // Delete pathway assignments
       await _supabase.from('user_pathway').delete().eq('user_id', userId);

@@ -170,14 +170,14 @@ class DepartmentService {
   Future<bool> isOrientationCompleted(String userId) async {
     try {
       final response = await _supabase
-          .from('usr_stat')
+          .from('usr_progress')
           .select('orientation_completed')
           .eq('user_id', userId)
           .maybeSingle();
 
       if (response == null) {
         // User progress record doesn't exist yet, create it
-        await _supabase.from('usr_stat').insert({
+        await _supabase.from('usr_progress').insert({
           'user_id': userId,
           'orientation_completed': false,
         });
@@ -194,7 +194,7 @@ class DepartmentService {
   Future<void> markOrientationComplete(String userId) async {
     try {
       await _supabase
-          .from('usr_stat')
+          .from('usr_progress')
           .update({'orientation_completed': true})
           .eq('user_id', userId);
     } catch (e) {

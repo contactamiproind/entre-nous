@@ -218,6 +218,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     String dbType = _questionType;
     if (_questionType == 'multiple_choice') dbType = 'mcq';
     if (_questionType == 'match_following') dbType = 'match';
+    if (_questionType == 'scenario_decision') dbType = 'scenario_decision';
     
     // Get type_id from quest_types table
     final typeRes = await Supabase.instance.client
@@ -274,13 +275,81 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
           {'id': 'c4', 'text': 'Memorable experience moment', 'correct_bucket': 'delight'}
         ]
       };
+    } else if (_questionType == 'scenario_decision') {
+      // Prepare options array with is_correct flags (same as multiple choice)
+      final options = _optionControllers.asMap().entries.map((entry) {
+        return {
+          'text': entry.value.text.trim(),
+          'is_correct': entry.key == _correctDisplayIndex,
+        };
+      }).toList();
+      
+      questionData['options'] = options;
+      questionData['correct_answer'] = _optionControllers[_correctDisplayIndex].text.trim();
     }
 
-    await Supabase.instance.client.from('questions').insert(questionData);
+    final insertedQuestion = await Supabase.instance.client
+        .from('questions')
+        .insert(questionData)
+        .select()
+        .single();
+
+    // AUTO-ASSIGNMENT: Create usr_progress entries for all users with this department
+    try {
+      final questionId = insertedQuestion['id'];
+      final deptId = _selectedPathway!.id;
+      final levelNumber = _selectedLevel!.levelNumber;
+      
+      debugPrint('🔄 Starting auto-assignment for question $questionId');
+      
+      // Get all users who have this department assigned
+      final usersWithDept = await Supabase.instance.client
+          .from('usr_dept')
+          .select('id, user_id')
+          .eq('dept_id', deptId);
+      
+      debugPrint('👥 Found ${usersWithDept.length} users with this department');
+      
+      if (usersWithDept.isNotEmpty) {
+        // Create usr_progress entries for each user
+        final progressEntries = usersWithDept.map((userDept) {
+          return {
+            'user_id': userDept['user_id'],
+            'usr_dept_id': userDept['id'], // Link to usr_dept
+            'question_id': questionId,
+            'dept_id': deptId,
+            'level_number': levelNumber,
+            'level_name': difficulty, // Use difficulty as level_name
+            'question_text': _titleController.text.trim(),
+            'question_type': _questionType,
+            'difficulty': difficulty,
+            'category': 'Orientation',
+            'subcategory': 'Vision',
+            'points': 10,
+            'status': 'pending',
+            'score_earned': 0,
+            'attempt_count': 0,
+            'flagged_for_review': false,
+          };
+        }).toList();
+        
+        await Supabase.instance.client
+            .from('usr_progress')
+            .insert(progressEntries);
+        
+        debugPrint('✅ Auto-assigned question to ${usersWithDept.length} users');
+      } else {
+        debugPrint('⚠️ No users found with this department');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Auto-assignment failed: $e');
+      debugPrint('   Stack trace: ${StackTrace.current}');
+      // Don't fail the whole operation if auto-assignment fails
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Question added successfully!')),
+        const SnackBar(content: Text('Question added and assigned to users successfully!')),
       );
       Navigator.pop(context);
     }
@@ -441,6 +510,10 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                           value: 'match_following',
                           child: Text('Match the Following'),
                         ),
+                        DropdownMenuItem(
+                          value: 'scenario_decision',
+                          child: Text('Scenario Decision'),
+                        ),
                       ],
                       onChanged: (value) {
                         if (value != null) {
@@ -518,6 +591,77 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Select the correct answer by clicking the radio button',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ] else if (_questionType == 'scenario_decision') ...[
+                      // Scenario Decision UI
+                      TextFormField(
+                        controller: _titleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Scenario Title',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.psychology),
+                        ),
+                        maxLines: 3,
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Description
+                      TextFormField(
+                        controller: _descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.description),
+                        ),
+                        maxLines: 3,
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      const Text(
+                        'Decision Options',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...List.generate(4, (index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              Radio<int>(
+                                value: index,
+                                groupValue: _correctDisplayIndex,
+                                onChanged: (val) {
+                                  setState(() => _correctDisplayIndex = val!);
+                                },
+                                activeColor: Colors.green,
+                              ),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _optionControllers[index],
+                                  decoration: InputDecoration(
+                                    labelText: 'Option ${index + 1}',
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Select the best decision (correct answer)',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],

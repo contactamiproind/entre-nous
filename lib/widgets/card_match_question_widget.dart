@@ -146,16 +146,16 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            children: buckets.map((bucket) => Expanded(
+            children: buckets.map((bucket) => Flexible(
+              fit: FlexFit.tight,
               child: _buildBucket(bucket),
             )).toList(),
           ),
         ),
         
-        const SizedBox(height: 16),
-        
         // Cards
-        Expanded(
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 400),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: GridView.builder(

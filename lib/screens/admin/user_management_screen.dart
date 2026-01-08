@@ -257,7 +257,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       try {
         // Delete user progress
         await Supabase.instance.client
-            .from('usr_stat')
+            .from('usr_progress')
             .delete()
             .eq('user_id', user['user_id']);
 
