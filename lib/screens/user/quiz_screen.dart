@@ -144,7 +144,7 @@ class _QuizScreenState extends State<QuizScreen> {
           'id': progress['question_id'],
           'progress_id': progress['id'], // Store usr_progress ID for updates
           'title': progress['question_text'],
-          'description': progress['question_type'],
+          'description': questionData['description'],
           'difficulty': progress['difficulty'],
           'points': progress['points'],
           'status': progress['status'],
