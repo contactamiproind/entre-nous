@@ -62,7 +62,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final padding = ResponsiveUtils.getPagePadding(context);
-    final logoSize = ResponsiveUtils.isMobile(context) ? 120.0 : 180.0;
+    final logoSize = ResponsiveUtils.isMobile(context) ? 180.0 : 250.0;
     final titleSize = ResponsiveUtils.getH1Size(context) + 8;
     
     return Scaffold(

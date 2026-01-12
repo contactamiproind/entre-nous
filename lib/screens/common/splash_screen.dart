@@ -107,7 +107,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
-    final logoSize = isMobile ? 100.0 : 120.0;
+    final logoSize = isMobile ? 180.0 : 250.0;
     final titleSize = isMobile ? 32.0 : 40.0;
     final subtitleSize = isMobile ? 14.0 : 16.0;
     final spacing = isMobile ? 24.0 : 32.0;

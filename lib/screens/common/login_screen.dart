@@ -189,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final padding = ResponsiveUtils.getPagePadding(context);
     final titleSize = ResponsiveUtils.getH1Size(context);
     final subtitleSize = ResponsiveUtils.getBodySize(context);
-    final logoSize = ResponsiveUtils.isMobile(context) ? 60.0 : 80.0;
+    final logoSize = ResponsiveUtils.isMobile(context) ? 200.0 : 280.0;
     
     return Scaffold(
       body: Container(
