@@ -20,6 +20,11 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
   int _totalEnrolled = 0;
   bool _isLoading = true;
   List<Map<String, dynamic>> _pathwaysData = [];
+  int _quizTimerSeconds = 30; // Default timer duration
+  
+  // Scoring thresholds (as percentages)
+  double _fullPointsThreshold = 0.5;  // < 50% time = full points
+  double _halfPointsThreshold = 0.75; // < 75% time = half points
 
   @override
   void initState() {
@@ -108,55 +113,92 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        title: const Text('Admin Dashboard'),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A2F4B),
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadStats,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
-            onPressed: _logout,
-          ),
-        ],
-      ),
-      body: _buildBody(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF1A2F4B),
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.alt_route),
-            label: 'Department',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.quiz),
-            label: 'Q-Bank',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'Users',
-          ),
-        ],
+    return WillPopScope(
+      onWillPop: () async {
+        // If not on home tab, go back to home tab instead of exiting
+        if (_selectedIndex != 0) {
+          setState(() => _selectedIndex = 0);
+          return false; // Don't pop the route
+        }
+        // If on home tab, prevent back navigation (stay on dashboard)
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          title: const Text('Admin Dashboard'),
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadStats,
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout, color: Colors.red),
+              onPressed: _logout,
+            ),
+          ],
+        ),
+        body: _buildBody(),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: (index) => setState(() => _selectedIndex = index),
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: const Color(0xFF8B5CF6),
+          unselectedItemColor: Colors.grey,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.alt_route),
+              label: 'Department',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.quiz),
+              label: 'Q-Bank',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.people),
+              label: 'Users',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildBody() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF6EC1E4),
+            Color(0xFF9BA8E8),
+            Color(0xFFE8A8D8),
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: _buildCurrentScreen(),
+      ),
+    );
+  }
+
+  Widget _buildCurrentScreen() {
     switch (_selectedIndex) {
       case 0:
         return _buildHomeTab();
@@ -172,6 +214,8 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
         return UserManagementScreen(
           onBack: () => setState(() => _selectedIndex = 0),
         );
+      case 4:
+        return _buildSettingsScreen();
       default:
         return _buildHomeTab();
     }
@@ -188,7 +232,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1A2F4B),
+              color: Color(0xFF1E293B),
             ),
           ),
           const SizedBox(height: 20),
@@ -215,7 +259,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                   'Users',
                   _totalUsers.toString(),
                   Icons.people,
-                  const Color(0xFF42A5F5),
+                  const Color(0xFF8B5CF6),
                 ),
                 
                 // Divider
@@ -230,7 +274,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                   'Depts',
                   _totalDepartments.toString(),
                   Icons.alt_route,
-                  const Color(0xFF66BB6A),
+                  const Color(0xFFFBBF24),
                 ),
                 
                  // Divider
@@ -245,7 +289,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                   'Enrolled',
                   _totalEnrolled.toString(),
                   Icons.school,
-                  const Color(0xFFFF9800),
+                  const Color(0xFFF9A8D4),
                 ),
               ],
             ),
@@ -257,7 +301,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1A2F4B),
+              color: Color(0xFF1E293B),
             ),
           ),
           const SizedBox(height: 12),
@@ -281,7 +325,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
               _buildActionButton(
                 'Manage Question Bank',
                 Icons.quiz_rounded,
-                const Color(0xFF10B981),
+                const Color(0xFFFBBF24),
                 () => setState(() => _selectedIndex = 2), // Navigate to Q-Bank tab
               ),
             ],
@@ -378,6 +422,387 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
         'Department Management - Coming Soon',
         style: TextStyle(fontSize: 18),
       ),
+    );
+  }
+
+  Widget _buildSettingsScreen() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Quiz Settings',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 32),
+          
+          // Timer Configuration Card
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.timer,
+                        color: Color(0xFF8B5CF6),
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Quiz Timer',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A2F4B),
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Set time limit for each question',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                
+                // Timer Duration Slider
+                Row(
+                  children: [
+                    const Text(
+                      'Duration:',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A2F4B),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBBF24).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _quizTimerSeconds == 0 ? 'Disabled' : '$_quizTimerSeconds seconds',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A2F4B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                Slider(
+                  value: _quizTimerSeconds.toDouble(),
+                  min: 0,
+                  max: 120,
+                  divisions: 24,
+                  activeColor: const Color(0xFF8B5CF6),
+                  inactiveColor: Colors.grey[300],
+                  label: _quizTimerSeconds == 0 ? 'Disabled' : '$_quizTimerSeconds s',
+                  onChanged: (value) {
+                    setState(() {
+                      _quizTimerSeconds = value.toInt();
+                    });
+                  },
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Quick preset buttons
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _buildPresetButton('15s', 15),
+                    _buildPresetButton('30s', 30),
+                    _buildPresetButton('45s', 45),
+                    _buildPresetButton('60s', 60),
+                    _buildPresetButton('90s', 90),
+                    _buildPresetButton('Disable', 0),
+                  ],
+                ),
+                
+                const SizedBox(height: 40),
+                
+                // Scoring Thresholds Section
+                const Divider(thickness: 2),
+                const SizedBox(height: 24),
+                
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBBF24).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.star,
+                        color: Color(0xFFFBBF24),
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Scoring Thresholds',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A2F4B),
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Configure time-based point breakpoints',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                
+                // Full Points Threshold
+                Row(
+                  children: [
+                    const Text(
+                      'Full Points (100):',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A2F4B),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '< ${(_fullPointsThreshold * 100).toInt()}% time',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Slider(
+                  value: _fullPointsThreshold,
+                  min: 0.2,
+                  max: 0.8,
+                  divisions: 12,
+                  activeColor: Colors.green,
+                  label: '${(_fullPointsThreshold * 100).toInt()}%',
+                  onChanged: (value) {
+                    setState(() {
+                      _fullPointsThreshold = value;
+                      // Ensure half points threshold is always higher
+                      if (_halfPointsThreshold <= _fullPointsThreshold) {
+                        _halfPointsThreshold = (_fullPointsThreshold + 0.1).clamp(0.3, 0.9);
+                      }
+                    });
+                  },
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Half Points Threshold
+                Row(
+                  children: [
+                    const Text(
+                      'Half Points (50):',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A2F4B),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '< ${(_halfPointsThreshold * 100).toInt()}% time',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Slider(
+                  value: _halfPointsThreshold,
+                  min: 0.3,
+                  max: 0.9,
+                  divisions: 12,
+                  activeColor: Colors.orange,
+                  label: '${(_halfPointsThreshold * 100).toInt()}%',
+                  onChanged: (value) {
+                    setState(() {
+                      _halfPointsThreshold = value;
+                      // Ensure full points threshold is always lower
+                      if (_fullPointsThreshold >= _halfPointsThreshold) {
+                        _fullPointsThreshold = (_halfPointsThreshold - 0.1).clamp(0.2, 0.8);
+                      }
+                    });
+                  },
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Quarter Points Info
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.red, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Quarter Points (25): ≥ ${(_halfPointsThreshold * 100).toInt()}% time',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.red,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // Save Button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final fullPct = (_fullPointsThreshold * 100).toInt();
+                      final halfPct = (_halfPointsThreshold * 100).toInt();
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _quizTimerSeconds == 0
+                                ? 'Quiz timer disabled'
+                                : 'Settings saved!\nTimer: $_quizTimerSeconds sec\nFull pts: <$fullPct%, Half pts: <$halfPct%',
+                          ),
+                          backgroundColor: const Color(0xFF8B5CF6),
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B5CF6),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Save Settings',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildPresetButton(String label, int seconds) {
+    final isSelected = _quizTimerSeconds == seconds;
+    return OutlinedButton(
+      onPressed: () {
+        setState(() {
+          _quizTimerSeconds = seconds;
+        });
+      },
+      style: OutlinedButton.styleFrom(
+        backgroundColor: isSelected ? const Color(0xFF8B5CF6) : Colors.white,
+        foregroundColor: isSelected ? Colors.white : const Color(0xFF8B5CF6),
+        side: BorderSide(
+          color: const Color(0xFF8B5CF6),
+          width: 2,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      child: Text(label),
     );
   }
 }

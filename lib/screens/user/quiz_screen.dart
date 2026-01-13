@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -34,10 +35,19 @@ class _QuizScreenState extends State<QuizScreen> {
   Map<int, int> _selectedAnswers = {}; // question_index -> answer_index
   bool _showResults = false;
   bool _showCelebration = false;
+  int? _firstWrongQuestionIndex; // Track first wrong answer for Try Again
+  Map<int, bool> _answeredCorrectly = {}; // Track which questions were answered correctly
   
   Map<int, Map<String, String?>> _matchAnswers = {}; // question_index -> {left_item -> selected_right_item}
   Map<int, int> _gameScores = {}; // question_index -> score (for interactive games)
-// Show gamified intro logic
+  Map<int, int> _questionPoints = {}; // question_index -> points earned (time-based)
+  Map<int, int> _questionAnswerTimes = {}; // question_index -> remaining seconds when answered
+  
+  // Timer variables
+  Timer? _questionTimer;
+  int _remainingSeconds = 30;
+  static const int _questionTimeLimit = 30; // 30 seconds per question
+  int _questionStartTime = 30; // Track time when question started
 
   @override
   void initState() {
@@ -47,8 +57,102 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   void dispose() {
+    _questionTimer?.cancel();
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  void _startQuestionTimer() {
+    _questionTimer?.cancel();
+    setState(() {
+      _remainingSeconds = _questionTimeLimit;
+      _questionStartTime = _questionTimeLimit; // Record start time
+    });
+    
+    _questionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingSeconds > 0) {
+        setState(() {
+          _remainingSeconds--;
+        });
+        
+        // Haptic feedback when reaching 10 seconds
+        if (_remainingSeconds == 10) {
+          HapticFeedback.mediumImpact();
+        }
+      } else {
+        timer.cancel();
+        _handleTimeExpired();
+      }
+    });
+  }
+
+  void _handleTimeExpired() {
+    // Auto-advance to next question when time expires
+    if (_currentQuestionIndex < _questions.length - 1) {
+      setState(() {
+        _currentQuestionIndex++;
+      });
+      _startQuestionTimer();
+    } else {
+      // Last question - submit quiz
+      _submitQuiz();
+    }
+  }
+
+  int _calculatePoints() {
+    // Calculate time used (in seconds)
+    final timeUsed = _questionStartTime - _remainingSeconds;
+    final timePercentage = timeUsed / _questionStartTime;
+    
+    // Time-based scoring:
+    // < 50% time used: Full points (100)
+    // 50-75% time used: Half points (50)
+    // > 75% time used: Quarter points (25)
+    if (timePercentage < 0.5) {
+      return 100; // Fast answer - full points
+    } else if (timePercentage < 0.75) {
+      return 50; // Moderate speed - half points
+    } else {
+      return 25; // Slow answer - quarter points
+    }
+  }
+
+  void _recordAnswerWithPoints(bool isCorrect, int questionIndex) {
+    // Record points for the specified question based on answer correctness and speed
+    if (isCorrect) {
+      // Check if we have the answer time stored
+      if (_questionAnswerTimes.containsKey(questionIndex)) {
+        final remainingTime = _questionAnswerTimes[questionIndex]!;
+        final timeUsed = _questionStartTime - remainingTime;
+        final timePercentage = timeUsed / _questionStartTime;
+        
+        // Calculate points based on time used
+        int points;
+        if (timePercentage < 0.5) {
+          points = 100; // Fast answer - full points
+        } else if (timePercentage < 0.75) {
+          points = 50; // Moderate speed - half points
+        } else {
+          points = 25; // Slow answer - quarter points
+        }
+        
+        _questionPoints[questionIndex] = points;
+        debugPrint('✅ Question $questionIndex: Earned $points points (answered with ${remainingTime}s remaining, ${timePercentage.toStringAsFixed(1)}% time used)');
+      } else {
+        // Fallback: no timing data, give full points
+        _questionPoints[questionIndex] = 100;
+        debugPrint('✅ Question $questionIndex: Earned 100 points (no timing data)');
+      }
+    } else {
+      _questionPoints[questionIndex] = 0;
+      debugPrint('❌ Question $questionIndex: 0 points (incorrect answer)');
+    }
+  }
+
+  void _recordAnswerTime() {
+    // Record the remaining time when the current question is answered
+    _questionAnswerTimes[_currentQuestionIndex] = _remainingSeconds;
+    debugPrint('⏱️ Question $_currentQuestionIndex answered with $_remainingSeconds seconds remaining');
   }
 
   Future<void> _loadQuestions() async {
@@ -87,18 +191,36 @@ class _QuizScreenState extends State<QuizScreen> {
             .eq('id', progress['question_id'])
             .single();
         
-        // Infer question type from title
+        // Infer question type from title AND options structure
         String inferredType = 'multiple_choice'; // default
         final title = questionData['title']?.toString().toLowerCase() ?? '';
-        if (title.contains('single tap')) {
-          inferredType = 'single_tap_choice';
-        } else if (title.contains('card match')) {
+        final optionsRaw = questionData['options'];
+        
+        // Check if options structure indicates card match (Map with cards/buckets)
+        bool isCardMatchByStructure = false;
+        if (optionsRaw is Map) {
+          final hasCards = optionsRaw.containsKey('cards');
+          final hasBuckets = optionsRaw.containsKey('buckets');
+          isCardMatchByStructure = hasCards && hasBuckets;
+        }
+        
+        if (isCardMatchByStructure) {
+          // Detected as card match by structure - most reliable
           inferredType = 'card_match';
+          debugPrint('   ✅ Card Match detected by OPTIONS STRUCTURE');
+        } else if (title.contains('single tap')) {
+          inferredType = 'single_tap_choice';
+        } else if (title.contains('card match') || title.contains('card_match')) {
+          inferredType = 'card_match';
+          debugPrint('   ✅ Card Match detected by TITLE');
         } else if (title.contains('scenario') || title.contains('decision')) {
           inferredType = 'scenario_decision';
         } else if (title.contains('match')) {
+          // Only set to match_following if it's not already identified as card_match
           inferredType = 'match_following';
         }
+        
+        debugPrint('   Question type inferred: $inferredType (title: $title)');
         
         
         // Extract options from the question data
@@ -164,6 +286,11 @@ class _QuizScreenState extends State<QuizScreen> {
         _matchAnswers = {};
         _gameScores = {};
       });
+      
+      // Start timer for first question
+      if (questions.isNotEmpty) {
+        _startQuestionTimer();
+      }
     } catch (e) {
       debugPrint('❌ Error loading questions: $e');
       if (mounted) {
@@ -176,6 +303,12 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _submitQuiz() async {
+    debugPrint('📊 === SUBMITTING QUIZ ===');
+    debugPrint('Total questions: ${_questions.length}');
+    debugPrint('Game scores map: $_gameScores');
+
+    // Record answer time for current question before processing
+    _recordAnswerTime();
 
     int correctCount = 0;
     int totalScore = 0;
@@ -185,6 +318,7 @@ class _QuizScreenState extends State<QuizScreen> {
     for (int i = 0; i < _questions.length; i++) {
       final question = _questions[i];
       final questionType = question['question_type'] ?? 'multiple_choice';
+      debugPrint('Question $i: Type = $questionType');
       
       bool isCorrect = false;
       
@@ -240,14 +374,37 @@ class _QuizScreenState extends State<QuizScreen> {
         }
       }
 
+      // Track if this question was answered correctly
+      _answeredCorrectly[i] = isCorrect;
+      
+      // Track first wrong answer for Try Again functionality
+      if (!isCorrect && _firstWrongQuestionIndex == null) {
+        _firstWrongQuestionIndex = i;
+      }
+      
       if (questionType == 'card_match') {
         final score = _gameScores[i] ?? 0;
+        debugPrint('🎮 Card Match Question $i: Score = $score');
         totalScore += score;
-        if (score >= 40) correctCount++; // threshold for "correct" status
+        // Count as correct if score is 25 or higher (out of max ~60)
+        if (score >= 25) {
+          debugPrint('✅ Card Match counted as CORRECT (score >= 25)');
+          correctCount++;
+          _answeredCorrectly[i] = true;
+        } else {
+          debugPrint('❌ Card Match counted as WRONG (score < 25)');
+        }
       } else {
         if (isCorrect) {
           correctCount++;
           totalScore += questionValue;
+          debugPrint('🔵 About to record points for question $i (correct)');
+          // Record time-based points for correct answer
+          _recordAnswerWithPoints(true, i);
+        } else {
+          debugPrint('🔵 About to record points for question $i (incorrect)');
+          // Record 0 points for incorrect answer
+          _recordAnswerWithPoints(false, i);
         }
       }
     }
@@ -314,18 +471,31 @@ class _QuizScreenState extends State<QuizScreen> {
                }
                isCorrect = allCorrect && userMatches.length == pairs.length;
                userAnswer = {'type': 'match_following', 'matches': userMatches};
-            }
+             }
 
-          await _progressService.saveQuestionAnswer(
-            userId: user.id,
-            departmentId: widget.level['department_id'] ?? widget.level['pathway_id'] ?? widget.level['dept_id'] ?? '',
-            usrDeptId: widget.level['usr_dept_id'] ?? '',
-            questionId: question['id'],
-            userAnswer: userAnswer.toString(),
-            isCorrect: isCorrect,
-            scoreEarned: isCorrect ? questionValue : 0,
-          );
-        }
+           // Calculate time-based points for correct answers
+           int pointsEarned = 0;
+           if (isCorrect) {
+             // Use time-based scoring if question was answered (has tracked time)
+             if (_questionPoints.containsKey(i)) {
+               pointsEarned = _questionPoints[i]!;
+             } else {
+               // Fallback: calculate points now (for questions answered before timer implementation)
+               pointsEarned = _calculatePoints();
+               _questionPoints[i] = pointsEarned;
+             }
+           }
+
+           await _progressService.saveQuestionAnswer(
+             userId: user.id,
+             departmentId: widget.level['department_id'] ?? widget.level['pathway_id'] ?? widget.level['dept_id'] ?? '',
+             usrDeptId: widget.level['usr_dept_id'] ?? '',
+             questionId: question['id'],
+             userAnswer: userAnswer.toString(),
+             isCorrect: isCorrect,
+             scoreEarned: pointsEarned, // Use time-based points
+           );
+         }
 
         if (widget.pathwayName.toLowerCase() == 'orientation') {
           await PathwayService().markOrientationComplete(user.id);
@@ -396,148 +566,234 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFDF8F0), // Cream
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+      extendBodyBehindAppBar: true,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF6EC1E4), // Light blue
+              Color(0xFF9BA8E8), // Purple-blue
+              Color(0xFFE8A8D8), // Pink
+            ],
+          ),
         ),
-        title: Text(
-          '${widget.pathwayName} - Level ${widget.level['level_number']}',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent, // Transparent to show cream
-        foregroundColor: const Color(0xFF1A2F4B), // Navy
-        elevation: 0,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Progress Bar
-            LinearProgressIndicator(
-              value: (_currentQuestionIndex + 1) / _questions.length,
-              color: const Color(0xFF6BCB9F), // Pastel Teal
-              backgroundColor: const Color(0xFF1A2F4B).withOpacity(0.1),
-              minHeight: 12,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            const SizedBox(height: 24),
-            
-            // Question Counter
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8C67D).withOpacity(0.3), // Light Yellow pill
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                'Question ${_currentQuestionIndex + 1} of ${_questions.length}',
-                style: const TextStyle(
-                  color: Color(0xFF1A2F4B),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            
-            // Question Text or Type Indicator
-            if (questionType == 'match_following')
-              Text(
-                'Match the Following items below!',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: const Color(0xFF1A2F4B),
-                ),
-              )
-            else
-              Text(
-                question['title'] ?? question['question_text'] ?? 'Question',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: const Color(0xFF1A2F4B),
-                  fontSize: 22,
-                  height: 1.3,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (question['description'] != null && question['description'].toString().isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  question['description'],
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: const Color(0xFF1A2F4B).withOpacity(0.7),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            const SizedBox(height: 32),
-            
-            // Question Content (Scrollable)
-            Expanded(
-              child: SingleChildScrollView(
-                child: questionType == 'card_match'
-                    ? CardMatchQuestionWidget(
-                        questionData: question,
-                        onAnswerSubmitted: (score, isCorrect) {
-                          setState(() {
-                            _gameScores[_currentQuestionIndex] = score;
-                            if (_currentQuestionIndex < _questions.length - 1) {
-                              _currentQuestionIndex++;
-                            } else {
-                              _submitQuiz();
-                            }
-                          });
-                        },
-                      )
-                    : (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision')
-                        ? _buildMultipleChoiceOptions(question)
-                        : _buildMatchTheFollowing(question),
-              ),
-            ),
-            
-            const SizedBox(height: 12),
-            
-            // Navigation Buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (_currentQuestionIndex > 0)
-                  OutlinedButton(
-                    onPressed: () {
-                      setState(() => _currentQuestionIndex--);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.grey[700],
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Custom AppBar
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
-                    child: const Text('Previous'),
-                  )
-                else
-                  const SizedBox(), // Spacer
-                  
-                ElevatedButton(
-                  onPressed: !isAnswered
-                      ? null
-                      : () {
-                          if (_currentQuestionIndex < _questions.length - 1) {
-                            setState(() => _currentQuestionIndex++);
-                          } else {
-                            _submitQuiz();
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B5CE7),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                  child: Text(
-                    _currentQuestionIndex < _questions.length - 1 ? 'Next' : 'Submit',
+                    Expanded(
+                      child: Text(
+                        '${widget.pathwayName} - Level ${widget.level['level_number']}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Main content
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Progress Bar
+                      LinearProgressIndicator(
+                        value: (_currentQuestionIndex + 1) / _questions.length,
+                        color: const Color(0xFFFBBF24), // Yellow
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        minHeight: 12,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // Question Counter and Timer
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Question ${_currentQuestionIndex + 1} of ${_questions.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          // Timer Display with pulsing animation when low
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 500),
+                            curve: Curves.easeInOut,
+                            transform: _remainingSeconds <= 10 
+                                ? (Matrix4.identity()..scale(1.1))
+                                : Matrix4.identity(),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _remainingSeconds <= 10 
+                                  ? Colors.red.withOpacity(0.9)
+                                  : const Color(0xFFFBBF24).withOpacity(0.8),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: _remainingSeconds <= 10 
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.red.withOpacity(0.6),
+                                        blurRadius: 12,
+                                        spreadRadius: 2,
+                                      ),
+                                    ]
+                                  : [],
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _remainingSeconds <= 10 
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.timer_outlined,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '$_remainingSeconds s',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: _remainingSeconds <= 10 ? 16 : 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      
+                      // Question Text or Type Indicator
+                      if (questionType == 'match_following')
+                        Text(
+                          'Match the Following items below!',
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            color: const Color(0xFF1A2F4B),
+                          ),
+                        )
+                      else
+                        Text(
+                          question['title'] ?? question['question_text'] ?? 'Question',
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            color: Colors.white,
+                            fontSize: 22,
+                            height: 1.3,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (question['description'] != null && question['description'].toString().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            question['description'],
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      const SizedBox(height: 32),
+                      
+                      // Question Content (Scrollable)
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: questionType == 'card_match'
+                              ? CardMatchQuestionWidget(
+                                  questionData: question,
+                                  onAnswerSubmitted: (score, isCorrect) {
+                                    setState(() {
+                                      _gameScores[_currentQuestionIndex] = score;
+                                      if (_currentQuestionIndex < _questions.length - 1) {
+                                        _currentQuestionIndex++;
+                                      } else {
+                                        _submitQuiz();
+                                      }
+                                    });
+                                  },
+                                )
+                              : (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision')
+                                  ? _buildMultipleChoiceOptions(question)
+                                  : _buildMatchTheFollowing(question),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
+                      // Navigation Buttons with bottom padding to avoid bottom bar
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 24.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            if (_currentQuestionIndex > 0)
+                              OutlinedButton(
+                                onPressed: () {
+                                  setState(() => _currentQuestionIndex--);
+                                  _startQuestionTimer(); // Restart timer for previous question
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.grey[700],
+                                ),
+                                child: const Text('Previous'),
+                              )
+                            else
+                              const SizedBox(), // Spacer
+                              
+                            ElevatedButton(
+                              onPressed: !isAnswered
+                                  ? null
+                                  : () {
+                                      if (_currentQuestionIndex < _questions.length - 1) {
+                                        setState(() => _currentQuestionIndex++);
+                                        _startQuestionTimer(); // Restart timer for next question
+                                      } else {
+                                        _questionTimer?.cancel(); // Stop timer before submitting
+                                        _submitQuiz();
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              ),
+                              child: Text(
+                                _currentQuestionIndex < _questions.length - 1 ? 'Next' : 'Submit',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -545,6 +801,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
   Widget _buildMultipleChoiceOptions(Map<String, dynamic> question) {
     final List<dynamic> options = question['options'] ?? [];
+    final List<dynamic> optionsData = question['options_data'] ?? [];
     final List<Color> optionColors = [
       const Color(0xFFF08A7E), // Coral
       const Color(0xFF6BCB9F), // Teal
@@ -558,12 +815,24 @@ class _QuizScreenState extends State<QuizScreen> {
       );
     }
     
+    // Check if this question was answered and submitted (feedback only after submit)
+    final wasAnswered = _answeredCorrectly.containsKey(_currentQuestionIndex);
+    final wasAnsweredWrong = wasAnswered && _answeredCorrectly[_currentQuestionIndex] == false;
+    
     return Column(
       children: options.asMap().entries.map((entry) {
         final index = entry.key;
         final option = entry.value;
         final isSelected = _selectedAnswers[_currentQuestionIndex] == index;
         final optionColor = optionColors[index % optionColors.length];
+        
+        // Check if this is the correct answer
+        final isCorrectAnswer = index < optionsData.length && 
+                                optionsData[index]['is_correct'] == true;
+        
+        // Show correct answer with green border only after submit if user answered wrong
+        final showAsCorrect = wasAnsweredWrong && isCorrectAnswer;
+        final showAsWrong = wasAnsweredWrong && isSelected && !isCorrectAnswer;
         
         return Padding(
           padding: const EdgeInsets.only(bottom: 16),
@@ -578,10 +847,18 @@ class _QuizScreenState extends State<QuizScreen> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               decoration: BoxDecoration(
-                color: isSelected ? optionColor : Colors.white,
+                color: showAsCorrect 
+                    ? const Color(0xFF6BCB9F).withOpacity(0.3) 
+                    : showAsWrong 
+                        ? const Color(0xFFF08A7E).withOpacity(0.3)
+                        : isSelected ? optionColor : Colors.white,
                 border: Border.all(
-                  color: isSelected ? optionColor : const Color(0xFFE0E0E0),
-                  width: isSelected ? 3 : 2,
+                  color: showAsCorrect 
+                      ? const Color(0xFF6BCB9F) 
+                      : showAsWrong 
+                          ? const Color(0xFFF08A7E)
+                          : isSelected ? optionColor : const Color(0xFFE0E0E0),
+                  width: (showAsCorrect || showAsWrong) ? 3 : isSelected ? 3 : 2,
                 ),
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: isSelected
@@ -631,7 +908,19 @@ class _QuizScreenState extends State<QuizScreen> {
                       ),
                     ),
                   ),
-                  if (isSelected)
+                  if (showAsCorrect)
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF6BCB9F),
+                      size: 28,
+                    )
+                  else if (showAsWrong)
+                    const Icon(
+                      Icons.cancel_rounded,
+                      color: Color(0xFFF08A7E),
+                      size: 28,
+                    )
+                  else if (isSelected)
                     const Icon(
                       Icons.check_circle_rounded,
                       color: Colors.white,
@@ -798,19 +1087,33 @@ class _QuizScreenState extends State<QuizScreen> {
 
   Widget _buildResultsScreen() {
     final int totalQuestions = _questions.length;
-    final int correctAnswers = _score ~/ 100; // Assuming 100 points per question
+    // Calculate total score from time-based points
+    final int totalScore = _questionPoints.values.fold(0, (sum, points) => sum + points);
+    // Count only correct answers (points > 0)
+    final int correctAnswers = _questionPoints.values.where((points) => points > 0).length;
     
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: const Color(0xFFFDF8F0), // Cream
-          body: SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF6EC1E4),
+                  Color(0xFF9BA8E8),
+                  Color(0xFFE8A8D8),
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                     // Big icon reaction based on score
                     Icon(
                       _getScoreIcon(correctAnswers, totalQuestions),
@@ -825,7 +1128,7 @@ class _QuizScreenState extends State<QuizScreen> {
                       style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w900,
-                        color: Color(0xFF1A2F4B), // Navy
+                        color: Colors.white,
                         letterSpacing: -0.5,
                       ),
                       textAlign: TextAlign.center,
@@ -864,7 +1167,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            '$_score',
+                            '$totalScore',
                             style: const TextStyle(
                               fontSize: 72,
                               fontWeight: FontWeight.w900,
@@ -905,9 +1208,9 @@ class _QuizScreenState extends State<QuizScreen> {
                     // Fun message
                     Text(
                       _getEncouragementMessage(correctAnswers, totalQuestions),
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 18,
-                        color: const Color(0xFF1A2F4B).withOpacity(0.8),
+                        color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
                       textAlign: TextAlign.center,
@@ -919,11 +1222,77 @@ class _QuizScreenState extends State<QuizScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context, true);
+                        onPressed: () async {
+                          if (correctAnswers / totalQuestions >= 0.7) {
+                            // NEXT CHALLENGE - Go directly to next level
+                            final currentLevelNumber = widget.level['level_number'] ?? 1;
+                            final nextLevelNumber = currentLevelNumber + 1;
+                            
+                            // Try to get next level data
+                            try {
+                              debugPrint('🔍 Looking for next level: $nextLevelNumber in pathway: ${widget.pathwayId}');
+                              
+                              final nextLevelData = await Supabase.instance.client
+                                  .from('departments')
+                                  .select('id, dept_id, title, level_number, description')
+                                  .eq('dept_id', widget.pathwayId)
+                                  .eq('level_number', nextLevelNumber)
+                                  .maybeSingle();
+                              
+                              debugPrint('📊 Next level data: $nextLevelData');
+                              
+                              if (nextLevelData != null && mounted) {
+                                // Add required fields for QuizScreen
+                                nextLevelData['department_id'] = widget.pathwayId;
+                                nextLevelData['pathway_id'] = widget.pathwayId;
+                                nextLevelData['dept_id'] = widget.pathwayId;
+                                
+                                // Navigate directly to next level quiz
+                                debugPrint('✅ Navigating to next level quiz');
+                                
+                                // Pop current quiz screen and pathway detail screen, then push next level
+                                Navigator.of(context).popUntil((route) => route.isFirst);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => QuizScreen(
+                                      level: nextLevelData,
+                                      pathwayName: widget.pathwayName,
+                                      pathwayId: widget.pathwayId,
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                // No more levels, go back to dashboard
+                                debugPrint('ℹ️ No more levels found, returning to dashboard');
+                                if (mounted) Navigator.pop(context, true);
+                              }
+                            } catch (e) {
+                              debugPrint('❌ Error loading next level: $e');
+                              if (mounted) Navigator.pop(context, true);
+                            }
+                          } else {
+                            // TRY AGAIN - Return to first wrong question
+                            if (_firstWrongQuestionIndex != null) {
+                              setState(() {
+                                _currentQuestionIndex = _firstWrongQuestionIndex!;
+                                _showResults = false;
+                                _showCelebration = false;
+                                _answeredCorrectly.clear(); // Clear feedback state for clean retry
+                              });
+                            } else {
+                              // Fallback: restart from beginning
+                              setState(() {
+                                _currentQuestionIndex = 0;
+                                _showResults = false;
+                                _answeredCorrectly.clear(); // Clear feedback state for clean retry
+                                _showCelebration = false;
+                              });
+                            }
+                          }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF6BCB9F), // Teal Logic
+                          backgroundColor: const Color(0xFF8B5CF6), // Purple
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 20),
                           shape: RoundedRectangleBorder(
@@ -948,6 +1317,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                   ],
                 ),
+              ),
               ),
             ),
           ),

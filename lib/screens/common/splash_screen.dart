@@ -116,12 +116,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFFDF8F0), // Cream
-              Color(0xFFFFF5E6), // Lighter cream
-              Color(0xFFFEF3E2), // Warm cream
+              Color(0xFF6EC1E4), // Light blue
+              Color(0xFF9BA8E8), // Purple-blue
+              Color(0xFFE8A8D8), // Pink
             ],
           ),
         ),
@@ -144,30 +144,48 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     SizedBox(height: spacing),
                     
                     Text(
-                      'ENEPL Quiz',
+                      'Level UP!',
                       style: TextStyle(
-                        fontSize: titleSize,
+                        fontSize: titleSize + 8,
                         fontWeight: FontWeight.w900,
-                        color: const Color(0xFF1A2F4B),
-                        letterSpacing: -1,
+                        color: const Color(0xFF8B5CF6), // Purple
+                        letterSpacing: 2,
                         shadows: [
                           Shadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.white.withOpacity(0.3),
                             offset: const Offset(0, 2),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: isMobile ? 4 : 8),
+                    Text(
+                      'ENEPL Training Game',
+                      style: TextStyle(
+                        fontSize: titleSize - 4,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFFFBD38D), // Yellow
+                        letterSpacing: 1,
+                        shadows: [
+                          Shadow(
+                            color: Colors.white.withOpacity(0.2),
+                            offset: const Offset(0, 1),
                             blurRadius: 4,
                           ),
                         ],
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    SizedBox(height: isMobile ? 8 : 12),
+                    SizedBox(height: isMobile ? 12 : 16),
                     Text(
-                      'Learn • Practice • Excel',
+                      'Elevate Your Potential. Conquer Every Challenge.',
                       style: TextStyle(
-                        fontSize: subtitleSize,
-                        color: const Color(0xFF1A2F4B).withOpacity(0.6),
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 2,
+                        fontSize: subtitleSize - 1,
+                        color: Colors.white.withOpacity(0.9),
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.5,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -177,18 +195,20 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       width: isMobile ? 36 : 40,
                       height: isMobile ? 36 : 40,
                       child: const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6BCB9F)),
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFBBF24)), // Yellow
                         strokeWidth: 3.5,
+                        backgroundColor: Colors.white24,
                       ),
                     ),
                     SizedBox(height: isMobile ? 60 : 80),
                     
                     Text(
-                      'Version 1.0.0',
+                      'ENEPL',
                       style: TextStyle(
-                        color: const Color(0xFF1A2F4B).withOpacity(0.4),
-                        fontSize: isMobile ? 11 : 12,
-                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFFFBBF24), // Yellow
+                        fontSize: isMobile ? 14 : 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2,
                       ),
                     ),
                   ],

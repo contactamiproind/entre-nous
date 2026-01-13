@@ -298,8 +298,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      body: Column(
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF6EC1E4),
+              Color(0xFF9BA8E8),
+              Color(0xFFE8A8D8),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
         children: [
           // Header
           Container(
@@ -437,8 +455,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           },
                         ),
                       ),
-          ),
-        ],
+            ),
+          ],
+        ),
+        ),
       ),
     );
   }

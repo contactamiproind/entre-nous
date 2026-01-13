@@ -111,13 +111,15 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
     final color = _getDepartmentColor();
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(widget.pathwayName),
-        backgroundColor: color,
+        title: Text(widget.pathwayName, style: const TextStyle(color: Colors.white)),
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -162,13 +164,14 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
                   ),
                 )
               : Container(
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        color.withOpacity(0.1),
-                        Colors.white,
+                        Color(0xFF6EC1E4), // Light blue
+                        Color(0xFF9BA8E8), // Purple-blue
+                        Color(0xFFE8A8D8), // Pink
                       ],
                     ),
                   ),
@@ -199,8 +202,8 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
                                       Expanded(
                                         child: LinearProgressIndicator(
                                           value: _getCurrentLevel() / _levels.length,
-                                          backgroundColor: Colors.grey[300],
-                                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                                          backgroundColor: Colors.white.withOpacity(0.3),
+                                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFBBF24)),
                                           minHeight: 8,
                                         ),
                                       ),
@@ -233,13 +236,16 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
                               itemBuilder: (context, index) {
                                 final level = _levels[index];
                                 final levelNumber = level['level_number'];
+                                final currentLevel = _getCurrentLevel();
                                 final isUnlocked = _isLevelUnlocked(levelNumber);
-                                final isCurrent = levelNumber == _getCurrentLevel();
+                                final isCurrent = levelNumber == currentLevel;
+                                final isCompleted = levelNumber < currentLevel;
 
                                 return _LevelCard(
                                   level: level,
                                   isUnlocked: isUnlocked,
                                   isCurrent: isCurrent,
+                                  isCompleted: isCompleted,
                                   color: color,
                                   onTap: isUnlocked
                                       ? () async {
@@ -297,8 +303,8 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
           },
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF1A2F4B),
-          unselectedItemColor: const Color(0xFF1A2F4B).withOpacity(0.4),
+          selectedItemColor: const Color(0xFF8B5CF6),
+          unselectedItemColor: const Color(0xFF8B5CF6).withOpacity(0.4),
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
           elevation: 0,
           items: const [
@@ -329,6 +335,7 @@ class _LevelCard extends StatelessWidget {
   final Map<String, dynamic> level;
   final bool isUnlocked;
   final bool isCurrent;
+  final bool isCompleted;
   final Color color;
   final VoidCallback? onTap;
 
@@ -336,6 +343,7 @@ class _LevelCard extends StatelessWidget {
     required this.level,
     required this.isUnlocked,
     required this.isCurrent,
+    required this.isCompleted,
     required this.color,
     this.onTap,
   });
@@ -368,19 +376,25 @@ class _LevelCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: isUnlocked
-                        ? Text(
-                            '${level['level_number']}',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: color,
-                            ),
+                    child: isCompleted
+                        ? Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 32,
                           )
-                        : const Icon(
-                            Icons.lock,
-                            color: Colors.grey,
-                          ),
+                        : isUnlocked
+                            ? Text(
+                                '${level['level_number']}',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: color,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.lock,
+                                color: Colors.grey,
+                              ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -405,7 +419,29 @@ class _LevelCard extends StatelessWidget {
                           color: isUnlocked ? Colors.grey[600] : Colors.grey[400],
                         ),
                       ),
-                      if (isCurrent)
+                      if (isCompleted)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                size: 14,
+                                color: Colors.green,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Completed',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (isCurrent)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
@@ -421,11 +457,23 @@ class _LevelCard extends StatelessWidget {
                   ),
                 ),
                 // Action button
-                if (isUnlocked)
+                if (isCompleted)
+                  const Icon(
+                    Icons.check_circle,
+                    color: Colors.green,
+                    size: 32,
+                  )
+                else if (isCurrent)
                   Icon(
-                    isCurrent ? Icons.play_circle_filled : Icons.check_circle,
+                    Icons.play_circle_filled,
                     color: color,
                     size: 32,
+                  )
+                else if (isUnlocked)
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    color: color,
+                    size: 24,
                   )
                 else
                   const Icon(

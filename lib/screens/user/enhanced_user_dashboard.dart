@@ -190,65 +190,77 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
       );
     }
 
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFFDF8F0), // Cream
-              Color(0xFFFFF5E6), // Lighter cream
+    return WillPopScope(
+      onWillPop: () async {
+        // If not on home tab, go back to home tab instead of exiting
+        if (_selectedIndex != 0) {
+          setState(() => _selectedIndex = 0);
+          return false; // Don't pop the route
+        }
+        // If on home tab, prevent back navigation (stay on dashboard)
+        return false;
+      },
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF6EC1E4), // Light blue
+                Color(0xFF9BA8E8), // Purple-blue
+                Color(0xFFE8A8D8), // Pink
+              ],
+            ),
+          ),
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              _buildHomeTab(),
+              _buildPathwayTab(),
+              _buildInfoTab(),
+              _buildProfileTab(),
             ],
           ),
         ),
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: [
-            _buildHomeTab(),
-            _buildPathwayTab(),
-            _buildInfoTab(),
-            _buildProfileTab(),
-          ],
-        ),
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF1A2F4B).withOpacity(0.08),
-              blurRadius: 25,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) => setState(() => _selectedIndex = index),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF1A2F4B), // Navy
-          unselectedItemColor: const Color(0xFF1A2F4B).withOpacity(0.4),
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-          elevation: 0,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.map_rounded),
-              label: 'Department',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.info_rounded),
-              label: 'Info',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_rounded),
-              label: 'Profile',
-            ),
-          ],
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 25,
+                offset: const Offset(0, -5),
+              ),
+            ],
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: (index) => setState(() => _selectedIndex = index),
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.white,
+            selectedItemColor: const Color(0xFF8B5CF6), // Purple
+            unselectedItemColor: const Color(0xFF8B5CF6).withOpacity(0.4),
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+            elevation: 0,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home_rounded),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.map_rounded),
+                label: 'Department',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.info_rounded),
+                label: 'Info',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person_rounded),
+                label: 'Profile',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -258,32 +270,47 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   // HOME TAB
   // ============================================
   Widget _buildHomeTab() {
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      color: const Color(0xFF1A2F4B),
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          children: [
-            // Header
-            Stack(
+    return SafeArea(
+      child: RefreshIndicator(
+        onRefresh: _loadData,
+        color: const Color(0xFF8B5CF6),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              // Header
+              Stack(
               children: [
                 Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1A2F4B), // Navy
-                    borderRadius: BorderRadius.only(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF8B5CF6), // Purple
+                        Color(0xFF6366F1), // Indigo
+                      ],
+                    ),
+                    borderRadius: const BorderRadius.only(
                       bottomLeft: Radius.circular(40),
                       bottomRight: Radius.circular(40),
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                  padding: const EdgeInsets.fromLTRB(24, 60, 24, 40),
+                  padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
                   child: Column(
                     children: [
                       // Profile Picture
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8C67D), // Yellow ring
+                          color: const Color(0xFFFBBF24), // Yellow ring
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -329,24 +356,12 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // Rank and Level Badges
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildBadge(
-                            icon: Icons.star_rounded,
-                            label: 'RANK',
-                            value: '#${_userProgress?['current_level'] ?? 1}',
-                            color: const Color(0xFFF08A7E), // Coral
-                          ),
-                          const SizedBox(width: 16),
-                          _buildBadge(
-                            icon: Icons.bar_chart_rounded,
-                            label: 'LEVEL',
-                            value: '${_userProgress?['current_level'] ?? 1}',
-                            color: const Color(0xFF6BCB9F), // Teal
-                          ),
-                        ],
+                      // Level Badge (Rank removed)
+                      _buildBadge(
+                        icon: Icons.bar_chart_rounded,
+                        label: 'LEVEL',
+                        value: '${_userProgress?['current_level'] ?? 2}',
+                        color: const Color(0xFFFBBF24), // Yellow
                       ),
                     ],
                   ),
@@ -444,7 +459,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF1A2F4B).withOpacity(0.05),
+                          color: Colors.white.withOpacity(0.1),
                           blurRadius: 15,
                           offset: const Offset(0, 5),
                         ),
@@ -464,10 +479,10 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF6BCB9F).withOpacity(0.1),
+                                      color: const Color(0xFF8B5CF6).withOpacity(0.15),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
-                                    child: const Icon(Icons.map_rounded, color: Color(0xFF6BCB9F), size: 20),
+                                    child: const Icon(Icons.map_rounded, color: Color(0xFF8B5CF6), size: 20),
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
@@ -490,7 +505,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                                 child: const Icon(
                                   Icons.arrow_forward_rounded,
                                   size: 16,
-                                  color: Color(0xFF1A2F4B),
+                                  color: Color(0xFF1E293B),
                                 ),
                               ),
                             ],
@@ -501,7 +516,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
-                              color: Color(0xFF1A2F4B),
+                              color: Color(0xFF1E293B),
                               height: 1.2,
                             ),
                           ),
@@ -514,9 +529,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                                   child: LinearProgressIndicator(
                                     value: (_userProgress?['current_level'] ?? 1) / 
                                            (_currentLevels.isNotEmpty ? _currentLevels.length : 1),
-                                    backgroundColor: const Color(0xFF1A2F4B).withOpacity(0.05),
+                                    backgroundColor: Colors.white.withOpacity(0.3),
                                     valueColor: const AlwaysStoppedAnimation<Color>(
-                                      Color(0xFF6BCB9F), // Teal
+                                      Color(0xFFFBBF24), // Yellow
                                     ),
                                     minHeight: 12,
                                   ),
@@ -527,7 +542,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                                 'Lvl ${_userProgress?['current_level'] ?? 1} / ${_currentLevels.length}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1A2F4B),
+                                  color: Color(0xFF1E293B),
                                 ),
                               ),
                             ],
@@ -541,6 +556,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             const SizedBox(height: 20),
           ],
         ),
+      ),
       ),
     );
   }
@@ -743,7 +759,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
                 side: isCurrent 
-                    ? const BorderSide(color: Color(0xFF6BCB9F), width: 2)
+                    ? const BorderSide(color: Color(0xFF8B5CF6), width: 2)
                     : BorderSide.none,
               ),
               child: InkWell(
@@ -774,12 +790,12 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                         width: 60,
                         height: 60,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6B5CE7).withOpacity(0.1),
+                          color: const Color(0xFF8B5CF6).withOpacity(0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
                           Icons.school_rounded,
-                          color: Color(0xFF6B5CE7),
+                          color: Color(0xFF8B5CF6),
                           size: 32,
                         ),
                       ),
@@ -794,7 +810,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A2F4B),
+                                color: Color(0xFF1E293B),
                               ),
                             ),
                             if (pathway.description != null) ...[
@@ -817,7 +833,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF6BCB9F),
+                                  color: const Color(0xFF8B5CF6),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
@@ -889,15 +905,31 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   Widget _buildInfoTab() {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
             setState(() => _selectedIndex = 0); // Navigate to Home tab
           },
         ),
-        title: const Text('Information'),
+        title: const Text('Information', style: TextStyle(color: Colors.white)),
       ),
-      body: ListView(
+      extendBodyBehindAppBar: true,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF6EC1E4),
+              Color(0xFF9BA8E8),
+              Color(0xFFE8A8D8),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           _buildInfoCard(
@@ -915,7 +947,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             title: 'Achievements',
             description: 'Earn ranks and badges by completing quizzes and improving your scores.',
           ),
-        ],
+          ],
+        ),
+        ),
       ),
     );
   }
@@ -939,7 +973,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                 color: const Color(0xFF6B5CE7).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: const Color(0xFF6B5CE7)),
+              child: Icon(icon, color: const Color(0xFF8B5CF6)),
             ),
             const SizedBox(width: 15),
             Expanded(
@@ -976,17 +1010,33 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   Widget _buildProfileTab() {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
             setState(() => _selectedIndex = 0); // Navigate to Home tab
           },
         ),
-        title: const Text('Profile'),
+        title: const Text('Profile', style: TextStyle(color: Colors.white)),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
+      extendBodyBehindAppBar: true,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF6EC1E4),
+              Color(0xFF9BA8E8),
+              Color(0xFFE8A8D8),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
           // Profile Header
           Center(
             child: Column(
@@ -1075,7 +1125,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
           onTap: _logout,
           isDestructive: true,
         ),
-      ],
+        ],
+        ),
+        ),
       ),
     );
   }
