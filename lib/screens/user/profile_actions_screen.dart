@@ -169,8 +169,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Edit Profile'),
+        backgroundColor: const Color(0xFF8B5CF6),
+        foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF6EC1E4), // Light blue
+              Color(0xFF9BA8E8), // Purple-blue
+              Color(0xFFE8A8D8), // Pink
+            ],
+          ),
+        ),
+        child: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Form(
           key: _formKey,
@@ -311,6 +325,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -340,8 +355,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Notifications'),
+        backgroundColor: const Color(0xFF8B5CF6),
+        foregroundColor: Colors.white,
       ),
-      body: ListView(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF6EC1E4), // Light blue
+              Color(0xFF9BA8E8), // Purple-blue
+              Color(0xFFE8A8D8), // Pink
+            ],
+          ),
+        ),
+        child: ListView(
         children: [
           SwitchListTile(
             title: const Text('Email Notifications'),
@@ -362,6 +391,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onChanged: (v) => setState(() => _updates = v),
           ),
         ],
+        ),
       ),
     );
   }
@@ -370,8 +400,140 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 // ==========================================
 // SETTINGS SCREEN
 // ==========================================
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  String _selectedTheme = 'Light Mode';
+  String _selectedLanguage = 'English';
+
+  void _showThemeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Choose Theme'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<String>(
+              title: const Text('Light Mode'),
+              value: 'Light Mode',
+              groupValue: _selectedTheme,
+              onChanged: (value) {
+                setState(() => _selectedTheme = value!);
+                Navigator.pop(context);
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('Dark Mode'),
+              value: 'Dark Mode',
+              groupValue: _selectedTheme,
+              onChanged: (value) {
+                setState(() => _selectedTheme = value!);
+                Navigator.pop(context);
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('System Default'),
+              value: 'System Default',
+              groupValue: _selectedTheme,
+              onChanged: (value) {
+                setState(() => _selectedTheme = value!);
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLanguageDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Choose Language'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<String>(
+              title: const Text('English'),
+              value: 'English',
+              groupValue: _selectedLanguage,
+              onChanged: (value) {
+                setState(() => _selectedLanguage = value!);
+                Navigator.pop(context);
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('Hindi'),
+              value: 'Hindi',
+              groupValue: _selectedLanguage,
+              onChanged: (value) {
+                setState(() => _selectedLanguage = value!);
+                Navigator.pop(context);
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('Spanish'),
+              value: 'Spanish',
+              groupValue: _selectedLanguage,
+              onChanged: (value) {
+                setState(() => _selectedLanguage = value!);
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPrivacyDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Privacy & Security'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text(
+              'Privacy Settings',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            SizedBox(height: 12),
+            Text('• Your data is encrypted and secure'),
+            SizedBox(height: 8),
+            Text('• We never share your information'),
+            SizedBox(height: 8),
+            Text('• You can delete your account anytime'),
+            SizedBox(height: 16),
+            Text(
+              'Security Features',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            SizedBox(height: 12),
+            Text('• Two-factor authentication available'),
+            SizedBox(height: 8),
+            Text('• Regular security updates'),
+            SizedBox(height: 8),
+            Text('• Secure password storage'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -382,33 +544,48 @@ class SettingsScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Settings'),
+        backgroundColor: const Color(0xFF8B5CF6),
+        foregroundColor: Colors.white,
       ),
-      body: ListView(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF6EC1E4), // Light blue
+              Color(0xFF9BA8E8), // Purple-blue
+              Color(0xFFE8A8D8), // Pink
+            ],
+          ),
+        ),
+        child: ListView(
         children: [
           ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('Appearance'),
-            trailing: const Text('Light Mode'),
-            onTap: () {},
+            leading: const Icon(Icons.palette_outlined, color: Colors.white),
+            title: const Text('Appearance', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            trailing: Text(_selectedTheme, style: const TextStyle(color: Colors.white70)),
+            onTap: _showThemeDialog,
           ),
           ListTile(
-            leading: const Icon(Icons.language),
-            title: const Text('Language'),
-            trailing: const Text('English'),
-            onTap: () {},
+            leading: const Icon(Icons.language, color: Colors.white),
+            title: const Text('Language', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            trailing: Text(_selectedLanguage, style: const TextStyle(color: Colors.white70)),
+            onTap: _showLanguageDialog,
           ),
            ListTile(
-            leading: const Icon(Icons.security),
-            title: const Text('Privacy & Security'),
-            onTap: () {},
+            leading: const Icon(Icons.security, color: Colors.white),
+            title: const Text('Privacy & Security', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            onTap: _showPrivacyDialog,
           ),
-          const Divider(),
+          const Divider(color: Colors.white24),
           const ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('Version'),
-            trailing: Text('1.0.0'),
+            leading: Icon(Icons.info_outline, color: Colors.white),
+            title: Text('Version', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            trailing: Text('1.0.0', style: TextStyle(color: Colors.white70)),
           ),
         ],
+        ),
       ),
     );
   }
@@ -429,8 +606,22 @@ class HelpSupportScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Help & Support'),
+        backgroundColor: const Color(0xFF8B5CF6),
+        foregroundColor: Colors.white,
       ),
-      body: ListView(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF6EC1E4), // Light blue
+              Color(0xFF9BA8E8), // Purple-blue
+              Color(0xFFE8A8D8), // Pink
+            ],
+          ),
+        ),
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: const [
           Text(
@@ -480,6 +671,7 @@ class HelpSupportScreen extends StatelessWidget {
             ),
           )
         ],
+        ),
       ),
     );
   }

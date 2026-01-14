@@ -305,10 +305,8 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
             ),
           ),
           const SizedBox(height: 12),
-          // Quick Action Buttons - New Design
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
+          // Quick Action Buttons - Vertical Stack
+          Column(
             children: [
               _buildActionButton(
                 'User Profile',
@@ -316,12 +314,14 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                 const Color(0xFF42A5F5),
                 () => setState(() => _selectedIndex = 3), // Navigate to Users tab
               ),
+              const SizedBox(height: 12),
               _buildActionButton(
                 'Departments',
                 Icons.alt_route_rounded,
                 const Color(0xFF8B5CF6),
                 () => setState(() => _selectedIndex = 1), // Navigate to Department tab
               ),
+              const SizedBox(height: 12),
               _buildActionButton(
                 'Manage Question Bank',
                 Icons.quiz_rounded,
@@ -378,39 +378,56 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
     Color color,
     VoidCallback onTap,
   ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: (MediaQuery.of(context).size.width - 48) / 2,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: Colors.white, size: 24),
+    return SizedBox(
+      width: double.infinity,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.grey.withOpacity(0.2),
+              width: 1,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
                   color: color,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
                 ),
               ),
-            ),
-          ],
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Colors.grey.shade400,
+                size: 18,
+              ),
+            ],
+          ),
         ),
       ),
     );

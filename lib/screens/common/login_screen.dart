@@ -443,7 +443,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                               decoration: InputDecoration(
-                                labelText: 'Email',
+                                hintText: 'Email',
+                                hintStyle: const TextStyle(
+                                  color: Color(0xFF9CA3AF),
+                                  fontSize: 16,
+                                ),
                                 filled: true,
                                 fillColor: Colors.white,
                                 prefixIcon: const Icon(
@@ -491,7 +495,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               textInputAction: TextInputAction.done,
                               onFieldSubmitted: (_) => _login(),
                               decoration: InputDecoration(
-                                labelText: 'Password',
+                                hintText: 'Password',
+                                hintStyle: const TextStyle(
+                                  color: Color(0xFF9CA3AF),
+                                  fontSize: 16,
+                                ),
                                 filled: true,
                                 fillColor: Colors.white,
                                 prefixIcon: const Icon(

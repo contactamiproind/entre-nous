@@ -303,12 +303,13 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
-                  child: Column(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // Profile Picture
                       Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFBBF24), // Yellow ring
                           shape: BoxShape.circle,
@@ -321,8 +322,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                           ],
                         ),
                         child: Container(
-                          width: 80,
-                          height: 80,
+                          width: 60,
+                          height: 60,
                           decoration: const BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,
@@ -330,38 +331,75 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                           child: Center(
                             child: Text(
                               _userAvatar,
-                              style: const TextStyle(fontSize: 40),
+                              style: const TextStyle(fontSize: 30),
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      // User Name
-                      Text(
-                        _userName,
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
+                      const SizedBox(width: 16),
+                      // User Info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _userName,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Welcome back!',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.7),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Welcome back, $_userName!',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.7),
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(width: 12),
+                      // Level Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFBBF24),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFBBF24).withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      // Level Badge (Rank removed)
-                      _buildBadge(
-                        icon: Icons.bar_chart_rounded,
-                        label: 'LEVEL',
-                        value: '${_userProgress?['current_level'] ?? 2}',
-                        color: const Color(0xFFFBBF24), // Yellow
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.bar_chart_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'LVL ${_userProgress?['current_level'] ?? 2}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

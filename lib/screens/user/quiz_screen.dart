@@ -48,6 +48,10 @@ class _QuizScreenState extends State<QuizScreen> {
   int _remainingSeconds = 30;
   static const int _questionTimeLimit = 30; // 30 seconds per question
   int _questionStartTime = 30; // Track time when question started
+  
+  // Attempt tracking
+  int _currentAttempt = 1;
+  static const int _maxAttempts = 2;
 
   @override
   void initState() {
@@ -87,16 +91,116 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _handleTimeExpired() {
-    // Auto-advance to next question when time expires
-    if (_currentQuestionIndex < _questions.length - 1) {
-      setState(() {
-        _currentQuestionIndex++;
-      });
-      _startQuestionTimer();
+    // Show retry dialog when time expires
+    _questionTimer?.cancel();
+    
+    if (_currentAttempt < _maxAttempts) {
+      _showRetryDialog();
     } else {
-      // Last question - submit quiz
-      _submitQuiz();
+      // After max attempts, show message and allow answering with 0 points
+      _showNoPointsDialog();
     }
+  }
+  
+  void _showRetryDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.timer_off, color: Color(0xFFF08A7E), size: 28),
+            SizedBox(width: 12),
+            Text('Time\'s Up!'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'You\'ve used all 30 seconds for this question.',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Attempt $_currentAttempt of $_maxAttempts',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF8B5CF6),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _retryQuestion();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Try Again'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _showNoPointsDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.info_outline, color: Color(0xFFF08A7E), size: 28),
+            SizedBox(width: 12),
+            Text('No Points Available'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Text(
+              'You\'ve used both attempts for this question.',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'You can still answer, but you won\'t earn any points.',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFF08A7E),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _retryQuestion() {
+    setState(() {
+      _currentAttempt++;
+    });
+    // Reset timer to 30 seconds and restart
+    _startQuestionTimer();
   }
 
   int _calculatePoints() {
@@ -119,6 +223,14 @@ class _QuizScreenState extends State<QuizScreen> {
 
   void _recordAnswerWithPoints(bool isCorrect, int questionIndex) {
     // Record points for the specified question based on answer correctness and speed
+    
+    // If user has exceeded max attempts, award 0 points regardless of correctness
+    if (_currentAttempt > _maxAttempts) {
+      _questionPoints[questionIndex] = 0;
+      debugPrint('⚠️ Question $questionIndex: 0 points (exceeded max attempts)');
+      return;
+    }
+    
     if (isCorrect) {
       // Check if we have the answer time stored
       if (_questionAnswerTimes.containsKey(questionIndex)) {
@@ -640,45 +752,60 @@ class _QuizScreenState extends State<QuizScreen> {
                               ),
                             ),
                           ),
-                          // Timer Display with pulsing animation when low
+                          // Timer Display - Enhanced visibility
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 500),
                             curve: Curves.easeInOut,
                             transform: _remainingSeconds <= 10 
-                                ? (Matrix4.identity()..scale(1.1))
+                                ? (Matrix4.identity()..scale(1.15))
                                 : Matrix4.identity(),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             decoration: BoxDecoration(
                               color: _remainingSeconds <= 10 
-                                  ? Colors.red.withOpacity(0.9)
-                                  : const Color(0xFFFBBF24).withOpacity(0.8),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: _remainingSeconds <= 10 
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.red.withOpacity(0.6),
-                                        blurRadius: 12,
-                                        spreadRadius: 2,
-                                      ),
-                                    ]
-                                  : [],
+                                  ? Colors.red
+                                  : const Color(0xFFFBBF24),
+                              borderRadius: BorderRadius.circular(30),
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 3,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _remainingSeconds <= 10
+                                      ? Colors.red.withOpacity(0.8)
+                                      : const Color(0xFFFBBF24).withOpacity(0.6),
+                                  blurRadius: 16,
+                                  spreadRadius: 4,
+                                ),
+                              ],
                             ),
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   _remainingSeconds <= 10 
                                       ? Icons.warning_amber_rounded
-                                      : Icons.timer_outlined,
+                                      : Icons.timer,
                                   color: Colors.white,
-                                  size: 18,
+                                  size: 28,
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 8),
                                 Text(
-                                  '$_remainingSeconds s',
+                                  '$_remainingSeconds',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: _remainingSeconds <= 10 ? 16 : 14,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: _remainingSeconds <= 10 ? 32 : 28,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  's',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: _remainingSeconds <= 10 ? 20 : 18,
                                   ),
                                 ),
                               ],
