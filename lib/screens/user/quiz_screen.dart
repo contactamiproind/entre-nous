@@ -757,25 +757,25 @@ class _QuizScreenState extends State<QuizScreen> {
                             duration: const Duration(milliseconds: 500),
                             curve: Curves.easeInOut,
                             transform: _remainingSeconds <= 10 
-                                ? (Matrix4.identity()..scale(1.15))
+                                ? (Matrix4.identity()..scale(1.1))
                                 : Matrix4.identity(),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
                               color: _remainingSeconds <= 10 
                                   ? Colors.red
                                   : const Color(0xFFFBBF24),
-                              borderRadius: BorderRadius.circular(30),
+                              borderRadius: BorderRadius.circular(25),
                               border: Border.all(
                                 color: Colors.white,
-                                width: 3,
+                                width: 2,
                               ),
                               boxShadow: [
                                 BoxShadow(
                                   color: _remainingSeconds <= 10
-                                      ? Colors.red.withOpacity(0.8)
-                                      : const Color(0xFFFBBF24).withOpacity(0.6),
-                                  blurRadius: 16,
-                                  spreadRadius: 4,
+                                      ? Colors.red.withOpacity(0.5)
+                                      : const Color(0xFFFBBF24).withOpacity(0.4),
+                                  blurRadius: 10,
+                                  spreadRadius: 2,
                                 ),
                               ],
                             ),
@@ -787,25 +787,25 @@ class _QuizScreenState extends State<QuizScreen> {
                                       ? Icons.warning_amber_rounded
                                       : Icons.timer,
                                   color: Colors.white,
-                                  size: 28,
+                                  size: 22,
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 6),
                                 Text(
                                   '$_remainingSeconds',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w900,
-                                    fontSize: _remainingSeconds <= 10 ? 32 : 28,
-                                    letterSpacing: 1.2,
+                                    fontSize: _remainingSeconds <= 10 ? 28 : 24,
+                                    letterSpacing: 1.0,
                                   ),
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 3),
                                 Text(
                                   's',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w700,
-                                    fontSize: _remainingSeconds <= 10 ? 20 : 18,
+                                    fontSize: _remainingSeconds <= 10 ? 18 : 16,
                                   ),
                                 ),
                               ],
