@@ -1199,20 +1199,126 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
           child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _buildInfoCard(
-            icon: Icons.school,
-            title: 'About ENEPL Quiz',
-            description: 'Learn, Practice, and Excel with our comprehensive quiz platform.',
-          ),
-          _buildInfoCard(
+          // What Is This Game?
+          _buildExpandableSection(
             icon: Icons.help_outline,
-            title: 'How to Use',
-            description: 'Complete quizzes in your assigned pathway to progress through levels.',
+            iconColor: const Color(0xFFE91E63),
+            title: 'What Is This Game?',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildBoldText('This is a decision-based event simulation game.'),
+                const SizedBox(height: 8),
+                _buildNormalText('You don\'t just answer questions, you plan, move, choose, fix, and adapt like a real event professional.'),
+                const SizedBox(height: 12),
+                _buildBoldText('There are no perfect answers, only better decisions.'),
+              ],
+            ),
           ),
-          _buildInfoCard(
-            icon: Icons.emoji_events,
-            title: 'Achievements',
-            description: 'Earn ranks and badges by completing quizzes and improving your scores.',
+          
+          // How the Game Works
+          _buildExpandableSection(
+            icon: Icons.settings,
+            iconColor: const Color(0xFF9C27B0),
+            title: 'How the Game Works',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildBulletPoint('Each level is a real event scenario'),
+                _buildBulletPoint('You unlock information by playing mini-games'),
+                _buildBulletPoint('Every choice affects:'),
+                Padding(
+                  padding: const EdgeInsets.only(left: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSubBullet('Budget'),
+                      _buildSubBullet('Safety'),
+                      _buildSubBullet('Guest experience'),
+                      _buildSubBullet('Team efficiency'),
+                    ],
+                  ),
+                ),
+                _buildBulletPoint('The final level is live event execution'),
+              ],
+            ),
+          ),
+          
+          // What You'll Be Doing
+          _buildExpandableSection(
+            icon: Icons.videogame_asset,
+            iconColor: const Color(0xFF2196F3),
+            title: 'What You\'ll Be Doing',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildBulletPoint('Choosing between options'),
+                _buildBulletPoint('Moving elements on a live venue map'),
+                _buildBulletPoint('Fixing last-minute problems'),
+                _buildBulletPoint('Adapting when plans change'),
+                _buildBulletPoint('Thinking like a Project Head, not a checklist follower'),
+              ],
+            ),
+          ),
+          
+          // How You're Scored
+          _buildExpandableSection(
+            icon: Icons.star,
+            iconColor: const Color(0xFFFFC107),
+            title: 'How You\'re Scored',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildNormalText('You earn points based on:'),
+                const SizedBox(height: 8),
+                _buildBulletPoint('Smart planning (not overspending)'),
+                _buildBulletPoint('Safety-first decisions'),
+                _buildBulletPoint('Guest flow & experience'),
+                _buildBulletPoint('Crisis handling'),
+                _buildBulletPoint('Time efficiency'),
+                const SizedBox(height: 12),
+                _buildItalicText('Mistakes won\'t end the game.'),
+                _buildItalicText('They\'ll just make your job harder... like real life 😉'),
+              ],
+            ),
+          ),
+          
+          // Types of Challenges
+          _buildExpandableSection(
+            icon: Icons.extension,
+            iconColor: const Color(0xFF4CAF50),
+            title: 'Types of Challenges You\'ll See',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildBulletPoint('Choose This or That'),
+                _buildBulletPoint('Drag & Place Objects'),
+                _buildBulletPoint('Fix What Went Wrong'),
+                _buildBulletPoint('Re-prioritise Under Pressure'),
+                const SizedBox(height: 12),
+                _buildEmojiText('✍️ No typing.'),
+                _buildEmojiText('📦 No theory dumps.'),
+                _buildEmojiText('🧠 Just thinking on your feet.'),
+              ],
+            ),
+          ),
+          
+          // End Goal
+          _buildExpandableSection(
+            icon: Icons.flag,
+            iconColor: const Color(0xFFFF5722),
+            title: 'End Goal',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildNormalText('Successfully execute the event with:'),
+                const SizedBox(height: 8),
+                _buildBulletPoint('Minimal chaos'),
+                _buildBulletPoint('Happy client'),
+                _buildBulletPoint('Safe guests'),
+                _buildBulletPoint('A team that doesn\'t hate you'),
+              ],
+            ),
           ),
           ],
         ),
@@ -1267,6 +1373,187 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildExpandableSection({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required Widget content,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 24),
+          ),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A2F4B),
+            ),
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: content,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required Widget content,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 28),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A2F4B),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            content,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBoldText(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF1A2F4B),
+      ),
+    );
+  }
+
+  Widget _buildNormalText(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 15,
+        color: Colors.grey[700],
+        height: 1.5,
+      ),
+    );
+  }
+
+  Widget _buildItalicText(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 14,
+        fontStyle: FontStyle.italic,
+        color: Colors.grey[600],
+      ),
+    );
+  }
+
+  Widget _buildEmojiText(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          color: Color(0xFF1A2F4B),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBulletPoint(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.grey[700],
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubBullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('○ ', style: TextStyle(fontSize: 14)),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

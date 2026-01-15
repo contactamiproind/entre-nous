@@ -623,55 +623,258 @@ class HelpSupportScreen extends StatelessWidget {
         ),
         child: ListView(
         padding: const EdgeInsets.all(16),
-        children: const [
-          Text(
+        children: [
+          const Text(
             'Frequently Asked Questions',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
-          SizedBox(height: 16),
-          ExpansionTile(
-            title: Text('How do I take a quiz?'),
-            children: [
-              Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text('Go to the "Department" tab, select a level, and tap "Start" to begin your quiz.'),
-              ),
-            ],
+          const SizedBox(height: 20),
+          
+          // Stuck? Start Here
+          _buildExpandableFAQ(
+            title: 'Stuck? Start Here',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'If something feels confusing, ask yourself:',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                _buildBullet('Is this a budget issue?'),
+                _buildBullet('Is this a safety issue?'),
+                _buildBullet('Is this a guest-flow issue?'),
+                const SizedBox(height: 12),
+                const Text(
+                  'Most problems in the game fall into one of these.',
+                  style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
           ),
-          ExpansionTile(
-            title: Text('How is my score calculated?'),
-            children: [
-              Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text('You earn points for every correct answer. Complete high-difficulty questions for more points!'),
-              ),
-            ],
+          
+          // What If I Make the Wrong Choice?
+          _buildExpandableFAQ(
+            title: 'What If I Make the Wrong Choice?',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Good.\nThat\'s how the game teaches you.',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Wrong choices:',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                _buildBullet('Don\'t end the game'),
+                _buildBullet('Unlock new problems'),
+                _buildBullet('Force you to adapt'),
+                const SizedBox(height: 12),
+                const Text(
+                  'You\'ll learn faster by fixing mistakes than avoiding them.',
+                  style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
           ),
-           ExpansionTile(
-            title: Text('Can I retake a quiz?'),
-            children: [
-              Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text('Yes, you can retake quizzes to improve your score at any time.'),
-              ),
-            ],
+          
+          // Pro Tips
+          _buildExpandableFAQ(
+            title: 'Pro Tips',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildBullet('Always think movement + space'),
+                _buildBullet('Never block:'),
+                Padding(
+                  padding: const EdgeInsets.only(left: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSubBullet('Walkways'),
+                      _buildSubBullet('Emergency access'),
+                      _buildSubBullet('Cable paths'),
+                    ],
+                  ),
+                ),
+                _buildBullet('If something feels crowded, it probably is'),
+              ],
+            ),
           ),
-          SizedBox(height: 24),
+          
+          // Why Did My Score Drop?
+          _buildExpandableFAQ(
+            title: 'Why Did My Score Drop?',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Scores drop when:',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                _buildBullet('You chose the wrong answer'),
+                _buildBullet('Exceeded the timer'),
+                _buildBullet('Didn\'t follow ENEPL vision values and goals'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Tip: Fixing a problem early costs fewer points.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Need More Help?
+          _buildExpandableFAQ(
+            title: 'Need More Help?',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'If you\'re still unsure:',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                _buildBullet('Replay the level'),
+                _buildBullet('Try a different approach'),
+                _buildBullet('Explore alternate placements'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Real events never go as planned.\nGreat event managers adapt.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Support Card
           Card(
-            color: Color(0xFFF3E5F5),
+            color: const Color(0xFFF3E5F5),
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Need more help?', style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text('Contact us at support@enepl.com'),
+                  const Text(
+                    'Support',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A2F4B),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'For technical issues or bugs:',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Email: support@enepl.com',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF6B5CE7),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Response Time: Within 24 working hours',
+                    style: TextStyle(fontSize: 14),
+                  ),
                 ],
               ),
             ),
-          )
+          ),
         ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildExpandableFAQ({
+    required String title,
+    required Widget content,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ExpansionTile(
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1A2F4B),
+          ),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: content,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubBullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('◦ ', style: TextStyle(fontSize: 14)),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }
