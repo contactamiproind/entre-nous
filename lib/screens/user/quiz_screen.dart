@@ -9,15 +9,13 @@ import '../../widgets/card_match_question_widget.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class QuizScreen extends StatefulWidget {
-  final Map<String, dynamic> level;
-  final String pathwayName;
-  final String pathwayId;
+  final String category; // 'Orientation', 'Process', or 'SOP'
+  final String? subcategory; // Only for Orientation: 'Values', 'Goals', 'Vision', 'Greetings'
 
   const QuizScreen({
     super.key,
-    required this.level,
-    required this.pathwayName,
-    required this.pathwayId,
+    required this.category,
+    this.subcategory,
   });
 
   @override
@@ -274,37 +272,45 @@ class _QuizScreenState extends State<QuizScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception('Not logged in');
       
-      // Get level number from widget
-      final levelNumber = widget.level['level_number'] ?? 1;
+      debugPrint('🔍 Loading questions for category: ${widget.category}');
+      if (widget.subcategory != null) {
+        debugPrint('  Subcategory: ${widget.subcategory}');
+      }
       
-      debugPrint('🔍 Loading assigned questions for user ${user.id}');
-      debugPrint('  Department ID: ${widget.pathwayId}');
-      debugPrint('  Level number: $levelNumber');
+      // First, get the department ID for this category
+      final departmentData = await Supabase.instance.client
+          .from('departments')
+          .select('id')
+          .eq('title', widget.category)
+          .maybeSingle();
       
-      // Load questions from usr_progress (assigned questions only)
-      final progressData = await Supabase.instance.client
-          .from('usr_progress')
-          .select('id, question_id, question_text, question_type, difficulty, points, status, user_answer, is_correct')
-          .eq('user_id', user.id)
-          .eq('dept_id', widget.pathwayId)
-          .eq('level_number', levelNumber)
+      if (departmentData == null) {
+        debugPrint('❌ No department found for category: ${widget.category}');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      final deptId = departmentData['id'];
+      debugPrint('📁 Found department ID: $deptId');
+      
+      // Load questions for this department
+      final questionsData = await Supabase.instance.client
+          .from('questions')
+          .select('id, title, description, options, correct_answer, type_id, difficulty, points, dept_id')
+          .eq('dept_id', deptId)
           .order('created_at');
       
-      debugPrint('📊 Found ${progressData.length} assigned questions for this level');
+      debugPrint('📊 Found ${questionsData.length} questions for this department');
 
       List<Map<String, dynamic>> questions = [];
       
-      // For each progress entry, load the full question details including options
-      for (var progress in progressData) {
-        // Load full question data including options from questions table
-        final questionData = await Supabase.instance.client
-            .from('questions')
-            .select('id, title, description, options, correct_answer')
-            .eq('id', progress['question_id'])
-            .single();
+      // Process each question from the database
+      for (var questionData in questionsData) {
         
         // Infer question type from title AND options structure
-        String inferredType = 'multiple_choice'; // default
+        String inferredType = 'multiple_choice'; // Default type
         final title = questionData['title']?.toString().toLowerCase() ?? '';
         final optionsRaw = questionData['options'];
         
@@ -371,19 +377,15 @@ class _QuizScreenState extends State<QuizScreen> {
           debugPrint('   Options is a Map (likely card_match question)');
         }
         
-        debugPrint('  Question ${progress['question_id']}: loaded ${options.length} options');
+        debugPrint('  Question ${questionData['id']}: loaded ${options.length} options');
       }  
         
         questions.add({
-          'id': progress['question_id'],
-          'progress_id': progress['id'], // Store usr_progress ID for updates
-          'title': progress['question_text'],
+          'id': questionData['id'],
+          'title': questionData['title'],
           'description': questionData['description'],
-          'difficulty': progress['difficulty'],
-          'points': progress['points'],
-          'status': progress['status'],
-          'user_answer': progress['user_answer'],
-          'is_correct': progress['is_correct'],
+          'difficulty': questionData['difficulty'],
+          'points': questionData['points'] ?? 10,
           'options': inferredType == 'card_match' ? questionData['options'] : options, // Keep Map for card_match, use List for others
           'options_data': optionsData, // Store full option data with is_correct flags
           'correct_answer': questionData['correct_answer'], // CRITICAL: Add for validation
@@ -596,41 +598,25 @@ class _QuizScreenState extends State<QuizScreen> {
                pointsEarned = _calculatePoints();
                _questionPoints[i] = pointsEarned;
              }
-           }
+            }
 
-           await _progressService.saveQuestionAnswer(
-             userId: user.id,
-             departmentId: widget.level['department_id'] ?? widget.level['pathway_id'] ?? widget.level['dept_id'] ?? '',
-             usrDeptId: widget.level['usr_dept_id'] ?? '',
-             questionId: question['id'],
-             userAnswer: userAnswer.toString(),
-             isCorrect: isCorrect,
-             scoreEarned: pointsEarned, // Use time-based points
-           );
-         }
+            // TODO: Update category progress in user_category_progress table
+            // For now, we'll just track points locally
+          }
 
-        if (widget.pathwayName.toLowerCase() == 'orientation') {
+        if (widget.category.toLowerCase() == 'orientation') {
           await PathwayService().markOrientationComplete(user.id);
         }
 
-        // Auto-unlock next level if user passed (>= 70%)
+        // Auto-unlock next category if user passed (>= 70%)
         if (percentage >= 70) {
           try {
-            final currentLevelNumber = widget.level['level_number'] ?? 1;
-            final nextLevelNumber = currentLevelNumber + 1;
-            
-            debugPrint('🔓 Unlocking next level: $nextLevelNumber');
-            
-            // Update usr_dept to unlock next level
-            await Supabase.instance.client
-                .from('usr_dept')
-                .update({'current_level': nextLevelNumber})
-                .eq('user_id', user.id)
-                .eq('dept_id', widget.pathwayId);
-            
-            debugPrint('✅ Next level unlocked successfully!');
+            // TODO: Implement category unlocking logic
+            // - If all Orientation subcategories completed, unlock Process
+            // - If Process completed, unlock SOP
+            debugPrint('🔓 Category completion check needed');
           } catch (e) {
-            debugPrint('Error unlocking next level: $e');
+            debugPrint('Error unlocking next category: $e');
           }
         }
       }
@@ -651,9 +637,35 @@ class _QuizScreenState extends State<QuizScreen> {
 
     if (_questions.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.level['title'] ?? widget.level['level_name'] ?? 'Level ${widget.level['level_number']}')),
-        body: const Center(
-          child: Text('No questions available for this level yet.'),
+        appBar: AppBar(
+          title: Text(widget.subcategory != null 
+              ? '${widget.category} - ${widget.subcategory}'
+              : widget.category),
+          backgroundColor: const Color(0xFF8B5CF6),
+          foregroundColor: Colors.white,
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF6EC1E4), // Light blue
+                Color(0xFF9BA8E8), // Purple-blue
+                Color(0xFFE8A8D8), // Pink
+              ],
+            ),
+          ),
+          child: const Center(
+            child: Text(
+              'No questions available for this category yet.',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -705,7 +717,9 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                     Expanded(
                       child: Text(
-                        '${widget.pathwayName} - Level ${widget.level['level_number']}',
+                        widget.subcategory != null 
+                            ? '${widget.category} - ${widget.subcategory}'
+                            : widget.category,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -964,10 +978,81 @@ class _QuizScreenState extends State<QuizScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 16),
           child: InkWell(
-            onTap: () {
+            onTap: () async {
+              // Don't allow answer if already answered this question
+              if (_answeredCorrectly.containsKey(_currentQuestionIndex)) {
+                return;
+              }
+              
               setState(() {
                 _selectedAnswers[_currentQuestionIndex] = index;
               });
+              
+              // Check if answer is correct
+              final isCorrect = index < optionsData.length && 
+                               optionsData[index]['is_correct'] == true;
+              
+              if (isCorrect) {
+                // Stop timer
+                _questionTimer?.cancel();
+                
+                // Calculate and record points
+                final points = _calculatePoints();
+                _recordAnswerWithPoints(true, _currentQuestionIndex);
+                _questionPoints[_currentQuestionIndex] = points;
+                
+                // Mark as answered correctly
+                setState(() {
+                  _answeredCorrectly[_currentQuestionIndex] = true;
+                });
+                
+                // Show celebration
+                await Future.delayed(const Duration(milliseconds: 300));
+                if (mounted) {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    barrierColor: Colors.black.withOpacity(0.7),
+                    builder: (context) => CelebrationWidget(
+                      show: true,
+                      points: points,
+                      onComplete: () {
+                        Navigator.of(context).pop();
+                        // Move to next question
+                        if (_currentQuestionIndex < _questions.length - 1) {
+                          setState(() {
+                            _currentQuestionIndex++;
+                            _currentAttempt = 1;
+                            _remainingSeconds = 30;
+                          });
+                          _startQuestionTimer();
+                        } else {
+                          // Quiz complete
+                          _submitQuiz();
+                        }
+                      },
+                    ),
+                  );
+                }
+              } else {
+                // Wrong answer
+                _questionTimer?.cancel();
+                
+                if (_currentAttempt < _maxAttempts) {
+                  // Show retry dialog
+                  _showRetryDialog();
+                } else {
+                  // Max attempts reached, record 0 points and move on
+                  _recordAnswerWithPoints(false, _currentQuestionIndex);
+                  _questionPoints[_currentQuestionIndex] = 0;
+                  
+                  setState(() {
+                    _answeredCorrectly[_currentQuestionIndex] = false;
+                  });
+                  
+                  _showNoPointsDialog();
+                }
+              }
             },
             borderRadius: BorderRadius.circular(20),
             child: AnimatedContainer(
@@ -1345,78 +1430,13 @@ class _QuizScreenState extends State<QuizScreen> {
                     
                     const SizedBox(height: 48),
                     
-                    // Colorful button
+                    // Return to Dashboard button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () async {
-                          if (correctAnswers / totalQuestions >= 0.7) {
-                            // NEXT CHALLENGE - Go directly to next level
-                            final currentLevelNumber = widget.level['level_number'] ?? 1;
-                            final nextLevelNumber = currentLevelNumber + 1;
-                            
-                            // Try to get next level data
-                            try {
-                              debugPrint('🔍 Looking for next level: $nextLevelNumber in pathway: ${widget.pathwayId}');
-                              
-                              final nextLevelData = await Supabase.instance.client
-                                  .from('departments')
-                                  .select('id, dept_id, title, level_number, description')
-                                  .eq('dept_id', widget.pathwayId)
-                                  .eq('level_number', nextLevelNumber)
-                                  .maybeSingle();
-                              
-                              debugPrint('📊 Next level data: $nextLevelData');
-                              
-                              if (nextLevelData != null && mounted) {
-                                // Add required fields for QuizScreen
-                                nextLevelData['department_id'] = widget.pathwayId;
-                                nextLevelData['pathway_id'] = widget.pathwayId;
-                                nextLevelData['dept_id'] = widget.pathwayId;
-                                
-                                // Navigate directly to next level quiz
-                                debugPrint('✅ Navigating to next level quiz');
-                                
-                                // Pop current quiz screen and pathway detail screen, then push next level
-                                Navigator.of(context).popUntil((route) => route.isFirst);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => QuizScreen(
-                                      level: nextLevelData,
-                                      pathwayName: widget.pathwayName,
-                                      pathwayId: widget.pathwayId,
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                // No more levels, go back to dashboard
-                                debugPrint('ℹ️ No more levels found, returning to dashboard');
-                                if (mounted) Navigator.pop(context, true);
-                              }
-                            } catch (e) {
-                              debugPrint('❌ Error loading next level: $e');
-                              if (mounted) Navigator.pop(context, true);
-                            }
-                          } else {
-                            // TRY AGAIN - Return to first wrong question
-                            if (_firstWrongQuestionIndex != null) {
-                              setState(() {
-                                _currentQuestionIndex = _firstWrongQuestionIndex!;
-                                _showResults = false;
-                                _showCelebration = false;
-                                _answeredCorrectly.clear(); // Clear feedback state for clean retry
-                              });
-                            } else {
-                              // Fallback: restart from beginning
-                              setState(() {
-                                _currentQuestionIndex = 0;
-                                _showResults = false;
-                                _answeredCorrectly.clear(); // Clear feedback state for clean retry
-                                _showCelebration = false;
-                              });
-                            }
-                          }
+                        onPressed: () {
+                          // Return to dashboard
+                          Navigator.pop(context, true);
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF8B5CF6), // Purple
@@ -1427,18 +1447,12 @@ class _QuizScreenState extends State<QuizScreen> {
                           ),
                           elevation: 0,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              correctAnswers / totalQuestions >= 0.7 ? 'NEXT CHALLENGE 🚀' : 'TRY AGAIN 💪',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'Return to Dashboard',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),

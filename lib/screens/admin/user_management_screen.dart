@@ -299,11 +299,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -342,16 +337,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     ),
                   ],
                 ),
-                Flexible(
-                  child: ElevatedButton.icon(
-                    onPressed: _showAddUserDialog,
-                    icon: const Icon(Icons.person_add),
-                    label: const Text('Add'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3B82F6),
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
+                FloatingActionButton(
+                  onPressed: _showAddUserDialog,
+                  backgroundColor: const Color(0xFF3B82F6),
+                  child: const Icon(Icons.person_add, color: Colors.white),
                 ),
               ],
             ),

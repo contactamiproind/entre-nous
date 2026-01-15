@@ -5,11 +5,13 @@ import 'dart:math';
 class CelebrationWidget extends StatefulWidget {
   final bool show;
   final VoidCallback? onComplete;
+  final int? points;
 
   const CelebrationWidget({
     super.key,
     required this.show,
     this.onComplete,
+    this.points,
   });
 
   @override
@@ -69,6 +71,53 @@ class _CelebrationWidgetState extends State<CelebrationWidget> {
 
     return Stack(
       children: [
+        // Points display in center
+        if (widget.points != null)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF6B5CE7),
+                    Color(0xFF3498DB),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '🎉 Correct!',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '+${widget.points} points',
+                    style: const TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFFFFD700),
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         // Left side confetti
         Align(
           alignment: Alignment.topLeft,

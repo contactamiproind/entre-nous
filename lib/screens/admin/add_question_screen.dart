@@ -26,7 +26,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   bool _isSaving = false;
 
   // Question Type
-  String _questionType = 'multiple_choice'; // 'multiple_choice' or 'match_following'
+  String? _questionType; // nullable to show hint
   
   // Subcategory
   String? _selectedSubcategory;
@@ -215,7 +215,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     }
 
     // Map UI types to DB types
-    String dbType = _questionType;
+    String dbType = _questionType ?? 'mcq';
     if (_questionType == 'multiple_choice') dbType = 'mcq';
     if (_questionType == 'match_following') dbType = 'match';
     if (_questionType == 'scenario_decision') dbType = 'scenario_decision';
@@ -386,14 +386,27 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('Add New Question'),
         backgroundColor: const Color(0xFF3498DB),
         foregroundColor: Colors.white,
       ),
-      body: _isLoadingPathways
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF6EC1E4),
+              Color(0xFF9BA8E8),
+              Color(0xFFE8A8D8),
+            ],
+          ),
+        ),
+        child: _isLoadingPathways
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Form(
                 key: _formKey,
@@ -436,28 +449,8 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                   padding: EdgeInsets.all(8.0),
                                   child: CircularProgressIndicator(),
                                 ))
-                              : _levels.isEmpty 
-                                  ? Center(
-                                      child: Column(
-                                        children: [
-                                          const Text(
-                                            'No levels found for this pathway.',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          ElevatedButton.icon(
-                                            icon: const Icon(Icons.add_task),
-                                            label: const Text('Generate Default Levels'),
-                                            onPressed: _generateDefaultLevels,
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.orange,
-                                              foregroundColor: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  : DropdownButtonFormField<PathwayLevel>(
+                              : _levels.isNotEmpty 
+                                  ? DropdownButtonFormField<PathwayLevel>(
                                       isExpanded: true,
                                       decoration: const InputDecoration(
                                         labelText: 'Select Level',
@@ -481,22 +474,23 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                         setState(() => _selectedLevel = value);
                                       },
                                       validator: (v) => v == null ? 'Required' : null,
-                                    ),
+                                    )
+                                  : const SizedBox.shrink(),
                         ],
                       ),
-                    const SizedBox(height: 24),
-                    const Divider(),
                     const SizedBox(height: 16),
 
                     // Question Type Dropdown
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'Question Type',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.quiz),
+                        filled: true,
+                        fillColor: Colors.white,
                       ),
                       value: _questionType,
+                      hint: const Text('Question Type'),
                       items: [
                         DropdownMenuItem(
                           value: 'card_match',
@@ -522,8 +516,6 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                       },
                     ),
                     const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 16),
 
                     // Conditional UI based on question type
                     if (_questionType == 'multiple_choice') ...[
@@ -778,6 +770,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                 ),
               ),
             ),
+        ),
     );
   }
 }

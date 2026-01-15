@@ -256,6 +256,14 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
                                             'dept_id': widget.pathwayId,
                                           };
                                           
+                                          // TODO: Update to use category-based navigation
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Please use the new category-based navigation from the home screen'),
+                                            ),
+                                          );
+                                          
+                                          /* OLD CODE - TO BE REMOVED
                                           final result = await Navigator.push(
                                             context,
                                             MaterialPageRoute(
@@ -266,10 +274,13 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
                                               ),
                                             ),
                                           );
+                                          */
                                           // Refresh progress if quiz was completed
+                                          /* OLD CODE
                                           if (result == true && mounted) {
                                             _loadDepartmentData();
                                           }
+                                          */
                                         }
                                       : null,
                                 );

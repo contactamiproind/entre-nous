@@ -649,11 +649,6 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -695,7 +690,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                         ),
                       ],
                     ),
-                    ElevatedButton.icon(
+                    FloatingActionButton(
                       onPressed: () async {
                         await Navigator.push(
                           context,
@@ -705,16 +700,12 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                         );
                         _loadQuestions();
                       },
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF3B82F6),
-                        foregroundColor: Colors.white,
-                      ),
+                      backgroundColor: const Color(0xFF3B82F6),
+                      child: const Icon(Icons.add, color: Colors.white),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 16),
                 // Department Filter and Select Questions in one row
                 Row(
                   children: [

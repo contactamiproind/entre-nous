@@ -7,6 +7,7 @@ import '../../services/assignment_service.dart';
 import '../../services/progress_service.dart';
 import 'profile_actions_screen.dart';
 import 'pathway_detail_screen.dart';
+import 'quiz_screen.dart';
 
 class EnhancedUserDashboard extends StatefulWidget {
   const EnhancedUserDashboard({super.key});
@@ -249,7 +250,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.map_rounded),
-                label: 'Department',
+                label: 'Categories',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.info_rounded),
@@ -469,128 +470,95 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               ),
             ),
             const SizedBox(height: 20),
-            // Current Pathway Card
-            if (_currentPathway != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: InkWell(
-                  onTap: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => DepartmentDetailScreen(
-                          pathwayId: _currentPathway!.id,
-                          pathwayName: _currentPathway!.title,
-                        ),
+            
+            // Current Category Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: InkWell(
+                onTap: () async {
+                  // Navigate to Orientation quiz
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const QuizScreen(
+                        category: 'Orientation',
                       ),
-                    );
-                    // Handle tab switching or data refresh
-                    if (result is int && mounted) {
-                      setState(() => _selectedIndex = result);
-                    } else if (result == true && mounted) {
-                      _loadData();
-                    }
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.white.withOpacity(0.1),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
-                        ),
+                    ),
+                  );
+                  // Refresh data after quiz completion
+                  if (mounted) _loadData();
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF8B5CF6), // Purple
+                        Color(0xFF6366F1), // Indigo
                       ],
-                      border: Border.all(color: Colors.grey.withOpacity(0.1)),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF8B5CF6).withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: const Icon(Icons.map_rounded, color: Color(0xFF8B5CF6), size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'CURRENT DEPARTMENT',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey[400],
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[50],
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.arrow_forward_rounded,
-                                  size: 16,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _currentPathway!.title,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF1E293B),
-                              height: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: LinearProgressIndicator(
-                                    value: (_userProgress?['current_level'] ?? 1) / 
-                                           (_currentLevels.isNotEmpty ? _currentLevels.length : 1),
-                                    backgroundColor: Colors.white.withOpacity(0.3),
-                                    valueColor: const AlwaysStoppedAnimation<Color>(
-                                      Color(0xFFFBBF24), // Yellow
-                                    ),
-                                    minHeight: 12,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Text(
-                                'Lvl ${_userProgress?['current_level'] ?? 1} / ${_currentLevels.length}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
                       ),
-                    ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.play_circle_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'CURRENTLY LEARNING',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white.withOpacity(0.8),
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Orientation',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: Colors.white.withOpacity(0.8),
+                        size: 18,
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
             const SizedBox(height: 20),
           ],
         ),
@@ -705,237 +673,498 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   }
 
   // ============================================
-  // PATHWAY TAB
+  // CATEGORY CARD BUILDER
   // ============================================
-  Widget _buildPathwayTab() {
-    if (_assignments.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              setState(() => _selectedIndex = 0); // Navigate to Home tab
-            },
+  Widget _buildCategoryCard({
+    required String category,
+    required IconData icon,
+    required Color color,
+    required String description,
+    required double progress,
+    required bool isLocked,
+    required VoidCallback onTap,
+    List<Map<String, String>>? subcategories,
+  }) {
+    return InkWell(
+      onTap: isLocked ? null : onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isLocked ? Colors.grey.shade300 : color.withOpacity(0.3),
+            width: 2,
           ),
-          title: const Text('Department'),
+          boxShadow: [
+            BoxShadow(
+              color: isLocked ? Colors.grey.withOpacity(0.1) : color.withOpacity(0.15),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
-        body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.route_outlined,
-                size: 80,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'No Pathway Assigned',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Please contact your admin to get assigned to a pathway',
-                style: TextStyle(
-                  color: Colors.grey[500],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Header
-          const Text(
-            'My Enrolled Departments',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1A2F4B),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tap any department to view levels and start quizzes',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 24),
-          
-          // Pathways List
-          ..._assignments.map((assignment) {
-            // Find the pathway for this assignment
-            final pathway = _pathways.firstWhere(
-              (p) => p.id == assignment.pathwayId,
-              orElse: () => Pathway(
-                id: assignment.pathwayId,
-                title: 'Unknown Pathway',
-                description: null,
-                createdAt: DateTime.now(),
-                updatedAt: DateTime.now(),
-              ),
-            );
-            
-            final isCurrent = _currentPathway?.id == pathway.id;
-            
-            return Card(
-              margin: const EdgeInsets.only(bottom: 16),
-              elevation: isCurrent ? 4 : 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: isCurrent 
-                    ? const BorderSide(color: Color(0xFF8B5CF6), width: 2)
-                    : BorderSide.none,
-              ),
-              child: InkWell(
-                onTap: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DepartmentDetailScreen(
-                        pathwayId: pathway.id,
-                        pathwayName: pathway.title,
-                      ),
+              // Header Row
+              Row(
+                children: [
+                  // Icon
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isLocked ? Colors.grey.shade200 : color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  );
-                  if (result is int && mounted) {
-                    // User tapped a different tab in pathway detail screen
-                    setState(() => _selectedIndex = result);
-                  } else if (result == true && mounted) {
-                    _loadData();
-                  }
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      // Icon
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.school_rounded,
-                          color: Color(0xFF8B5CF6),
-                          size: 32,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Pathway Info
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Icon(
+                      icon,
+                      color: isLocked ? Colors.grey.shade400 : color,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Category Name
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
                             Text(
-                              pathway.title,
-                              style: const TextStyle(
+                              category.toUpperCase(),
+                              style: TextStyle(
                                 fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E293B),
+                                fontWeight: FontWeight.w900,
+                                color: isLocked ? Colors.grey.shade600 : const Color(0xFF1E293B),
+                                letterSpacing: 0.5,
                               ),
                             ),
-                            if (pathway.description != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                pathway.description!,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                            if (isCurrent) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF8B5CF6),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text(
-                                  'CURRENT',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                            if (isLocked) ...[
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.lock_rounded,
+                                size: 18,
+                                color: Colors.grey.shade400,
                               ),
                             ],
                           ],
                         ),
+                        const SizedBox(height: 4),
+                        Text(
+                          description,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Arrow or Lock Icon
+                  if (!isLocked)
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 18,
+                      color: Colors.grey.shade400,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // Progress Bar
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Progress',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
-                      const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 16,
-                        color: Color(0xFF1A2F4B),
+                      Text(
+                        '${(progress * 100).toInt()}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: isLocked ? Colors.grey.shade600 : color,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isLocked ? Colors.grey.shade400 : color,
+                      ),
+                      minHeight: 8,
+                    ),
+                  ),
+                ],
+              ),
+              
+              // Subcategories (only for Orientation)
+              if (subcategories != null && subcategories.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Topics',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...subcategories.map((sub) {
+                        final status = sub['status'] ?? 'locked';
+                        IconData statusIcon;
+                        Color statusColor;
+                        
+                        if (status == 'completed') {
+                          statusIcon = Icons.check_circle_rounded;
+                          statusColor = const Color(0xFF10B981); // Green
+                        } else if (status == 'in_progress') {
+                          statusIcon = Icons.play_circle_rounded;
+                          statusColor = const Color(0xFFFBBF24); // Yellow
+                        } else {
+                          statusIcon = Icons.lock_rounded;
+                          statusColor = Colors.grey.shade400;
+                        }
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              Icon(statusIcon, size: 16, color: statusColor),
+                              const SizedBox(width: 8),
+                              Text(
+                                sub['name'] ?? '',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: status == 'locked' 
+                                      ? Colors.grey.shade500 
+                                      : const Color(0xFF1E293B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                ),
+              ],
+              
+              // Locked Message
+              if (isLocked) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          category == 'Process' 
+                              ? 'Complete Orientation to unlock'
+                              : 'Complete Process to unlock',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            );
-          }).toList(),
-          
-          const SizedBox(height: 16),
-          
-          // Info message
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.blue.shade200,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: Colors.blue.shade700,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'New departments are assigned by your administrator. Contact them to request additional learning paths.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.blue.shade900,
-                    ),
-                  ),
-                ),
               ],
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
+  // ============================================
+  // PATHWAY TAB
+  // ============================================
+  Widget _buildPathwayTab() {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            setState(() => _selectedIndex = 0); // Navigate to Home tab
+          },
+        ),
+        title: const Text('My Categories'),
+        backgroundColor: const Color(0xFF8B5CF6),
+        foregroundColor: Colors.white,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF6EC1E4), // Light blue
+              Color(0xFF9BA8E8), // Purple-blue
+              Color(0xFFE8A8D8), // Pink
+            ],
+          ),
+        ),
+        child: RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+          children: [
+            // Header
+            const Text(
+              'Learning Categories',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A2F4B),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Complete categories in order to unlock the next one',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Orientation Category
+            _buildCategoryListItem(
+              category: 'Orientation',
+              subcategory: null,
+              icon: Icons.school_rounded,
+              color: const Color(0xFF8B5CF6),
+              progress: 0.45,
+              isLocked: false,
+              isCurrent: true,
+            ),
+            const SizedBox(height: 16),
+            
+            // Process Category
+            _buildCategoryListItem(
+              category: 'Process',
+              subcategory: null,
+              icon: Icons.settings_rounded,
+              color: const Color(0xFF3B82F6),
+              progress: 0.0,
+              isLocked: true,
+              isCurrent: false,
+            ),
+            const SizedBox(height: 16),
+            
+            // SOP Category
+            _buildCategoryListItem(
+              category: 'SOP',
+              subcategory: null,
+              icon: Icons.description_rounded,
+              color: const Color(0xFF10B981),
+              progress: 0.0,
+              isLocked: true,
+              isCurrent: false,
+            ),
+          ],
+        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryListItem({
+    required String category,
+    String? subcategory,
+    required IconData icon,
+    required Color color,
+    required double progress,
+    required bool isLocked,
+    required bool isCurrent,
+  }) {
+    return Card(
+      elevation: isCurrent ? 4 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: isCurrent 
+            ? BorderSide(color: color, width: 2)
+            : BorderSide.none,
+      ),
+      child: InkWell(
+        onTap: isLocked ? null : () async {
+          // Navigate to quiz for this category
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => QuizScreen(
+                category: category,
+                subcategory: subcategory,
+              ),
+            ),
+          );
+          // Refresh data after quiz completion
+          if (mounted) setState(() {});
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  // Icon
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: isLocked ? Colors.grey.shade200 : color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: isLocked ? Colors.grey.shade400 : color,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Category Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              subcategory != null ? '$category - $subcategory' : category,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: isLocked ? Colors.grey.shade600 : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            if (isCurrent) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'CURRENT',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (isLocked) ...[
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.lock_rounded,
+                                size: 18,
+                                color: Colors.grey.shade400,
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          isLocked 
+                              ? 'Complete previous category to unlock'
+                              : 'Tap to continue learning',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!isLocked)
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.grey.shade400,
+                      size: 18,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Progress Bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    isLocked ? Colors.grey.shade400 : color,
+                  ),
+                  minHeight: 8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Progress',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  Text(
+                    '${(progress * 100).toInt()}%',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isLocked ? Colors.grey.shade600 : color,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   // ============================================
   // INFO TAB
