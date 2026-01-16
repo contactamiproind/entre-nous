@@ -33,6 +33,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   String _userName = 'Explorer';
   String _userAvatar = '👤';
   int _selectedIndex = 0;
+  
+  // Category progress tracking for Continue feature
+  Map<String, Map<String, dynamic>> _categoryProgress = {}; // category -> {total, answered, firstUnansweredIndex}
 
   @override
   void initState() {
@@ -166,6 +169,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
         _currentLevels = currentLevels;
         _isLoading = false;
       });
+      
+      // Load category progress for Continue feature
+      await _loadCategoryProgress();
     } catch (e) {
       debugPrint('Error loading data: $e');
       setState(() => _isLoading = false);
@@ -182,6 +188,48 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/login');
   }
+
+  Future<void> _loadCategoryProgress() async {
+    if (_userId == null) return;
+    try {
+      final categories = ['Orientation', 'Process', 'SOP'];
+      for (final category in categories) {
+        final deptData = await Supabase.instance.client.from('departments').select('id').eq('title', category).maybeSingle();
+        if (deptData == null) continue;
+        final deptId = deptData['id'];
+        final usrDeptData = await Supabase.instance.client.from('usr_dept').select('id').eq('user_id', _userId!).eq('dept_id', deptId).maybeSingle();
+        if (usrDeptData == null) {
+          _categoryProgress[category] = {'total': 0, 'answered': 0, 'firstUnansweredIndex': 0, 'progress': 0.0};
+          continue;
+        }
+        final usrDeptId = usrDeptData['id'];
+        final questionsData = await Supabase.instance.client.from('questions').select('id').eq('dept_id', deptId).order('created_at');
+        final totalQuestions = questionsData.length;
+        final progressData = await Supabase.instance.client.from('usr_progress').select('question_id, status').eq('usr_dept_id', usrDeptId).order('created_at');
+        int answeredCount = 0;
+        int firstUnansweredIndex = 0;
+        bool foundUnanswered = false;
+        for (int i = 0; i < questionsData.length; i++) {
+          final questionId = questionsData[i]['id'];
+          final progress = progressData.firstWhere((p) => p['question_id'] == questionId, orElse: () => {'status': 'pending'});
+          if (progress['status'] == 'answered') {
+            answeredCount++;
+          } else if (!foundUnanswered) {
+            firstUnansweredIndex = i;
+            foundUnanswered = true;
+          }
+        }
+        if (!foundUnanswered && totalQuestions > 0) firstUnansweredIndex = 0;
+        final progressPercentage = totalQuestions > 0 ? answeredCount / totalQuestions : 0.0;
+        _categoryProgress[category] = {'total': totalQuestions, 'answered': answeredCount, 'firstUnansweredIndex': firstUnansweredIndex, 'progress': progressPercentage};
+        debugPrint('📊 $category Progress: $answeredCount/$totalQuestions (${(progressPercentage * 100).toStringAsFixed(0)}%), First unanswered: $firstUnansweredIndex');
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error loading category progress: $e');
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -366,42 +414,6 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      // Level Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFBBF24),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFBBF24).withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.bar_chart_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'LVL ${_userProgress?['current_level'] ?? 2}',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -471,92 +483,141 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             ),
             const SizedBox(height: 20),
             
-            // Current Category Section
+            // Learning Categories Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: InkWell(
-                onTap: () async {
-                  // Navigate to Orientation quiz
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const QuizScreen(
-                        category: 'Orientation',
-                      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Learning Categories',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1E293B),
+                      letterSpacing: 0.5,
                     ),
-                  );
-                  // Refresh data after quiz completion
-                  if (mounted) _loadData();
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF8B5CF6), // Purple
-                        Color(0xFF6366F1), // Indigo
-                      ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Complete categories in order',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
                     ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF8B5CF6).withOpacity(0.3),
-                        blurRadius: 15,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 16),
+                  
+                  // Orientation Category
+                  _buildCategoryCard(
+                    category: 'Orientation',
+                    icon: Icons.school_rounded,
+                    color: const Color(0xFF8B5CF6), // Purple
+                    description: 'Get started with the basics',
+                    progress: _categoryProgress['Orientation']?['progress'] ?? 0.0,
+                    isLocked: false,
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const QuizScreen(
+                            category: 'Orientation',
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.play_circle_rounded,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'CURRENTLY LEARNING',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white.withOpacity(0.8),
-                                letterSpacing: 1,
+                      );
+                      if (mounted) _loadData();
+                    },
+                    onContinue: _categoryProgress['Orientation']?['progress'] != null && _categoryProgress['Orientation']!['progress'] > 0 && _categoryProgress['Orientation']!['progress'] < 1.0
+                        ? () async {
+                            final startIndex = _categoryProgress['Orientation']!['firstUnansweredIndex'] ?? 0;
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => QuizScreen(
+                                  category: 'Orientation',
+                                  startQuestionIndex: startIndex,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Orientation',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        color: Colors.white.withOpacity(0.8),
-                        size: 18,
-                      ),
-                    ],
+                            );
+                            if (mounted) _loadData();
+                          }
+                        : null,
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  
+                  // Process Category
+                  _buildCategoryCard(
+                    category: 'Process',
+                    icon: Icons.settings_rounded,
+                    color: const Color(0xFF3B82F6), // Blue
+                    description: 'Standard workflows and procedures',
+                    progress: _categoryProgress['Process']?['progress'] ?? 0.0,
+                    isLocked: true,
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const QuizScreen(
+                            category: 'Process',
+                          ),
+                        ),
+                      );
+                      if (mounted) _loadData();
+                    },
+                    onContinue: _categoryProgress['Process']?['progress'] != null && _categoryProgress['Process']!['progress'] > 0 && _categoryProgress['Process']!['progress'] < 1.0
+                        ? () async {
+                            final startIndex = _categoryProgress['Process']!['firstUnansweredIndex'] ?? 0;
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => QuizScreen(
+                                  category: 'Process',
+                                  startQuestionIndex: startIndex,
+                                ),
+                              ),
+                            );
+                            if (mounted) _loadData();
+                          }
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // SOP Category
+                  _buildCategoryCard(
+                    category: 'SOP',
+                    icon: Icons.description_rounded,
+                    color: const Color(0xFF10B981), // Green
+                    description: 'Standard Operating Procedures',
+                    progress: _categoryProgress['SOP']?['progress'] ?? 0.0,
+                    isLocked: true,
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const QuizScreen(
+                            category: 'SOP',
+                          ),
+                        ),
+                      );
+                      if (mounted) _loadData();
+                    },
+                    onContinue: _categoryProgress['SOP']?['progress'] != null && _categoryProgress['SOP']!['progress'] > 0 && _categoryProgress['SOP']!['progress'] < 1.0
+                        ? () async {
+                            final startIndex = _categoryProgress['SOP']!['firstUnansweredIndex'] ?? 0;
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => QuizScreen(
+                                  category: 'SOP',
+                                  startQuestionIndex: startIndex,
+                                ),
+                              ),
+                            );
+                            if (mounted) _loadData();
+                          }
+                        : null,
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
@@ -683,6 +744,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     required double progress,
     required bool isLocked,
     required VoidCallback onTap,
+    VoidCallback? onContinue,
     List<Map<String, String>>? subcategories,
   }) {
     return InkWell(
@@ -813,6 +875,40 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                   ),
                 ],
               ),
+              
+              // Continue Button
+              if (onContinue != null) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: onContinue,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: color,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.play_arrow_rounded, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Continue',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               
               // Subcategories (only for Orientation)
               if (subcategories != null && subcategories.isNotEmpty) ...[

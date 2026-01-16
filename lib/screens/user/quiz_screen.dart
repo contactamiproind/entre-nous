@@ -11,11 +11,13 @@ import 'package:audioplayers/audioplayers.dart';
 class QuizScreen extends StatefulWidget {
   final String category; // 'Orientation', 'Process', or 'SOP'
   final String? subcategory; // Only for Orientation: 'Values', 'Goals', 'Vision', 'Greetings'
+  final int? startQuestionIndex; // Optional: Start from specific question (for Continue feature)
 
   const QuizScreen({
     super.key,
     required this.category,
     this.subcategory,
+    this.startQuestionIndex,
   });
 
   @override
@@ -50,6 +52,9 @@ class _QuizScreenState extends State<QuizScreen> {
   // Attempt tracking
   int _currentAttempt = 1;
   static const int _maxAttempts = 2;
+  
+  // Progress tracking
+  String? _usrDeptId; // ID of the usr_dept record for saving progress
 
   @override
   void initState() {
@@ -196,6 +201,8 @@ class _QuizScreenState extends State<QuizScreen> {
   void _retryQuestion() {
     setState(() {
       _currentAttempt++;
+      // Clear the previous wrong answer so user can select again
+      _selectedAnswers.remove(_currentQuestionIndex);
     });
     // Reset timer to 30 seconds and restart
     _startQuestionTimer();
@@ -263,6 +270,129 @@ class _QuizScreenState extends State<QuizScreen> {
     // Record the remaining time when the current question is answered
     _questionAnswerTimes[_currentQuestionIndex] = _remainingSeconds;
     debugPrint('⏱️ Question $_currentQuestionIndex answered with $_remainingSeconds seconds remaining');
+  }
+  
+  /// Get or create usr_dept record for the current category
+  Future<String?> _getOrCreateUsrDept() async {
+    if (_usrDeptId != null) return _usrDeptId;
+    
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return null;
+      
+      // Get department ID for this category
+      final deptData = await Supabase.instance.client
+          .from('departments')
+          .select('id, title')
+          .eq('title', widget.category)
+          .maybeSingle();
+      
+      if (deptData == null) {
+        debugPrint('❌ Department not found for category: ${widget.category}');
+        return null;
+      }
+      
+      final deptId = deptData['id'];
+      final deptName = deptData['title'];
+      
+      // Check if usr_dept record already exists
+      final existingUsrDept = await Supabase.instance.client
+          .from('usr_dept')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('dept_id', deptId)
+          .maybeSingle();
+      
+      if (existingUsrDept != null) {
+        _usrDeptId = existingUsrDept['id'];
+        debugPrint('✅ Found existing usr_dept: $_usrDeptId');
+        return _usrDeptId;
+      }
+      
+      // Create new usr_dept record
+      final newUsrDept = await Supabase.instance.client
+          .from('usr_dept')
+          .insert({
+            'user_id': user.id,
+            'dept_id': deptId,
+            'dept_name': deptName,
+            'status': 'active',
+            'is_current': true,
+            'started_at': DateTime.now().toIso8601String(),
+          })
+          .select('id')
+          .single();
+      
+      _usrDeptId = newUsrDept['id'];
+      debugPrint('✅ Created new usr_dept: $_usrDeptId for $deptName');
+      return _usrDeptId;
+    } catch (e) {
+      debugPrint('❌ Error getting/creating usr_dept: $e');
+      return null;
+    }
+  }
+  
+  /// Save progress for a single question to the database
+  Future<void> _saveQuestionProgress({
+    required int questionIndex,
+    required Map<String, dynamic> question,
+    required bool isCorrect,
+    required Map<String, dynamic> userAnswer,
+    required int pointsEarned,
+  }) async {
+    try {
+      // Get or create usr_dept record
+      final usrDeptId = await _getOrCreateUsrDept();
+      if (usrDeptId == null) {
+        debugPrint('⚠️ Cannot save progress: usr_dept not found');
+        return;
+      }
+      
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+      
+      // Get department ID
+      final deptData = await Supabase.instance.client
+          .from('departments')
+          .select('id')
+          .eq('title', widget.category)
+          .maybeSingle();
+      
+      if (deptData == null) return;
+      final deptId = deptData['id'];
+      
+      final questionId = question['id'];
+      
+      // Prepare progress data
+      final progressData = {
+        'user_id': user.id,
+        'dept_id': deptId,
+        'usr_dept_id': usrDeptId,
+        'question_id': questionId,
+        'question_text': question['title'],
+        'question_type': question['question_type'],
+        'difficulty': question['difficulty'],
+        'category': widget.category,
+        'subcategory': widget.subcategory,
+        'points': question['points'] ?? 10,
+        'status': 'answered',
+        'user_answer': userAnswer.toString(),
+        'is_correct': isCorrect,
+        'score_earned': pointsEarned,
+        'attempt_count': _currentAttempt,
+        'completed_at': DateTime.now().toIso8601String(),
+      };
+      
+      // Upsert to handle both new answers and retries
+      await Supabase.instance.client
+          .from('usr_progress')
+          .upsert(progressData, onConflict: 'usr_dept_id,question_id');
+      
+      debugPrint('💾 Saved progress for question $questionIndex: ${isCorrect ? "✅ Correct" : "❌ Wrong"} ($pointsEarned points)');
+    } catch (e) {
+      debugPrint('❌ Error saving question progress: $e');
+      // Don't throw - progress saving failure shouldn't block quiz completion
+    }
   }
 
   Future<void> _loadQuestions() async {
@@ -399,9 +529,14 @@ class _QuizScreenState extends State<QuizScreen> {
         _isLoading = false;
         _matchAnswers = {};
         _gameScores = {};
+        
+        // Set initial question index (for Continue feature)
+        if (widget.startQuestionIndex != null && widget.startQuestionIndex! < questions.length) {
+          _currentQuestionIndex = widget.startQuestionIndex!;
+        }
       });
       
-      // Start timer for first question
+      // Start timer for current question (may not be first if resuming)
       if (questions.isNotEmpty) {
         _startQuestionTimer();
       }
@@ -600,8 +735,14 @@ class _QuizScreenState extends State<QuizScreen> {
              }
             }
 
-            // TODO: Update category progress in user_category_progress table
-            // For now, we'll just track points locally
+            // Save progress to database
+            await _saveQuestionProgress(
+              questionIndex: i,
+              question: question,
+              isCorrect: isCorrect,
+              userAnswer: userAnswer,
+              pointsEarned: pointsEarned,
+            );
           }
 
         if (widget.category.toLowerCase() == 'orientation') {
@@ -680,14 +821,29 @@ class _QuizScreenState extends State<QuizScreen> {
     debugPrint('   Question data: ${question.keys.toList()}');
     
     // Determine if current question is answered
+    // A question is considered answered if:
+    // 1. It's been marked in _answeredCorrectly (correct answer OR wrong after max attempts)
+    // 2. OR for match questions, all pairs have been matched
     bool isAnswered = false;
-    if (questionType == 'multiple_choice') {
+    if (_answeredCorrectly.containsKey(_currentQuestionIndex)) {
+      // Question has been fully processed (correct or wrong after attempts)
+      isAnswered = true;
+      debugPrint('🔵 Question $_currentQuestionIndex is ANSWERED (in _answeredCorrectly map)');
+    } else if (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision') {
+      // For multiple choice, check if an answer is selected (but not yet validated)
       isAnswered = _selectedAnswers[_currentQuestionIndex] != null;
-    } else {
+      debugPrint('🔵 Question $_currentQuestionIndex isAnswered = $isAnswered (selected: ${_selectedAnswers[_currentQuestionIndex]})');
+    } else if (questionType == 'match_following') {
       final pairs = List<Map<String, dynamic>>.from(question['match_pairs'] ?? []);
       final userMatches = _matchAnswers[_currentQuestionIndex] ?? {};
       isAnswered = userMatches.length == pairs.length;
+      debugPrint('🔵 Question $_currentQuestionIndex isAnswered = $isAnswered (matches: ${userMatches.length}/${pairs.length})');
     }
+    
+    debugPrint('🔵 _answeredCorrectly map: $_answeredCorrectly');
+    debugPrint('🔵 _selectedAnswers map: $_selectedAnswers');
+    debugPrint('🔵 Current attempt: $_currentAttempt / $_maxAttempts');
+
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -908,13 +1064,109 @@ class _QuizScreenState extends State<QuizScreen> {
                             ElevatedButton(
                               onPressed: !isAnswered
                                   ? null
-                                  : () {
-                                      if (_currentQuestionIndex < _questions.length - 1) {
-                                        setState(() => _currentQuestionIndex++);
-                                        _startQuestionTimer(); // Restart timer for next question
+                                  : () async {
+                                      // Get the selected answer
+                                      final selectedIndex = _selectedAnswers[_currentQuestionIndex];
+                                      if (selectedIndex == null) return;
+                                      
+                                      final question = _questions[_currentQuestionIndex];
+                                      final optionsData = List<Map<String, dynamic>>.from(question['options_data'] ?? []);
+                                      
+                                      // Check if answer is correct
+                                      final isCorrect = selectedIndex < optionsData.length && 
+                                                       optionsData[selectedIndex]['is_correct'] == true;
+                                      
+                                      // Stop timer
+                                      _questionTimer?.cancel();
+                                      
+                                      if (isCorrect) {
+                                        // Calculate and record points
+                                        final points = _calculatePoints();
+                                        _recordAnswerWithPoints(true, _currentQuestionIndex);
+                                        _questionPoints[_currentQuestionIndex] = points;
+                                        
+                                        // Mark as answered correctly
+                                        setState(() {
+                                          _answeredCorrectly[_currentQuestionIndex] = true;
+                                        });
+                                        
+                                        // Save progress to database
+                                        final options = List<String>.from(question['options'] ?? []);
+                                        final selectedAnswerText = selectedIndex < options.length 
+                                            ? options[selectedIndex] 
+                                            : '';
+                                        await _saveQuestionProgress(
+                                          questionIndex: _currentQuestionIndex,
+                                          question: question,
+                                          isCorrect: true,
+                                          userAnswer: {
+                                            'type': 'mcq',
+                                            'selected_index': selectedIndex,
+                                            'selected_answer': selectedAnswerText,
+                                          },
+                                          pointsEarned: points,
+                                        );
+                                        
+                                        // Show celebration
+                                        await Future.delayed(const Duration(milliseconds: 300));
+                                        if (mounted) {
+                                          showDialog(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            barrierColor: Colors.black.withOpacity(0.7),
+                                            builder: (context) => CelebrationWidget(
+                                              show: true,
+                                              points: points,
+                                              onComplete: () {
+                                                Navigator.of(context).pop();
+                                                // Move to next question
+                                                if (_currentQuestionIndex < _questions.length - 1) {
+                                                  setState(() {
+                                                    _currentQuestionIndex++;
+                                                    _currentAttempt = 1;
+                                                  });
+                                                  _startQuestionTimer();
+                                                } else {
+                                                  // Quiz complete
+                                                  _submitQuiz();
+                                                }
+                                              },
+                                            ),
+                                          );
+                                        }
                                       } else {
-                                        _questionTimer?.cancel(); // Stop timer before submitting
-                                        _submitQuiz();
+                                        // Wrong answer
+                                        if (_currentAttempt < _maxAttempts) {
+                                          // Show retry dialog
+                                          _showRetryDialog();
+                                        } else {
+                                          // Max attempts reached
+                                          _recordAnswerWithPoints(false, _currentQuestionIndex);
+                                          _questionPoints[_currentQuestionIndex] = 0;
+                                          
+                                          setState(() {
+                                            _answeredCorrectly[_currentQuestionIndex] = false;
+                                          });
+                                          
+                                          // Save progress to database
+                                          final options = List<String>.from(question['options'] ?? []);
+                                          final selectedAnswerText = selectedIndex < options.length 
+                                              ? options[selectedIndex] 
+                                              : '';
+                                          await _saveQuestionProgress(
+                                            questionIndex: _currentQuestionIndex,
+                                            question: question,
+                                            isCorrect: false,
+                                            userAnswer: {
+                                              'type': 'mcq',
+                                              'selected_index': selectedIndex,
+                                              'selected_answer': selectedAnswerText,
+                                            },
+                                            pointsEarned: 0,
+                                          );
+                                          
+                                          _showNoPointsDialog();
+                                        }
                                       }
                                     },
                               style: ElevatedButton.styleFrom(
@@ -978,81 +1230,16 @@ class _QuizScreenState extends State<QuizScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 16),
           child: InkWell(
-            onTap: () async {
+            onTap: () {
               // Don't allow answer if already answered this question
               if (_answeredCorrectly.containsKey(_currentQuestionIndex)) {
                 return;
               }
               
+              // Just record the selection, don't show feedback yet
               setState(() {
                 _selectedAnswers[_currentQuestionIndex] = index;
               });
-              
-              // Check if answer is correct
-              final isCorrect = index < optionsData.length && 
-                               optionsData[index]['is_correct'] == true;
-              
-              if (isCorrect) {
-                // Stop timer
-                _questionTimer?.cancel();
-                
-                // Calculate and record points
-                final points = _calculatePoints();
-                _recordAnswerWithPoints(true, _currentQuestionIndex);
-                _questionPoints[_currentQuestionIndex] = points;
-                
-                // Mark as answered correctly
-                setState(() {
-                  _answeredCorrectly[_currentQuestionIndex] = true;
-                });
-                
-                // Show celebration
-                await Future.delayed(const Duration(milliseconds: 300));
-                if (mounted) {
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    barrierColor: Colors.black.withOpacity(0.7),
-                    builder: (context) => CelebrationWidget(
-                      show: true,
-                      points: points,
-                      onComplete: () {
-                        Navigator.of(context).pop();
-                        // Move to next question
-                        if (_currentQuestionIndex < _questions.length - 1) {
-                          setState(() {
-                            _currentQuestionIndex++;
-                            _currentAttempt = 1;
-                            _remainingSeconds = 30;
-                          });
-                          _startQuestionTimer();
-                        } else {
-                          // Quiz complete
-                          _submitQuiz();
-                        }
-                      },
-                    ),
-                  );
-                }
-              } else {
-                // Wrong answer
-                _questionTimer?.cancel();
-                
-                if (_currentAttempt < _maxAttempts) {
-                  // Show retry dialog
-                  _showRetryDialog();
-                } else {
-                  // Max attempts reached, record 0 points and move on
-                  _recordAnswerWithPoints(false, _currentQuestionIndex);
-                  _questionPoints[_currentQuestionIndex] = 0;
-                  
-                  setState(() {
-                    _answeredCorrectly[_currentQuestionIndex] = false;
-                  });
-                  
-                  _showNoPointsDialog();
-                }
-              }
             },
             borderRadius: BorderRadius.circular(20),
             child: AnimatedContainer(
