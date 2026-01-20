@@ -445,8 +445,8 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('Add New Question'),
-        backgroundColor: const Color(0xFF3498DB),
-        foregroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: Colors.black,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -454,9 +454,9 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6EC1E4),
-              Color(0xFF9BA8E8),
-              Color(0xFFE8A8D8),
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -734,7 +734,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                               icon: const Icon(Icons.add),
                               label: const Text('Add Pair'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF8B5CF6),
+                                backgroundColor: const Color(0xFF3B82F6),
                                 foregroundColor: Colors.white,
                               ),
                             ),
@@ -820,7 +820,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                               icon: const Icon(Icons.add),
                               label: const Text('Add Pair'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF6B5CE7),
+                                backgroundColor: const Color(0xFF3B82F6),
                                 foregroundColor: Colors.white,
                               ),
                             ),
@@ -894,14 +894,14 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                       child: ElevatedButton(
                         onPressed: _isSaving ? null : _saveQuestion,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3498DB),
-                          foregroundColor: Colors.white,
+                          backgroundColor: const Color(0xFFE8D96F),
+                          foregroundColor: Colors.black,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                         child: _isSaving
-                            ? const CircularProgressIndicator(color: Colors.white)
+                            ? const CircularProgressIndicator(color: Colors.black)
                             : const Text(
                                 'Save Question',
                                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:math';
 import '../../utils/responsive_utils.dart';
 import '../../widgets/floating_decoration.dart';
 
@@ -124,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6BCB9F).withOpacity(0.2),
+                        color: const Color(0xFFF4EF8B).withOpacity(0.3),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -203,63 +204,65 @@ class _LoginScreenState extends State<LoginScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFF6EC1E4), // Light blue
-                  Color(0xFF9BA8E8), // Purple-blue
-                  Color(0xFFE8A8D8), // Pink
+                  Color(0xFFFFF9E6), // Very light yellow
+                  Color(0xFFF4EF8B), // Main yellow #f4ef8b
+                  Color(0xFFE8D96F), // Darker yellow
                 ],
               ),
             ),
           ),
           
-          // Floating decorations - larger geometric shapes
-          // Top left - small star
-          const FloatingDecoration(
-            shape: 'star',
-            color: Color(0xFFFBBF24), // Yellow star
-            size: 35,
-            top: 60,
-            left: 25,
-            opacity: 0.7,
+          // Top left - star
+          const Positioned(
+            top: 50,
+            left: 40,
+            child: Icon(
+              Icons.star,
+              color: Color(0xFFFFC107),
+              size: 45,
+            ),
           ),
           
-          // Left side - curved arc
-          const FloatingDecoration(
-            shape: 'squiggle',
-            color: Color(0xFFF9A8D4), // Light pink arc
-            size: 90,
-            top: 200,
-            left: -25,
-            opacity: 0.5,
+          // Top center-right - circle
+          Positioned(
+            top: 45,
+            right: MediaQuery.of(context).size.width * 0.30,
+            child: Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD8BFD8).withOpacity(0.6),
+                shape: BoxShape.circle,
+              ),
+            ),
           ),
           
-          // Bottom left - diamond
-          const FloatingDecoration(
-            shape: 'diamond',
-            color: Color(0xFFFBD38D), // Yellow diamond
-            size: 45,
-            bottom: 150,
-            left: 30,
-            opacity: 0.6,
+          // Diagonal stripe
+          Positioned(
+            top: 70,
+            right: -30,
+            child: Transform.rotate(
+              angle: -0.6,
+              child: Container(
+                width: 180,
+                height: 350,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE4B5).withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(25),
+                ),
+              ),
+            ),
           ),
           
-          // Top right - circle
-          const FloatingDecoration(
-            shape: 'circle',
-            color: Color(0xFFC4B5FD), // Light purple circle
-            size: 50,
-            top: 40,
-            right: 35,
-            opacity: 0.6,
-          ),
-          
-          // Right side - diagonal squiggle
-          const FloatingDecoration(
-            shape: 'squiggle',
-            color: Color(0xFFFFFFFF), // White squiggle
-            size: 110,
-            top: 120,
-            right: -35,
-            opacity: 0.4,
+          // Wavy line at bottom
+          Positioned(
+            bottom: 80,
+            left: -50,
+            right: -50,
+            child: CustomPaint(
+              size: Size(MediaQuery.of(context).size.width + 100, 100),
+              painter: WavePainter(),
+            ),
           ),
             // Main content
           SafeArea(
@@ -287,7 +290,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: TextStyle(
                           fontSize: titleSize,
                           fontWeight: FontWeight.w900,
-                          color: Colors.white,
+                          color: Colors.black,
                           letterSpacing: -0.5,
                           shadows: [
                             Shadow(
@@ -303,8 +306,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         'Login to continue your journey',
                         style: TextStyle(
                           fontSize: subtitleSize,
-                          color: Colors.white.withOpacity(0.9),
-                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       SizedBox(height: padding * 1.33),
@@ -343,7 +346,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: _selectedRole == 'user'
-                                        ? const Color(0xFF8B5CF6) // Purple
+                                        ? const Color(0xFFF4EF8B) // Yellow
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(25),
                                   ),
@@ -354,7 +357,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         Icons.person_rounded,
                                         size: 20,
                                         color: _selectedRole == 'user'
-                                            ? Colors.white
+                                            ? Colors.black
                                             : const Color(
                                                 0xFF1A2F4B,
                                               ).withOpacity(0.5),
@@ -365,7 +368,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           color: _selectedRole == 'user'
-                                              ? Colors.white
+                                              ? Colors.black
                                               : const Color(
                                                   0xFF1A2F4B,
                                                 ).withOpacity(0.5),
@@ -391,7 +394,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: _selectedRole == 'admin'
-                                        ? const Color(0xFFFBBF24) // Yellow
+                                        ? const Color(0xFFE8D96F) // Darker yellow for admin
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(25),
                                   ),
@@ -402,7 +405,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         Icons.admin_panel_settings_rounded,
                                         size: 20,
                                         color: _selectedRole == 'admin'
-                                            ? Colors.white
+                                            ? Colors.black
                                             : const Color(
                                                 0xFF1A2F4B,
                                               ).withOpacity(0.5),
@@ -413,7 +416,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           color: _selectedRole == 'admin'
-                                              ? Colors.white
+                                              ? Colors.black
                                               : const Color(
                                                   0xFF1A2F4B,
                                                 ).withOpacity(0.5),
@@ -445,14 +448,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               decoration: InputDecoration(
                                 hintText: 'Email',
                                 hintStyle: const TextStyle(
-                                  color: Color(0xFF9CA3AF),
+                                  color: Colors.black,
                                   fontSize: 16,
                                 ),
                                 filled: true,
                                 fillColor: Colors.white,
                                 prefixIcon: const Icon(
                                   Icons.email_rounded,
-                                  color: Color(0xFF8B5CF6),
+                                  color: Colors.black,
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),
@@ -497,14 +500,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               decoration: InputDecoration(
                                 hintText: 'Password',
                                 hintStyle: const TextStyle(
-                                  color: Color(0xFF9CA3AF),
+                                  color: Colors.black,
                                   fontSize: 16,
                                 ),
                                 filled: true,
                                 fillColor: Colors.white,
                                 prefixIcon: const Icon(
                                   Icons.lock_rounded,
-                                  color: Color(0xFF8B5CF6),
+                                  color: Colors.black,
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),
@@ -517,7 +520,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),
                                   borderSide: const BorderSide(
-                                    color: Color(0xFF8B5CF6),
+                                    color: Color(0xFFE8D96F),
                                     width: 2,
                                   ),
                                 ),
@@ -564,7 +567,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       child: Text(
                                         _errorMessage,
                                         style: const TextStyle(
-                                          color: Color(0xFF1A2F4B),
+                                          color: Color(0xFFE8D96F),
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -580,11 +583,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: ElevatedButton(
                                 onPressed: _isLoading ? null : _login,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFBBF24),
-                                  foregroundColor: const Color(0xFF1E293B),
-                                  elevation: 3,
+                                  backgroundColor: const Color(0xFFFFA726),
+                                  foregroundColor: Colors.black,
+                                  elevation: 0,
                                   shadowColor: const Color(
-                                    0xFFF8C67D,
+                                    0xFFE8D96F,
                                   ).withOpacity(0.4),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(20),
@@ -632,4 +635,30 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+}
+
+// Custom painter for wavy line decoration
+class WavePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFFFB6C1).withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+
+    final path = Path();
+    path.moveTo(0, size.height / 2);
+
+    for (double i = 0; i < size.width; i++) {
+      path.lineTo(
+        i,
+        size.height / 2 + 20 * sin(i / 50),
+      );
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

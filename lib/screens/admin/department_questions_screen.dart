@@ -249,20 +249,32 @@ class _DepartmentQuestionsScreenState extends State<DepartmentQuestionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        title: Text(widget.departmentName),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A2F4B),
-        elevation: 0,
-      ),
+    return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
+            ],
+          ),
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: Text(widget.departmentName),
+            backgroundColor: const Color(0xFFF4EF8B),
+            foregroundColor: Colors.black,
+            elevation: 0,
+          ),
       body: Column(
         children: [
           // Header with Add button
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.white,
+            color: const Color(0xFFF4EF8B),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -271,7 +283,7 @@ class _DepartmentQuestionsScreenState extends State<DepartmentQuestionsScreen> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A2F4B),
+                    color: Colors.black,
                   ),
                 ),
                 ElevatedButton.icon(
@@ -428,6 +440,8 @@ class _DepartmentQuestionsScreenState extends State<DepartmentQuestionsScreen> {
           ),
         ],
       ),
+        ),
+
     );
   }
 }

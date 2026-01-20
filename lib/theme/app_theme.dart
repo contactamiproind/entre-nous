@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // New Color Palette - Based on Splash Screen Gradient
+  // Yellow Color Palette - Based on #f4ef8b
   // Gradient Colors
-  static const Color gradientBlueTop = Color(0xFF6EC1E4); // Light blue from splash
-  static const Color gradientBlueMid = Color(0xFF9BA8E8); // Purple-blue transition
-  static const Color gradientPinkBottom = Color(0xFFE8A8D8); // Pink from splash
+  static const Color gradientYellowTop = Color(0xFFFFF9E6); // Very light yellow
+  static const Color gradientYellowMid = Color(0xFFF4EF8B); // Main yellow #f4ef8b
+  static const Color gradientYellowBottom = Color(0xFFE8D96F); // Slightly darker yellow
   
   // Primary Colors
-  static const Color primaryPurple = Color(0xFF8B5CF6); // Purple for "Level UP!" text
-  static const Color primaryYellow = Color(0xFFFBD38D); // Yellow/gold accents
+  static const Color primaryYellow = Color(0xFFF4EF8B); // Main yellow #f4ef8b
+  static const Color primaryYellowDark = Color(0xFFE8D96F); // Darker yellow for contrast
   static const Color primaryWhite = Color(0xFFFFFFFF); // White text
   
   // Accent Colors
-  static const Color accentGold = Color(0xFFFBBF24); // Bright yellow for buttons
-  static const Color accentLightPurple = Color(0xFFC4B5FD); // Light purple
-  static const Color accentPink = Color(0xFFF9A8D4); // Light pink
+  static const Color accentGold = Color(0xFFF4EF8B); // Yellow for buttons
+  static const Color accentLightYellow = Color(0xFFFFFBD6); // Very light yellow
+  static const Color accentAmber = Color(0xFFFFC107); // Amber accent
   
   // Neutral Colors
   static const Color white = Colors.white;
-  static const Color lightBackground = Color(0xFFF8FAFC);
+  static const Color lightBackground = Color(0xFFFFFDF5);
   static const Color textDark = Color(0xFF1E293B);
   static const Color textLight = Color(0xFF64748B);
 
@@ -29,7 +29,7 @@ class AppTheme {
       fontSize: 32,
       fontWeight: FontWeight.w900,
       letterSpacing: -0.5,
-      color: primaryPurple,
+      color: textDark,
     ),
     displayMedium: TextStyle(
       fontSize: 28,
@@ -70,9 +70,9 @@ class AppTheme {
       scaffoldBackgroundColor: lightBackground,
       colorScheme: const ColorScheme(
         brightness: Brightness.light,
-        primary: primaryPurple,
-        onPrimary: white,
-        secondary: accentGold,
+        primary: primaryYellow,
+        onPrimary: textDark,
+        secondary: accentAmber,
         onSecondary: textDark,
         error: Color(0xFFEF4444),
         onError: white,
@@ -116,8 +116,8 @@ class AppTheme {
       
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: primaryPurple,
-          side: const BorderSide(color: primaryPurple, width: 2),
+          foregroundColor: textDark,
+          side: const BorderSide(color: primaryYellowDark, width: 2),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
@@ -139,7 +139,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(20),
-          borderSide: const BorderSide(color: primaryPurple, width: 2),
+          borderSide: const BorderSide(color: primaryYellowDark, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         labelStyle: const TextStyle(color: textLight),

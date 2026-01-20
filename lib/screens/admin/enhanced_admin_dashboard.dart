@@ -132,6 +132,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
           foregroundColor: Colors.white,
           elevation: 0,
           automaticallyImplyLeading: false,
+          leading: const SizedBox(),
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -148,7 +149,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
           currentIndex: _selectedIndex,
           onTap: (index) => setState(() => _selectedIndex = index),
           type: BottomNavigationBarType.fixed,
-          selectedItemColor: const Color(0xFF8B5CF6),
+          selectedItemColor: const Color(0xFFFFA726),
           unselectedItemColor: Colors.grey,
           items: const [
             BottomNavigationBarItem(
@@ -186,9 +187,9 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color(0xFF6EC1E4),
-            Color(0xFF9BA8E8),
-            Color(0xFFE8A8D8),
+            Color(0xFFFFF9E6), // Very light yellow
+            Color(0xFFF4EF8B), // Main yellow #f4ef8b
+            Color(0xFFE8D96F), // Darker yellow
           ],
         ),
       ),
@@ -318,14 +319,14 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
               _buildActionButton(
                 'Departments',
                 Icons.alt_route_rounded,
-                const Color(0xFF8B5CF6),
+                const Color(0xFFFFA726),
                 () => setState(() => _selectedIndex = 1), // Navigate to Department tab
               ),
               const SizedBox(height: 12),
               _buildActionButton(
                 'Manage Question Bank',
                 Icons.quiz_rounded,
-                const Color(0xFFFBBF24),
+                const Color(0xFFF4EF8B),
                 () => setState(() => _selectedIndex = 2), // Navigate to Q-Bank tab
               ),
             ],
@@ -451,7 +452,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                icon: const Icon(Icons.arrow_back, color: Colors.black),
                 onPressed: () => setState(() => _selectedIndex = 0),
               ),
               const Text(
@@ -459,7 +460,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: Colors.black,
                 ),
               ),
             ],
@@ -488,12 +489,12 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                        color: const Color(0xFFFBBF24).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
                         Icons.timer,
-                        color: Color(0xFF8B5CF6),
+                        color: Color(0xFFFBBF24),
                         size: 28,
                       ),
                     ),
@@ -561,7 +562,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                   min: 0,
                   max: 120,
                   divisions: 24,
-                  activeColor: const Color(0xFF8B5CF6),
+                  activeColor: const Color(0xFFFBBF24),
                   inactiveColor: Colors.grey[300],
                   label: _quizTimerSeconds == 0 ? 'Disabled' : '$_quizTimerSeconds s',
                   onChanged: (value) {
@@ -778,13 +779,13 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                                 ? 'Quiz timer disabled'
                                 : 'Settings saved!\nTimer: $_quizTimerSeconds sec\nFull pts: <$fullPct%, Half pts: <$halfPct%',
                           ),
-                          backgroundColor: const Color(0xFF8B5CF6),
+                          backgroundColor: const Color(0xFF3B82F6),
                           duration: const Duration(seconds: 3),
                         ),
                       );
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B5CF6),
+                      backgroundColor: const Color(0xFF1E293B),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(

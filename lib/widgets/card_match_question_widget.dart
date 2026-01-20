@@ -169,7 +169,7 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF3B82F6),
+                  color: Color(0xFFE8D96F),
                 ),
               ),
               Text(
@@ -352,7 +352,7 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF3B82F6), width: 2),
+              border: Border.all(color: const Color(0xFFE8D96F), width: 2),
             ),
             child: Text(
               card['text'],
@@ -408,11 +408,11 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
     switch (colorName.toLowerCase()) {
       case 'blue':
       case 'ease':
-        return const Color(0xFF3B82F6);
+        return const Color(0xFFE8D96F);
       case 'gold':
       case 'yellow':
       case 'delight':
-        return const Color(0xFFFBBF24);
+        return const Color(0xFFF4EF8B);
       default:
         return Colors.grey;
     }

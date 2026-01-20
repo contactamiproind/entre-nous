@@ -94,13 +94,13 @@ class _ScenarioDecisionWidgetState extends State<ScenarioDecisionWidget> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF9B59B6).withOpacity(0.1),
-                  const Color(0xFF8E44AD).withOpacity(0.05),
+                  const Color(0xFFF4EF8B).withOpacity(0.1),
+                  const Color(0xFFE8D96F).withOpacity(0.05),
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: const Color(0xFF9B59B6).withOpacity(0.3),
+                color: const Color(0xFFF4EF8B).withOpacity(0.3),
                 width: 2,
               ),
             ),
@@ -113,7 +113,7 @@ class _ScenarioDecisionWidgetState extends State<ScenarioDecisionWidget> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF9B59B6),
+                          color: const Color(0xFFE8D96F),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -129,7 +129,7 @@ class _ScenarioDecisionWidgetState extends State<ScenarioDecisionWidget> {
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF9B59B6),
+                            color: Color(0xFFE8D96F),
                           ),
                         ),
                       ),
@@ -213,7 +213,7 @@ class _ScenarioDecisionWidgetState extends State<ScenarioDecisionWidget> {
                   backgroundColor = Colors.grey.withOpacity(0.05);
                 }
               } else {
-                borderColor = const Color(0xFF9B59B6).withOpacity(0.3);
+                borderColor = const Color(0xFFF4EF8B).withOpacity(0.3);
                 backgroundColor = Colors.white;
               }
               
@@ -233,7 +233,7 @@ class _ScenarioDecisionWidgetState extends State<ScenarioDecisionWidget> {
                     boxShadow: isSelected && !showFeedback
                         ? [
                             BoxShadow(
-                              color: const Color(0xFF9B59B6).withOpacity(0.3),
+                              color: const Color(0xFFF4EF8B).withOpacity(0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -249,7 +249,7 @@ class _ScenarioDecisionWidgetState extends State<ScenarioDecisionWidget> {
                         decoration: BoxDecoration(
                           color: showFeedback && isSelected
                               ? (isCorrect ? Colors.green : Colors.red)
-                              : const Color(0xFF9B59B6),
+                              : const Color(0xFFE8D96F),
                           shape: BoxShape.circle,
                         ),
                         child: Center(

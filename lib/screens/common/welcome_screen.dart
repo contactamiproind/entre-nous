@@ -79,9 +79,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFF6EC1E4), // Light blue
-                  Color(0xFF9BA8E8), // Purple-blue
-                  Color(0xFFE8A8D8), // Pink
+                  Color(0xFFFFF9E6), // Very light yellow
+                  Color(0xFFF4EF8B), // Main yellow #f4ef8b
+                  Color(0xFFE8D96F), // Darker yellow
                 ],
               ),
             ),
@@ -90,7 +90,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           // Top left - small circle
           const FloatingDecoration(
             shape: 'circle',
-            color: Color(0xFFF9A8D4), // Light pink circle
+            color: Color(0xFFFFFBD6), // Light yellow circle
             size: 40,
             top: 50,
             left: 30,
@@ -99,7 +99,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           // Left side - curved arc (using squiggle)
           const FloatingDecoration(
             shape: 'squiggle',
-            color: Color(0xFFC4B5FD), // Light purple arc
+            color: Color(0xFFFFC107), // Amber arc
             size: 80,
             top: 180,
             left: -20,
@@ -109,7 +109,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           // Top right - yellow circle
           const FloatingDecoration(
             shape: 'circle',
-            color: Color(0xFFFBBF24), // Yellow circle
+            color: Color(0xFFE8D96F), // Yellow circle
             size: 55,
             top: 30,
             right: 30,
@@ -151,21 +151,21 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           'Welcome to',
                           style: Theme.of(context).textTheme.headlineMedium
                               ?.copyWith(
-                                color: const Color(0xFFFBBF24), // Yellow accent
+                                color: const Color(0xFF1E293B), // Dark text
                                 fontWeight: FontWeight.w600,
                               ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Entre Nous Quiz',
+                          'Entre Nous Experiences',
                           style: Theme.of(context).textTheme.displayLarge
                               ?.copyWith(
-                                color: Colors.white,
+                                color: const Color(0xFF1E293B),
                                 fontSize: titleSize,
                                 fontWeight: FontWeight.w900,
                                 shadows: [
                                   Shadow(
-                                    color: Colors.black.withOpacity(0.05),
+                                    color: Colors.white.withOpacity(0.3),
                                     offset: const Offset(0, 2),
                                     blurRadius: 4,
                                   ),
@@ -195,12 +195,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           child: ElevatedButton(
                             onPressed: _navigateToLogin,
                             style: ElevatedButton.styleFrom(
-                              elevation: 4,
-                              shadowColor: const Color(
-                                0xFF6BCB9F,
-                              ).withOpacity(0.3),
+                              backgroundColor: const Color(0xFFFFA726), // Orange like LOGIN button
+                              foregroundColor: Colors.black,
+                              elevation: 0,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                             ),
                             child: const Row(
@@ -209,13 +208,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                 Text(
                                   'START',
                                   style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w900,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
                                     letterSpacing: 1.5,
                                   ),
                                 ),
-                                SizedBox(width: 12),
-                                Icon(Icons.play_circle_fill_rounded, size: 32),
+                                SizedBox(width: 8),
+                                Icon(Icons.play_circle_fill_rounded, size: 24),
                               ],
                             ),
                           ),

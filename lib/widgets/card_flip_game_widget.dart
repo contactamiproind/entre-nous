@@ -5,12 +5,14 @@ import 'dart:math';
 class CardFlipGameWidget extends StatefulWidget {
   final List<Map<String, dynamic>> pairs;
   final Function(int score, double accuracy, int timeTaken) onComplete;
+  final Function(int score, double accuracy)? onGameComplete; // Pass score when game is done
   final int pointsPerMatch;
 
   const CardFlipGameWidget({
     super.key,
     required this.pairs,
     required this.onComplete,
+    this.onGameComplete,
     this.pointsPerMatch = 10,
   });
 
@@ -28,6 +30,7 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
   int _score = 0;
   Timer? _gameTimer;
   int _secondsElapsed = 0;
+  bool _isGameComplete = false; // Track if game is complete but waiting for Next
   
   @override
   void initState() {
@@ -140,8 +143,20 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
   
   void _gameComplete() {
     _gameTimer?.cancel();
+    setState(() {
+      _isGameComplete = true;
+    });
+    // Notify parent that game is complete with score and accuracy
     final accuracy = _matchesFound / _totalAttempts;
-    widget.onComplete(_score, accuracy, _secondsElapsed);
+    widget.onGameComplete?.call(_score, accuracy);
+  }
+  
+  // Method to be called from parent when Next button is clicked
+  void completeGame() {
+    if (_isGameComplete) {
+      final accuracy = _matchesFound / _totalAttempts;
+      widget.onComplete(_score, accuracy, _secondsElapsed);
+    }
   }
   
   String _formatTime(int seconds) {
@@ -166,7 +181,7 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withOpacity(0.1),
+              color: const Color(0xFFF4EF8B).withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -174,14 +189,14 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.star, color: Color(0xFFFBBF24), size: 24),
+                    const Icon(Icons.star, color: Color(0xFFE8D96F), size: 24),
                     const SizedBox(width: 8),
                     Text(
                       'Score: $_score',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF8B5CF6),
+                        color: Color(0xFFE8D96F),
                       ),
                     ),
                   ],
@@ -236,13 +251,13 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
               ? const Color(0xFF6BCB9F).withOpacity(0.3)
               : card.isFlipped
                   ? Colors.white
-                  : const Color(0xFF8B5CF6),
+                  : const Color(0xFFF4EF8B),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: card.isMatched
                 ? const Color(0xFF6BCB9F)
                 : card.isFlipped
-                    ? const Color(0xFF8B5CF6)
+                    ? const Color(0xFFE8D96F)
                     : Colors.transparent,
             width: 3,
           ),
@@ -260,7 +275,7 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
               : const Icon(
                   Icons.question_mark,
                   size: 40,
-                  color: Colors.white,
+                  color: Colors.black,
                 ),
         ),
       ),

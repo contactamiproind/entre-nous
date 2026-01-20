@@ -275,17 +275,30 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('User Profile: ${widget.userEmail}'),
-          backgroundColor: const Color(0xFF1A2F4B),
-          foregroundColor: Colors.white,
-          toolbarHeight: 60,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
+            ],
           ),
         ),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: Text('User Profile: ${widget.userEmail}'),
+            backgroundColor: const Color(0xFFF4EF8B),
+            foregroundColor: Colors.black,
+            toolbarHeight: 60,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
@@ -484,6 +497,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

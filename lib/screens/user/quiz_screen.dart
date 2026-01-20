@@ -56,6 +56,9 @@ class _QuizScreenState extends State<QuizScreen> {
   
   // Progress tracking
   String? _usrDeptId; // ID of the usr_dept record for saving progress
+  
+  // Card game tracking
+  bool _isCardGameComplete = false; // Track if current card game is complete
 
   @override
   void initState() {
@@ -799,9 +802,9 @@ class _QuizScreenState extends State<QuizScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Color(0xFF6EC1E4), // Light blue
-                Color(0xFF9BA8E8), // Purple-blue
-                Color(0xFFE8A8D8), // Pink
+                Color(0xFFFFF9E6), // Very light yellow
+                Color(0xFFF4EF8B), // Main yellow #f4ef8b
+                Color(0xFFE8D96F), // Darker yellow
               ],
             ),
           ),
@@ -846,6 +849,10 @@ class _QuizScreenState extends State<QuizScreen> {
       final userMatches = _matchAnswers[_currentQuestionIndex] ?? {};
       isAnswered = userMatches.length == pairs.length;
       debugPrint('🔵 Question $_currentQuestionIndex isAnswered = $isAnswered (matches: ${userMatches.length}/${pairs.length})');
+    } else if (questionType == 'card_match') {
+      // For card match, check if game is complete
+      isAnswered = _isCardGameComplete;
+      debugPrint('🔵 Question $_currentQuestionIndex isAnswered = $isAnswered (card game complete: $_isCardGameComplete)');
     }
     
     debugPrint('🔵 _answeredCorrectly map: $_answeredCorrectly');
@@ -861,9 +868,9 @@ class _QuizScreenState extends State<QuizScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6EC1E4), // Light blue
-              Color(0xFF9BA8E8), // Purple-blue
-              Color(0xFFE8A8D8), // Pink
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -876,7 +883,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      icon: const Icon(Icons.arrow_back, color: Colors.black),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                     Expanded(
@@ -886,7 +893,7 @@ class _QuizScreenState extends State<QuizScreen> {
                             : widget.category,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: Colors.black,
                           fontSize: 18,
                         ),
                       ),
@@ -924,7 +931,7 @@ class _QuizScreenState extends State<QuizScreen> {
                             child: Text(
                               'Question ${_currentQuestionIndex + 1} of ${_questions.length}',
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: Colors.black,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 14,
                               ),
@@ -1005,7 +1012,7 @@ class _QuizScreenState extends State<QuizScreen> {
                         Text(
                           question['title'] ?? question['question_text'] ?? 'Question',
                           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            color: Colors.white,
+                            color: Colors.black,
                             fontSize: 22,
                             height: 1.3,
                             fontWeight: FontWeight.bold,
@@ -1017,7 +1024,7 @@ class _QuizScreenState extends State<QuizScreen> {
                             question['description'],
                             style: const TextStyle(
                               fontSize: 16,
-                              color: Colors.white,
+                              color: Colors.black,
                               height: 1.4,
                             ),
                           ),
@@ -1035,7 +1042,16 @@ class _QuizScreenState extends State<QuizScreen> {
                                             key: ValueKey('flip_${question['id']}'),
                                             pairs: _buildCardPairs(question),
                                             pointsPerMatch: 10,
+                                            onGameComplete: (score, accuracy) {
+                                              // Game is complete, store score and enable Next button
+                                              setState(() {
+                                                _isCardGameComplete = true;
+                                                _gameScores[_currentQuestionIndex] = score;
+                                                _answeredCorrectly[_currentQuestionIndex] = accuracy >= 0.7;
+                                              });
+                                            },
                                             onComplete: (score, accuracy, timeTaken) async {
+                                              // This will be called when Next is clicked
                                               // Save progress
                                               await _saveQuestionProgress(
                                                 questionIndex: _currentQuestionIndex,
@@ -1059,6 +1075,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                                 setState(() {
                                                   _currentQuestionIndex++;
                                                   _currentAttempt = 1;
+                                                  _isCardGameComplete = false; // Reset for next question
                                                 });
                                                 _startQuestionTimer();
                                               } else {
@@ -1118,11 +1135,75 @@ class _QuizScreenState extends State<QuizScreen> {
                               onPressed: !isAnswered
                                   ? null
                                   : () async {
+                                      final question = _questions[_currentQuestionIndex];
+                                      final questionType = question['question_type'] ?? 'multiple_choice';
+                                      
+                                      // Handle card match games
+                                      if (questionType == 'card_match' && _isCardGameComplete) {
+                                        // Get the game score from the state
+                                        final score = _gameScores[_currentQuestionIndex] ?? 0;
+                                        final accuracy = score >= 25 ? 0.7 : 0.5; // Simple accuracy based on score
+                                        
+                                        // Stop timer
+                                        _questionTimer?.cancel();
+                                        
+                                        // Show celebration with score
+                                        await Future.delayed(const Duration(milliseconds: 300));
+                                        if (mounted) {
+                                          showDialog(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            barrierColor: Colors.black.withOpacity(0.7),
+                                            builder: (context) => CelebrationWidget(
+                                              show: true,
+                                              points: score,
+                                              onComplete: () async {
+                                                Navigator.of(context).pop();
+                                                
+                                                // Now trigger the actual completion which saves and advances
+                                                // This will call the onComplete callback we set up earlier
+                                                // But we need to do it manually here
+                                                await _saveQuestionProgress(
+                                                  questionIndex: _currentQuestionIndex,
+                                                  question: question,
+                                                  isCorrect: accuracy >= 0.7,
+                                                  userAnswer: {
+                                                    'type': 'card_match_flip',
+                                                    'score': score,
+                                                    'accuracy': accuracy,
+                                                    'time_taken': _questionTimeLimit - _remainingSeconds,
+                                                  },
+                                                  pointsEarned: score,
+                                                );
+                                                
+                                                setState(() {
+                                                  _answeredCorrectly[_currentQuestionIndex] = accuracy >= 0.7;
+                                                  _gameScores[_currentQuestionIndex] = score;
+                                                });
+                                                
+                                                // Move to next question
+                                                if (_currentQuestionIndex < _questions.length - 1) {
+                                                  setState(() {
+                                                    _currentQuestionIndex++;
+                                                    _currentAttempt = 1;
+                                                    _isCardGameComplete = false; // Reset for next question
+                                                  });
+                                                  _startQuestionTimer();
+                                                } else {
+                                                  _submitQuiz();
+                                                }
+                                              },
+                                            ),
+                                          );
+                                        }
+                                        return;
+                                      }
+                                      
+                                      // Handle multiple choice questions
                                       // Get the selected answer
                                       final selectedIndex = _selectedAnswers[_currentQuestionIndex];
                                       if (selectedIndex == null) return;
                                       
-                                      final question = _questions[_currentQuestionIndex];
                                       final optionsData = List<Map<String, dynamic>>.from(question['options_data'] ?? []);
                                       
                                       // Check if answer is correct
@@ -1577,9 +1658,9 @@ class _QuizScreenState extends State<QuizScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFF6EC1E4),
-                  Color(0xFF9BA8E8),
-                  Color(0xFFE8A8D8),
+                  Color(0xFFFFF9E6), // Very light yellow
+                  Color(0xFFF4EF8B), // Main yellow #f4ef8b
+                  Color(0xFFE8D96F), // Darker yellow
                 ],
               ),
             ),

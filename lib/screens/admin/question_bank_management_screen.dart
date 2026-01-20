@@ -696,9 +696,9 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6EC1E4),
-              Color(0xFF9BA8E8),
-              Color(0xFFE8A8D8),
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -708,7 +708,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
           // Header
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.white,
+            color: const Color(0xFFF4EF8B),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -726,7 +726,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A2F4B),
+                            color: Colors.black,
                           ),
                         ),
                       ],

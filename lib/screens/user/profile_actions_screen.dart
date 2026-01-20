@@ -130,12 +130,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 height: 60,
                 decoration: BoxDecoration(
                   color: _avatarEmoji == emoji 
-                      ? const Color(0xFF6B5CE7).withOpacity(0.2)
+                      ? const Color(0xFFF4EF8B).withOpacity(0.5)
                       : Colors.grey[100],
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: _avatarEmoji == emoji 
-                        ? const Color(0xFF6B5CE7)
+                        ? const Color(0xFFE8D96F)
                         : Colors.transparent,
                     width: 2,
                   ),
@@ -168,19 +168,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Edit Profile'),
-        backgroundColor: const Color(0xFF8B5CF6),
-        foregroundColor: Colors.white,
+        title: const Text('Edit Profile', style: TextStyle(color: Colors.black)),
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: Colors.black,
       ),
       body: Container(
+        height: MediaQuery.of(context).size.height,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF6EC1E4), // Light blue
-              Color(0xFF9BA8E8), // Purple-blue
-              Color(0xFFE8A8D8), // Pink
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -202,7 +203,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         color: const Color(0xFFE8F0FE),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: const Color(0xFF6B5CE7),
+                          color: const Color(0xFFE8D96F),
                           width: 3,
                         ),
                       ),
@@ -219,7 +220,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: const BoxDecoration(
-                          color: Color(0xFF6B5CE7),
+                          color: Colors.black,
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -305,14 +306,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _saveProfile,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B5CE7),
-                    foregroundColor: Colors.white,
+                    backgroundColor: const Color(0xFFE8D96F),
+                    foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
+                      ? const CircularProgressIndicator(color: Colors.black)
                       : const Text(
                           'Save Changes',
                           style: TextStyle(
@@ -354,9 +355,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Notifications'),
-        backgroundColor: const Color(0xFF8B5CF6),
-        foregroundColor: Colors.white,
+        title: const Text('Notifications', style: TextStyle(color: Colors.black)),
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: Colors.black,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -364,9 +365,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF6EC1E4), // Light blue
-              Color(0xFF9BA8E8), // Purple-blue
-              Color(0xFFE8A8D8), // Pink
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -543,9 +544,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Settings'),
-        backgroundColor: const Color(0xFF8B5CF6),
-        foregroundColor: Colors.white,
+        title: const Text('Settings', style: TextStyle(color: Colors.black)),
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: Colors.black,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -553,36 +554,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF6EC1E4), // Light blue
-              Color(0xFF9BA8E8), // Purple-blue
-              Color(0xFFE8A8D8), // Pink
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
         child: ListView(
         children: [
           ListTile(
-            leading: const Icon(Icons.palette_outlined, color: Colors.white),
-            title: const Text('Appearance', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            trailing: Text(_selectedTheme, style: const TextStyle(color: Colors.white70)),
+            leading: const Icon(Icons.palette_outlined, color: Colors.black),
+            title: const Text('Appearance', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600)),
+            trailing: Text(_selectedTheme, style: const TextStyle(color: Colors.black87)),
             onTap: _showThemeDialog,
           ),
           ListTile(
-            leading: const Icon(Icons.language, color: Colors.white),
-            title: const Text('Language', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            trailing: Text(_selectedLanguage, style: const TextStyle(color: Colors.white70)),
+            leading: const Icon(Icons.language, color: Colors.black),
+            title: const Text('Language', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600)),
+            trailing: Text(_selectedLanguage, style: const TextStyle(color: Colors.black87)),
             onTap: _showLanguageDialog,
           ),
            ListTile(
-            leading: const Icon(Icons.security, color: Colors.white),
-            title: const Text('Privacy & Security', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            leading: const Icon(Icons.security, color: Colors.black),
+            title: const Text('Privacy & Security', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600)),
             onTap: _showPrivacyDialog,
           ),
-          const Divider(color: Colors.white24),
+          const Divider(color: Colors.black26),
           const ListTile(
-            leading: Icon(Icons.info_outline, color: Colors.white),
-            title: Text('Version', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            trailing: Text('1.0.0', style: TextStyle(color: Colors.white70)),
+            leading: Icon(Icons.info_outline, color: Colors.black),
+            title: Text('Version', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600)),
+            trailing: Text('1.0.0', style: TextStyle(color: Colors.black87)),
           ),
         ],
         ),
@@ -605,9 +606,9 @@ class HelpSupportScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Help & Support'),
-        backgroundColor: const Color(0xFF8B5CF6),
-        foregroundColor: Colors.white,
+        title: const Text('Help & Support', style: TextStyle(color: Colors.black)),
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: Colors.black,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -615,9 +616,9 @@ class HelpSupportScreen extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF6EC1E4), // Light blue
-              Color(0xFF9BA8E8), // Purple-blue
-              Color(0xFFE8A8D8), // Pink
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -629,7 +630,7 @@ class HelpSupportScreen extends StatelessWidget {
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: Colors.black,
             ),
           ),
           const SizedBox(height: 20),
@@ -767,7 +768,7 @@ class HelpSupportScreen extends StatelessWidget {
           
           // Support Card
           Card(
-            color: const Color(0xFFF3E5F5),
+            color: const Color(0xFFFFF9E6),
             elevation: 4,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -796,7 +797,7 @@ class HelpSupportScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF6B5CE7),
+                      color: Colors.black,
                     ),
                   ),
                   const SizedBox(height: 8),

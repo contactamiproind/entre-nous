@@ -187,9 +187,9 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6EC1E4),
-              Color(0xFF9BA8E8),
-              Color(0xFFE8A8D8),
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -199,7 +199,7 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
               // Header
               Container(
                 padding: const EdgeInsets.all(16),
-                color: Colors.white,
+                color: const Color(0xFFF4EF8B),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -214,7 +214,7 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A2F4B),
+                            color: Colors.black,
                           ),
                         ),
                       ],
@@ -224,7 +224,7 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
                       icon: const Icon(Icons.add),
                       label: const Text('Add'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6),
+                        backgroundColor: const Color(0xFF3B82F6),
                         foregroundColor: Colors.white,
                       ),
                     ),

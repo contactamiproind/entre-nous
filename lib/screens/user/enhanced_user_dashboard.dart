@@ -256,9 +256,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Color(0xFF6EC1E4), // Light blue
-                Color(0xFF9BA8E8), // Purple-blue
-                Color(0xFFE8A8D8), // Pink
+                Color(0xFFFFF9E6), // Very light yellow
+                Color(0xFFF4EF8B), // Main yellow #f4ef8b
+                Color(0xFFE8D96F), // Darker yellow
               ],
             ),
           ),
@@ -287,8 +287,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             onTap: (index) => setState(() => _selectedIndex = index),
             type: BottomNavigationBarType.fixed,
             backgroundColor: Colors.white,
-            selectedItemColor: const Color(0xFF8B5CF6), // Purple
-            unselectedItemColor: const Color(0xFF8B5CF6).withOpacity(0.4),
+            selectedItemColor: Colors.black,
+            unselectedItemColor: Colors.black.withOpacity(0.4),
             selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
             elevation: 0,
             items: const [
@@ -322,7 +322,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _loadData,
-        color: const Color(0xFF8B5CF6),
+        color: const Color(0xFFF4EF8B),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
@@ -336,8 +336,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Color(0xFF8B5CF6), // Purple
-                        Color(0xFF6366F1), // Indigo
+                        Color(0xFFF4EF8B), // Yellow
+                        Color(0xFFE8D96F), // Darker yellow
                       ],
                     ),
                     borderRadius: const BorderRadius.only(
@@ -346,7 +346,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                        color: const Color(0xFFF4EF8B).withOpacity(0.3),
                         blurRadius: 20,
                         offset: const Offset(0, 10),
                       ),
@@ -397,7 +397,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w900,
-                                color: Colors.white,
+                                color: Colors.black,
                                 letterSpacing: 0.5,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -407,8 +407,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                               'Welcome back!',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.white.withOpacity(0.7),
-                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
@@ -503,7 +503,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                     'Complete categories in order',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey.shade600,
+                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -512,7 +512,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                   _buildCategoryCard(
                     category: 'Orientation',
                     icon: Icons.school_rounded,
-                    color: const Color(0xFF8B5CF6), // Purple
+                    color: const Color(0xFFF4EF8B), // Yellow
                     description: 'Get started with the basics',
                     progress: _categoryProgress['Orientation']?['progress'] ?? 0.0,
                     isLocked: false,
@@ -783,7 +783,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                     ),
                     child: Icon(
                       icon,
-                      color: isLocked ? Colors.grey.shade400 : color,
+                      color: Colors.black,
                       size: 28,
                     ),
                   ),
@@ -800,7 +800,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w900,
-                                color: isLocked ? Colors.grey.shade600 : const Color(0xFF1E293B),
+                                color: Colors.black,
                                 letterSpacing: 0.5,
                               ),
                             ),
@@ -819,7 +819,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                           description,
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.grey.shade600,
+                            color: Colors.black,
                           ),
                         ),
                       ],
@@ -848,7 +848,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade600,
+                          color: Colors.black,
                         ),
                       ),
                       Text(
@@ -856,7 +856,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w900,
-                          color: isLocked ? Colors.grey.shade600 : color,
+                          color: Colors.black,
                         ),
                       ),
                     ],
@@ -1023,8 +1023,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
           },
         ),
         title: const Text('My Categories'),
-        backgroundColor: const Color(0xFF8B5CF6),
-        foregroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: Colors.black,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -1032,9 +1032,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6EC1E4), // Light blue
-              Color(0xFF9BA8E8), // Purple-blue
-              Color(0xFFE8A8D8), // Pink
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -1068,7 +1068,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               subcategory: null,
               icon: Icons.school_rounded,
               color: const Color(0xFF8B5CF6),
-              progress: 0.45,
+              progress: _categoryProgress['Orientation']?['progress'] ?? 0.0,
               isLocked: false,
               isCurrent: true,
             ),
@@ -1080,7 +1080,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               subcategory: null,
               icon: Icons.settings_rounded,
               color: const Color(0xFF3B82F6),
-              progress: 0.0,
+              progress: _categoryProgress['Process']?['progress'] ?? 0.0,
               isLocked: true,
               isCurrent: false,
             ),
@@ -1092,7 +1092,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               subcategory: null,
               icon: Icons.description_rounded,
               color: const Color(0xFF10B981),
-              progress: 0.0,
+              progress: _categoryProgress['SOP']?['progress'] ?? 0.0,
               isLocked: true,
               isCurrent: false,
             ),
@@ -1117,7 +1117,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: isCurrent 
-            ? BorderSide(color: color, width: 2)
+            ? const BorderSide(color: Color(0xFFF4EF8B), width: 2)
             : BorderSide.none,
       ),
       child: InkWell(
@@ -1147,12 +1147,12 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                     width: 60,
                     height: 60,
                     decoration: BoxDecoration(
-                      color: isLocked ? Colors.grey.shade200 : color.withOpacity(0.15),
+                      color: isLocked ? Colors.grey.shade200 : const Color(0xFFF4EF8B).withOpacity(0.3),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       icon,
-                      color: isLocked ? Colors.grey.shade400 : color,
+                      color: isLocked ? Colors.grey.shade400 : Colors.black,
                       size: 32,
                     ),
                   ),
@@ -1177,7 +1177,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: color,
+                                  color: const Color(0xFFF4EF8B),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Text(
@@ -1185,7 +1185,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                    color: Colors.black,
                                   ),
                                 ),
                               ),
@@ -1229,7 +1229,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                   value: progress,
                   backgroundColor: Colors.grey.shade200,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    isLocked ? Colors.grey.shade400 : color,
+                    isLocked ? Colors.grey.shade400 : const Color(0xFFF4EF8B),
                   ),
                   minHeight: 8,
                 ),
@@ -1271,12 +1271,12 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
             setState(() => _selectedIndex = 0); // Navigate to Home tab
           },
         ),
-        title: const Text('Information', style: TextStyle(color: Colors.white)),
+        title: const Text('Information', style: TextStyle(color: Colors.black)),
       ),
       extendBodyBehindAppBar: true,
       body: Container(
@@ -1285,9 +1285,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6EC1E4),
-              Color(0xFF9BA8E8),
-              Color(0xFFE8A8D8),
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -1663,12 +1663,12 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
             setState(() => _selectedIndex = 0); // Navigate to Home tab
           },
         ),
-        title: const Text('Profile', style: TextStyle(color: Colors.white)),
+        title: const Text('Profile', style: TextStyle(color: Colors.black)),
       ),
       extendBodyBehindAppBar: true,
       body: Container(
@@ -1677,9 +1677,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6EC1E4),
-              Color(0xFF9BA8E8),
-              Color(0xFFE8A8D8),
+              Color(0xFFFFF9E6), // Very light yellow
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),

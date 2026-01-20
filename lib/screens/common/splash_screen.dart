@@ -119,9 +119,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6EC1E4), // Light blue
-              Color(0xFF9BA8E8), // Purple-blue
-              Color(0xFFE8A8D8), // Pink
+              Color(0xFFFFF4CC), // Slightly darker light yellow for better contrast
+              Color(0xFFF4EF8B), // Main yellow #f4ef8b
+              Color(0xFFE8D96F), // Darker yellow
             ],
           ),
         ),
@@ -148,7 +148,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       style: TextStyle(
                         fontSize: titleSize + 8,
                         fontWeight: FontWeight.w900,
-                        color: const Color(0xFF8B5CF6), // Purple
+                        color: const Color(0xFF1E293B), // Dark text for contrast
                         letterSpacing: 2,
                         shadows: [
                           Shadow(
@@ -166,7 +166,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       style: TextStyle(
                         fontSize: titleSize - 4,
                         fontWeight: FontWeight.w800,
-                        color: const Color(0xFFFBD38D), // Yellow
+                        color: const Color(0xFF1E293B), // Dark text for contrast
                         letterSpacing: 1,
                         shadows: [
                           Shadow(
@@ -195,7 +195,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       width: isMobile ? 36 : 40,
                       height: isMobile ? 36 : 40,
                       child: const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFBBF24)), // Yellow
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE8D96F)), // Yellow
                         strokeWidth: 3.5,
                         backgroundColor: Colors.white24,
                       ),
@@ -205,7 +205,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     Text(
                       'ENEPL',
                       style: TextStyle(
-                        color: const Color(0xFFFBBF24), // Yellow
+                        color: const Color(0xFF1E293B), // Dark text for contrast
                         fontSize: isMobile ? 14 : 16,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 2,

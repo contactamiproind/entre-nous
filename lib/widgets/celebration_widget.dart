@@ -79,8 +79,8 @@ class _CelebrationWidgetState extends State<CelebrationWidget> {
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [
-                    Color(0xFF6B5CE7),
-                    Color(0xFF3498DB),
+                    Color(0xFFF4EF8B), // Main yellow
+                    Color(0xFFE8D96F), // Darker yellow
                   ],
                 ),
                 borderRadius: BorderRadius.circular(20),
@@ -100,7 +100,7 @@ class _CelebrationWidgetState extends State<CelebrationWidget> {
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: Colors.black,
                       decoration: TextDecoration.none,
                     ),
                   ),
@@ -110,7 +110,7 @@ class _CelebrationWidgetState extends State<CelebrationWidget> {
                     style: const TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFFFFD700),
+                      color: Colors.black,
                       decoration: TextDecoration.none,
                     ),
                   ),
