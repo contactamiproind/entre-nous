@@ -159,12 +159,12 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
     final gridSize = _calculateGridSize(_cards.length);
     
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(4),
       child: Column(
         children: [
           // Score and Timer Header
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: const Color(0xFF8B5CF6).withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
@@ -186,45 +186,32 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
                     ),
                   ],
                 ),
-                Row(
-                  children: [
-                    const Icon(Icons.timer, color: Color(0xFF8B5CF6), size: 24),
-                    const SizedBox(width: 8),
-                    Text(
-                      _formatTime(_secondsElapsed),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF8B5CF6),
-                      ),
-                    ),
-                  ],
-                ),
+                // Timer removed - using main quiz timer instead
               ],
             ),
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
           
           // Matches Counter
           Text(
             'Matches: $_matchesFound/${widget.pairs.length}',
             style: const TextStyle(
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: Color(0xFF64748B),
             ),
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
           
           // Card Grid
           Expanded(
             child: GridView.builder(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: gridSize.columns,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
                 childAspectRatio: 1.0,
               ),
               itemCount: _cards.length,

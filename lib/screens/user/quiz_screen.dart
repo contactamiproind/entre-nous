@@ -991,7 +991,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 8),
                       
                       // Question Text or Type Indicator
                       if (questionType == 'match_following')
@@ -1012,7 +1012,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           ),
                         ),
                         if (question['description'] != null && question['description'].toString().isNotEmpty) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 4),
                           Text(
                             question['description'],
                             style: const TextStyle(
@@ -1022,7 +1022,7 @@ class _QuizScreenState extends State<QuizScreen> {
                             ),
                           ),
                         ],
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 6),
                       
                       // Question Content (Scrollable)
                       Expanded(
