@@ -1030,7 +1030,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           child: questionType == 'card_match'
                                   ? _isFlipCardGame(question)
                                       ? SizedBox(
-                                          height: 600,
+                                          height: 700,
                                           child: CardFlipGameWidget(
                                             key: ValueKey('flip_${question['id']}'),
                                             pairs: _buildCardPairs(question),
