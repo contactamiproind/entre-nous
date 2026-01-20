@@ -177,10 +177,6 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(

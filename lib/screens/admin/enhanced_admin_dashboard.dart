@@ -126,13 +126,12 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         extendBodyBehindAppBar: true,
-        appBar: AppBar(
+        appBar: _selectedIndex == 0 ? AppBar(
           title: const Text('Admin Dashboard'),
           backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           elevation: 0,
           automaticallyImplyLeading: false,
-          leading: const SizedBox(),
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -143,7 +142,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
               onPressed: _logout,
             ),
           ],
-        ),
+        ) : null,
         body: _buildBody(),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedIndex,
