@@ -46,6 +46,9 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   // Match the Following Form Data
   final List<Map<String, TextEditingController>> _matchPairs = [];
 
+  // Card Match (Flip Card) Form Data
+  final List<Map<String, TextEditingController>> _cardPairs = [];
+
   void _addMatchPair() {
     if (_matchPairs.length < 6) {
       setState(() {
@@ -67,6 +70,27 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     }
   }
 
+  void _addCardPair() {
+    if (_cardPairs.length < 8) {
+      setState(() {
+        _cardPairs.add({
+          'card1': TextEditingController(),
+          'card2': TextEditingController(),
+        });
+      });
+    }
+  }
+
+  void _removeCardPair(int index) {
+    if (_cardPairs.length > 3) {
+      setState(() {
+        _cardPairs[index]['card1']!.dispose();
+        _cardPairs[index]['card2']!.dispose();
+        _cardPairs.removeAt(index);
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +98,10 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     // Initialize with 3 match pairs
     for (int i = 0; i < 3; i++) {
       _addMatchPair();
+    }
+    // Initialize with 3 card pairs
+    for (int i = 0; i < 3; i++) {
+      _addCardPair();
     }
   }
 
@@ -171,12 +199,6 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
 
   Future<void> _saveQuestion() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedLevel == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a level')),
-      );
-      return;
-    }
 
     // Validate based on question type
     if (_questionType == 'match_following') {
@@ -219,6 +241,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     if (_questionType == 'multiple_choice') dbType = 'mcq';
     if (_questionType == 'match_following') dbType = 'match';
     if (_questionType == 'scenario_decision') dbType = 'scenario_decision';
+    if (_questionType == 'card_match') dbType = 'card_match';
     
     // Get type_id from quest_types table
     final typeRes = await Supabase.instance.client
@@ -233,7 +256,6 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
 
     Map<String, dynamic> questionData = {
       'dept_id': _selectedPathway!.id,
-      'level_id': _selectedLevel!.id, // SAVE LEVEL ID
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
       'type_id': typeRes['id'], // Use type_id instead of question_type
@@ -241,6 +263,11 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       'points': 10,
       'created_at': DateTime.now().toIso8601String(),
     };
+    
+    // Only add level_id if a level is selected
+    if (_selectedLevel != null) {
+      questionData['level_id'] = _selectedLevel!.id;
+    }
 
     if (_questionType == 'multiple_choice') {
       // Prepare options array with is_correct flags
@@ -262,19 +289,37 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       
       questionData['match_pairs'] = matchPairs;
     } else if (_questionType == 'card_match') {
-       // Inject default template for now
-       questionData['options'] = {
-        'buckets': [
-          {'id': 'ease', 'label': 'Ease', 'icon': 'checklist', 'color': 'blue'},
-          {'id': 'delight', 'label': 'Delight', 'icon': 'star', 'color': 'gold'}
-        ],
-        'cards': [
-          {'id': 'c1', 'text': 'Clear process explanation', 'correct_bucket': 'ease'},
-          {'id': 'c2', 'text': 'Quick resolution of issue', 'correct_bucket': 'ease'},
-          {'id': 'c3', 'text': 'Thoughtful surprise element', 'correct_bucket': 'delight'},
-          {'id': 'c4', 'text': 'Memorable experience moment', 'correct_bucket': 'delight'}
-        ]
-      };
+       // Card Flip (Memory Match) game format
+       // Validate card pairs
+       if (_cardPairs.length < 3) {
+         ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(content: Text('Please add at least 3 card pairs')),
+         );
+         return;
+       }
+       
+       // Check if all pairs are filled
+       for (var pair in _cardPairs) {
+         if (pair['card1']!.text.trim().isEmpty || pair['card2']!.text.trim().isEmpty) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             const SnackBar(content: Text('Please fill all card pairs')),
+           );
+           return;
+         }
+       }
+       
+       // Convert to pairs format for CardFlipGameWidget
+       // Store in options field as array of pair objects
+       final pairs = [];
+       for (int i = 0; i < _cardPairs.length; i++) {
+         pairs.add({
+           'id': i + 1,
+           'question': _cardPairs[i]['card1']!.text.trim(),
+           'answer': _cardPairs[i]['card2']!.text.trim(),
+         });
+       }
+       
+       questionData['options'] = pairs;
     } else if (_questionType == 'scenario_decision') {
       // Prepare options array with is_correct flags (same as multiple choice)
       final options = _optionControllers.asMap().entries.map((entry) {
@@ -288,6 +333,13 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       questionData['correct_answer'] = _optionControllers[_correctDisplayIndex].text.trim();
     }
 
+    // Debug: Print the data being sent
+    debugPrint('📤 Saving Card Match question data:');
+    debugPrint('   Type: ${questionData['type_id']}');
+    debugPrint('   Options: ${questionData['options']}');
+    debugPrint('   Options Data: ${questionData['options_data']}');
+    debugPrint('   Full data: $questionData');
+
     final insertedQuestion = await Supabase.instance.client
         .from('questions')
         .insert(questionData)
@@ -298,7 +350,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     try {
       final questionId = insertedQuestion['id'];
       final deptId = _selectedPathway!.id;
-      final levelNumber = _selectedLevel!.levelNumber;
+      final levelNumber = _selectedLevel?.levelNumber ?? 1; // Default to 1 if no level selected
       
       debugPrint('🔄 Starting auto-assignment for question $questionId');
       
@@ -379,6 +431,10 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     for (var pair in _matchPairs) {
       pair['left']!.dispose();
       pair['right']!.dispose();
+    }
+    for (var pair in _cardPairs) {
+      pair['card1']!.dispose();
+      pair['card2']!.dispose();
     }
     super.dispose();
   }
@@ -517,33 +573,33 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                     ),
                     const SizedBox(height: 24),
 
+                    // Title (for all question types)
+                    TextFormField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Title',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.title),
+                      ),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Description (for all question types)
+                    TextFormField(
+                      controller: _descriptionController,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.description),
+                      ),
+                      maxLines: 3,
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+
                     // Conditional UI based on question type
                     if (_questionType == 'multiple_choice') ...[
-                      // Title
-                      TextFormField(
-                        controller: _titleController,
-                        decoration: const InputDecoration(
-                          labelText: 'Title',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.title),
-                        ),
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Description
-                      TextFormField(
-                        controller: _descriptionController,
-                        decoration: const InputDecoration(
-                          labelText: 'Description',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.description),
-                        ),
-                        maxLines: 3,
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 16),
-
                       // Options
                       const Text(
                         'Options',
@@ -654,6 +710,92 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Select the best decision (correct answer)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ] else if (_questionType == 'card_match') ...[
+                      // Card Match (Flip Card Memory Game) UI
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Card Pairs',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (_cardPairs.length < 8)
+                            ElevatedButton.icon(
+                              onPressed: _addCardPair,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Pair'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6),
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ...List.generate(_cardPairs.length, (index) {
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Pair ${index + 1}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    if (_cardPairs.length > 3)
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _removeCardPair(index),
+                                        tooltip: 'Remove pair',
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _cardPairs[index]['card1'],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Card 1 (e.g., 🥑 Avocado Toast)',
+                                    border: OutlineInputBorder(),
+                                    hintText: 'Enter text or emoji',
+                                  ),
+                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _cardPairs[index]['card2'],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Card 2 (e.g., Healthy Breakfast)',
+                                    border: OutlineInputBorder(),
+                                    hintText: 'Enter matching text',
+                                  ),
+                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Add 3-8 pairs. Players flip cards to find matching pairs by memory.',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],

@@ -40,12 +40,55 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
   }
 
   void _initializeGame() {
-    options = widget.questionData['options'] is String
-        ? jsonDecode(widget.questionData['options'])
-        : widget.questionData['options'];
-    
-    buckets = List<Map<String, dynamic>>.from(options['buckets'] ?? []);
-    cards = List<Map<String, dynamic>>.from(options['cards'] ?? []);
+    try {
+      debugPrint('🎮 CardMatchQuestionWidget._initializeGame()');
+      debugPrint('   Options type: ${widget.questionData['options'].runtimeType}');
+      debugPrint('   Options value: ${widget.questionData['options']}');
+      
+      // Parse options - handle both String (JSON) and Map formats
+      if (widget.questionData['options'] == null) {
+        debugPrint('ERROR: Card Match question has null options');
+        options = {'buckets': [], 'cards': []};
+      } else if (widget.questionData['options'] is String) {
+        debugPrint('   Parsing options from JSON string');
+        options = jsonDecode(widget.questionData['options']);
+      } else if (widget.questionData['options'] is Map) {
+        debugPrint('   Converting options from Map');
+        options = Map<String, dynamic>.from(widget.questionData['options']);
+      } else {
+        debugPrint('ERROR: Unexpected options type: ${widget.questionData['options'].runtimeType}');
+        debugPrint('ERROR: Options value: ${widget.questionData['options']}');
+        options = {'buckets': [], 'cards': []};
+      }
+      
+      // Validate and extract buckets
+      if (options['buckets'] != null && options['buckets'] is List) {
+        buckets = List<Map<String, dynamic>>.from(options['buckets']);
+      } else {
+        debugPrint('ERROR: Invalid or missing buckets in Card Match question');
+        buckets = [];
+      }
+      
+      // Validate and extract cards
+      if (options['cards'] != null && options['cards'] is List) {
+        cards = List<Map<String, dynamic>>.from(options['cards']);
+      } else {
+        debugPrint('ERROR: Invalid or missing cards in Card Match question');
+        cards = [];
+      }
+      
+      debugPrint('Card Match initialized: ${buckets.length} buckets, ${cards.length} cards');
+      
+    } catch (e, stackTrace) {
+      debugPrint('ERROR initializing Card Match game: $e');
+      debugPrint('Stack trace: $stackTrace');
+      debugPrint('Question data: ${widget.questionData}');
+      
+      // Fallback to empty data to prevent crash
+      options = {'buckets': [], 'cards': []};
+      buckets = [];
+      cards = [];
+    }
     
     // Shuffle cards
     cards.shuffle(Random());

@@ -6,6 +6,7 @@ import '../../services/progress_service.dart';
 import '../../services/pathway_service.dart';
 import '../../widgets/celebration_widget.dart';
 import '../../widgets/card_match_question_widget.dart';
+import '../../widgets/card_flip_game_widget.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class QuizScreen extends StatefulWidget {
@@ -475,7 +476,8 @@ class _QuizScreenState extends State<QuizScreen> {
       List<String> options = [];
       List<Map<String, dynamic>> optionsData = [];
       
-      if (questionData['options'] != null) {
+      // Skip options processing for card_match questions - they use a different Map structure
+      if (inferredType != 'card_match' && questionData['options'] != null) {
         final optionsRaw = questionData['options'];
         final correctAnswer = questionData['correct_answer']?.toString();
         
@@ -508,6 +510,8 @@ class _QuizScreenState extends State<QuizScreen> {
         }
         
         debugPrint('  Question ${questionData['id']}: loaded ${options.length} options');
+      } else if (inferredType == 'card_match') {
+        debugPrint('  Card Match question - preserving Map structure');
       }  
         
         questions.add({
@@ -720,7 +724,8 @@ class _QuizScreenState extends State<QuizScreen> {
                }
                isCorrect = allCorrect && userMatches.length == pairs.length;
                userAnswer = {'type': 'match_following', 'matches': userMatches};
-             }
+            }
+
 
            // Calculate time-based points for correct answers
            int pointsEarned = 0;
@@ -733,20 +738,22 @@ class _QuizScreenState extends State<QuizScreen> {
                pointsEarned = _calculatePoints();
                _questionPoints[i] = pointsEarned;
              }
-            }
+           }
 
-            // Save progress to database
-            await _saveQuestionProgress(
-              questionIndex: i,
-              question: question,
-              isCorrect: isCorrect,
-              userAnswer: userAnswer,
-              pointsEarned: pointsEarned,
-            );
-          }
+           // Save progress to database
+           await _saveQuestionProgress(
+             questionIndex: i,
+             question: question,
+             isCorrect: isCorrect,
+             userAnswer: userAnswer,
+             pointsEarned: pointsEarned,
+           );
+        } // End of for loop
+
+
 
         if (widget.category.toLowerCase() == 'orientation') {
-          await PathwayService().markOrientationComplete(user.id);
+          await PathwayService().markOrientationComplete(user!.id);
         }
 
         // Auto-unlock next category if user passed (>= 70%)
@@ -764,9 +771,10 @@ class _QuizScreenState extends State<QuizScreen> {
     } catch (e) {
       debugPrint('Error saving quiz result (Background): $e');
       // Do not show error to user, they have their results
-
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -1020,22 +1028,67 @@ class _QuizScreenState extends State<QuizScreen> {
                       Expanded(
                         child: SingleChildScrollView(
                           child: questionType == 'card_match'
-                              ? CardMatchQuestionWidget(
-                                  questionData: question,
-                                  onAnswerSubmitted: (score, isCorrect) {
-                                    setState(() {
-                                      _gameScores[_currentQuestionIndex] = score;
-                                      if (_currentQuestionIndex < _questions.length - 1) {
-                                        _currentQuestionIndex++;
-                                      } else {
-                                        _submitQuiz();
-                                      }
-                                    });
-                                  },
-                                )
-                              : (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision')
-                                  ? _buildMultipleChoiceOptions(question)
-                                  : _buildMatchTheFollowing(question),
+                                  ? _isFlipCardGame(question)
+                                      ? SizedBox(
+                                          height: 600,
+                                          child: CardFlipGameWidget(
+                                            key: ValueKey('flip_${question['id']}'),
+                                            pairs: _buildCardPairs(question),
+                                            pointsPerMatch: 10,
+                                            onComplete: (score, accuracy, timeTaken) async {
+                                              // Save progress
+                                              await _saveQuestionProgress(
+                                                questionIndex: _currentQuestionIndex,
+                                                question: question,
+                                                isCorrect: accuracy >= 0.7,
+                                                userAnswer: {
+                                                  'type': 'card_match_flip',
+                                                  'score': score,
+                                                  'accuracy': accuracy,
+                                                  'time_taken': timeTaken,
+                                                },
+                                                pointsEarned: score,
+                                              );
+                                              
+                                              setState(() {
+                                                _answeredCorrectly[_currentQuestionIndex] = accuracy >= 0.7;
+                                                _gameScores[_currentQuestionIndex] = score;
+                                              });
+                                              
+                                              if (_currentQuestionIndex < _questions.length - 1) {
+                                                setState(() {
+                                                  _currentQuestionIndex++;
+                                                  _currentAttempt = 1;
+                                                });
+                                                _startQuestionTimer();
+                                              } else {
+                                                _submitQuiz();
+                                              }
+                                            },
+                                          ),
+                                        )
+                                      : CardMatchQuestionWidget(
+                                          questionData: () {
+                                            debugPrint('🎮 Creating CardMatchQuestionWidget');
+                                            debugPrint('   Question ID: ${question['id']}');
+                                            debugPrint('   Options type: ${question['options'].runtimeType}');
+                                            debugPrint('   Options value: ${question['options']}');
+                                            return question;
+                                          }(),
+                                          onAnswerSubmitted: (score, isCorrect) {
+                                            setState(() {
+                                              _gameScores[_currentQuestionIndex] = score;
+                                              if (_currentQuestionIndex < _questions.length - 1) {
+                                                _currentQuestionIndex++;
+                                              } else {
+                                                _submitQuiz();
+                                              }
+                                            });
+                                          },
+                                        )
+                                  : (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision')
+                                      ? _buildMultipleChoiceOptions(question)
+                                      : _buildMatchTheFollowing(question),
                         ),
                       ),
                       
@@ -1192,6 +1245,36 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
+  // Helper method to detect if a card_match question should use the Card Flip game
+  bool _isFlipCardGame(Map<String, dynamic> question) {
+    final options = question['options'];
+    if (options == null || options is! List || options.isEmpty) return false;
+    
+    if (options[0] is Map) {
+      final firstItem = options[0] as Map;
+      return firstItem.containsKey('question') && firstItem.containsKey('answer');
+    }
+    
+    return false;
+  }
+
+  // Helper method to build card pairs for the Card Flip game
+  List<Map<String, dynamic>> _buildCardPairs(Map<String, dynamic> question) {
+    final options = question['options'];
+    if (options == null || options is! List) return [];
+    
+    return options.map<Map<String, dynamic>>((pair) {
+      return {
+        'id': pair['id'],
+        'left': pair['question'],
+        'right': pair['answer'],
+        'left_icon': null,
+        'right_icon': null,
+      };
+    }).toList();
+  }
+
+
   Widget _buildMultipleChoiceOptions(Map<String, dynamic> question) {
     final List<dynamic> options = question['options'] ?? [];
     final List<dynamic> optionsData = question['options_data'] ?? [];
@@ -1208,7 +1291,7 @@ class _QuizScreenState extends State<QuizScreen> {
       );
     }
     
-    // Check if this question was answered and submitted (feedback only after submit)
+    // Check if this question was answered and submitted
     final wasAnswered = _answeredCorrectly.containsKey(_currentQuestionIndex);
     final wasAnsweredWrong = wasAnswered && _answeredCorrectly[_currentQuestionIndex] == false;
     
@@ -1216,22 +1299,18 @@ class _QuizScreenState extends State<QuizScreen> {
       children: options.asMap().entries.map((entry) {
         final index = entry.key;
         final option = entry.value;
-        final isSelected = _selectedAnswers[_currentQuestionIndex] == index;
         final optionColor = optionColors[index % optionColors.length];
+        final isSelected = _selectedAnswers[_currentQuestionIndex] == index;
         
-        // Check if this is the correct answer
-        final isCorrectAnswer = index < optionsData.length && 
-                                optionsData[index]['is_correct'] == true;
-        
-        // Show correct answer with green border only after submit if user answered wrong
-        final showAsCorrect = wasAnsweredWrong && isCorrectAnswer;
-        final showAsWrong = wasAnsweredWrong && isSelected && !isCorrectAnswer;
+        // Show feedback only if question was answered
+        final showAsCorrect = wasAnswered && index < optionsData.length && optionsData[index]['is_correct'] == true;
+        final showAsWrong = wasAnsweredWrong && isSelected;
         
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(bottom: 12.0),
           child: InkWell(
             onTap: () {
-              // Don't allow answer if already answered this question
+              // Don't allow changing answer if already answered
               if (_answeredCorrectly.containsKey(_currentQuestionIndex)) {
                 return;
               }
@@ -1257,24 +1336,22 @@ class _QuizScreenState extends State<QuizScreen> {
                       : showAsWrong 
                           ? const Color(0xFFF08A7E)
                           : isSelected ? optionColor : const Color(0xFFE0E0E0),
-                  width: (showAsCorrect || showAsWrong) ? 3 : isSelected ? 3 : 2,
+                  width: isSelected || showAsCorrect || showAsWrong ? 3 : 2,
                 ),
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: isSelected
+                boxShadow: isSelected || showAsCorrect || showAsWrong
                     ? [
                         BoxShadow(
-                          color: optionColor.withOpacity(0.4),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
+                          color: (showAsCorrect 
+                              ? const Color(0xFF6BCB9F) 
+                              : showAsWrong 
+                                  ? const Color(0xFFF08A7E)
+                                  : optionColor).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
                         ),
                       ]
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+                    : [],
               ),
               child: Row(
                 children: [
@@ -1289,9 +1366,9 @@ class _QuizScreenState extends State<QuizScreen> {
                       child: Text(
                         String.fromCharCode(65 + index), // A, B, C, D
                         style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          color: isSelected ? Colors.white : optionColor,
                           fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? Colors.white : optionColor,
                         ),
                       ),
                     ),
@@ -1719,3 +1796,4 @@ class _QuizScreenState extends State<QuizScreen> {
     return const Color(0xFFFF9A76);
   }
 }
+

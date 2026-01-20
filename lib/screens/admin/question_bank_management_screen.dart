@@ -288,9 +288,17 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
     
     String selectedDifficulty = question['difficulty'] ?? 'easy';
     
-    // Parse existing options
+    // Get question type
+    String questionType = 'mcq'; // default
+    if (question['quest_types'] != null && question['quest_types'] is Map) {
+      questionType = question['quest_types']['type'] ?? 'mcq';
+    }
+    
+    // Parse existing options (only for MCQ/Scenario questions)
     List<Map<String, dynamic>> options = [];
-    if (question['options'] != null) {
+    bool isCardMatch = questionType == 'card_match';
+    
+    if (!isCardMatch && question['options'] != null) {
       try {
         final optionsList = question['options'] as List;
         for (var opt in optionsList) {
@@ -312,8 +320,8 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
       }
     }
     
-    // If no options, add 4 empty ones for MCQ
-    if (options.isEmpty) {
+    // If no options and not card match, add 4 empty ones for MCQ
+    if (options.isEmpty && !isCardMatch) {
       options = List.generate(4, (index) => {'text': '', 'is_correct': false});
     }
 
@@ -434,84 +442,117 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 16),
-                  // Options section
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Options (Multiple Choice)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                  // Options section (only for MCQ/Scenario questions)
+                  if (!isCardMatch) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Options (Multiple Choice)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle, color: Color(0xFF6BCB9F), size: 20),
-                        onPressed: () {
-                          setDialogState(() {
-                            options.add({'text': '', 'is_correct': false});
-                          });
-                        },
-                        tooltip: 'Add Option',
-                        padding: const EdgeInsets.all(4),
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ...List.generate(options.length, (index) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 40,
-                            child: Checkbox(
-                              value: options[index]['is_correct'],
-                              onChanged: (value) {
-                                setDialogState(() {
-                                  options[index]['is_correct'] = value ?? false;
-                                });
-                              },
-                            ),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              decoration: InputDecoration(
-                                labelText: 'Option ${index + 1}',
-                                border: const OutlineInputBorder(),
-                                hintText: 'Enter option text',
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                isDense: true,
-                              ),
-                              controller: TextEditingController(text: options[index]['text'])
-                                ..selection = TextSelection.fromPosition(
-                                  TextPosition(offset: options[index]['text'].length),
-                                ),
-                              onChanged: (value) {
-                                options[index]['text'] = value;
-                              },
-                            ),
-                          ),
-                          if (options.length > 2)
+                        IconButton(
+                          icon: const Icon(Icons.add_circle, color: Color(0xFF6BCB9F), size: 20),
+                          onPressed: () {
+                            setDialogState(() {
+                              options.add({'text': '', 'is_correct': false});
+                            });
+                          },
+                          tooltip: 'Add Option',
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ...List.generate(options.length, (index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
                             SizedBox(
                               width: 40,
-                              child: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                onPressed: () {
+                              child: Checkbox(
+                                value: options[index]['is_correct'],
+                                onChanged: (value) {
                                   setDialogState(() {
-                                    options.removeAt(index);
+                                    options[index]['is_correct'] = value ?? false;
                                   });
                                 },
-                                constraints: const BoxConstraints(),
-                                padding: const EdgeInsets.all(8),
                               ),
                             ),
+                            Expanded(
+                              child: TextField(
+                                decoration: InputDecoration(
+                                  labelText: 'Option ${index + 1}',
+                                  border: const OutlineInputBorder(),
+                                  hintText: 'Enter option text',
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  isDense: true,
+                                ),
+                                controller: TextEditingController(text: options[index]['text'])
+                                  ..selection = TextSelection.fromPosition(
+                                    TextPosition(offset: options[index]['text'].length),
+                                  ),
+                                onChanged: (value) {
+                                  options[index]['text'] = value;
+                                },
+                              ),
+                            ),
+                            if (options.length > 2)
+                              SizedBox(
+                                width: 40,
+                                child: IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      options.removeAt(index);
+                                    });
+                                  },
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.all(8),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ] else ...[
+                    // Show message for Card Match questions
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF3B82F6).withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: const Color(0xFF3B82F6),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Card Match questions cannot be edited here. Please create a new question to modify the card configuration.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                    );
-                  }),
+                    ),
+                  ],
                       ],
                     ),
                   ),
@@ -904,6 +945,19 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                                     style: TextStyle(
                                                       fontSize: 13,
                                                       color: Colors.grey[600],
+                                                    ),
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ] else if (questionType == 'card_match' && question['options'] != null) ...[
+                                                  // Show preview for Card Match questions
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    'Drag and drop cards into correct buckets',
+                                                    style: TextStyle(
+                                                      fontSize: 13,
+                                                      color: Colors.grey[600],
+                                                      fontStyle: FontStyle.italic,
                                                     ),
                                                     maxLines: 2,
                                                     overflow: TextOverflow.ellipsis,
