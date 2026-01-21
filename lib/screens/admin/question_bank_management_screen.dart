@@ -896,6 +896,11 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                 typeColor = const Color(0xFF9B59B6);
                                 bgColor = const Color(0xFF9B59B6).withOpacity(0.1);
                                 break;
+                              case 'sequence_builder':
+                                typeName = 'Sequence Builder';
+                                typeColor = const Color(0xFF00BCD4);
+                                bgColor = const Color(0xFF00BCD4).withOpacity(0.1);
+                                break;
                               default:
                                 typeName = 'Unknown';
                                 typeColor = Colors.grey;

@@ -1,0 +1,13 @@
+Please check the browser console for these specific messages:
+
+1. Look for: "🎮 SequenceBuilderWidget._initializeGame()"
+2. Look for: "Options type:" and "Options value:"
+3. Look for: "ERROR: Sequence Builder question has null options"
+4. Look for: "Sequence Builder initialized: X sentences"
+
+Copy and paste ALL the console output that appears after you click on the sequence builder question.
+
+This will help me understand if:
+- The options data is null (old question)
+- The options data is present but in wrong format
+- The widget is crashing for another reason

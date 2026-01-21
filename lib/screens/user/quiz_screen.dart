@@ -7,6 +7,7 @@ import '../../services/pathway_service.dart';
 import '../../widgets/celebration_widget.dart';
 import '../../widgets/card_match_question_widget.dart';
 import '../../widgets/card_flip_game_widget.dart';
+import '../../widgets/sequence_builder_widget.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class QuizScreen extends StatefulWidget {
@@ -467,6 +468,9 @@ class _QuizScreenState extends State<QuizScreen> {
           debugPrint('   ✅ Card Match detected by TITLE');
         } else if (title.contains('scenario') || title.contains('decision')) {
           inferredType = 'scenario_decision';
+        } else if (title.contains('sequence') || title.contains('arrange') || title.contains('order')) {
+          inferredType = 'sequence_builder';
+          debugPrint('   ✅ Sequence Builder detected by TITLE');
         } else if (title.contains('match')) {
           // Only set to match_following if it's not already identified as card_match
           inferredType = 'match_following';
@@ -479,8 +483,8 @@ class _QuizScreenState extends State<QuizScreen> {
       List<String> options = [];
       List<Map<String, dynamic>> optionsData = [];
       
-      // Skip options processing for card_match questions - they use a different Map structure
-      if (inferredType != 'card_match' && questionData['options'] != null) {
+      // Skip options processing for card_match and sequence_builder questions - they use different structures
+      if (inferredType != 'card_match' && inferredType != 'sequence_builder' && questionData['options'] != null) {
         final optionsRaw = questionData['options'];
         final correctAnswer = questionData['correct_answer']?.toString();
         
@@ -515,6 +519,8 @@ class _QuizScreenState extends State<QuizScreen> {
         debugPrint('  Question ${questionData['id']}: loaded ${options.length} options');
       } else if (inferredType == 'card_match') {
         debugPrint('  Card Match question - preserving Map structure');
+      } else if (inferredType == 'sequence_builder') {
+        debugPrint('  Sequence Builder question - preserving List structure');
       }  
         
         questions.add({
@@ -523,7 +529,7 @@ class _QuizScreenState extends State<QuizScreen> {
           'description': questionData['description'],
           'difficulty': questionData['difficulty'],
           'points': questionData['points'] ?? 10,
-          'options': inferredType == 'card_match' ? questionData['options'] : options, // Keep Map for card_match, use List for others
+          'options': (inferredType == 'card_match' || inferredType == 'sequence_builder') ? questionData['options'] : options, // Keep original structure for card_match and sequence_builder
           'options_data': optionsData, // Store full option data with is_correct flags
           'correct_answer': questionData['correct_answer'], // CRITICAL: Add for validation
           'question_type': inferredType, // Use inferred type
@@ -638,17 +644,17 @@ class _QuizScreenState extends State<QuizScreen> {
         _firstWrongQuestionIndex = i;
       }
       
-      if (questionType == 'card_match') {
+      if (questionType == 'card_match' || questionType == 'sequence_builder') {
         final score = _gameScores[i] ?? 0;
-        debugPrint('🎮 Card Match Question $i: Score = $score');
+        debugPrint('🎮 ${questionType == 'card_match' ? 'Card Match' : 'Sequence Builder'} Question $i: Score = $score');
         totalScore += score;
         // Count as correct if score is 25 or higher (out of max ~60)
         if (score >= 25) {
-          debugPrint('✅ Card Match counted as CORRECT (score >= 25)');
+          debugPrint('✅ ${questionType == 'card_match' ? 'Card Match' : 'Sequence Builder'} counted as CORRECT (score >= 25)');
           correctCount++;
           _answeredCorrectly[i] = true;
         } else {
-          debugPrint('❌ Card Match counted as WRONG (score < 25)');
+          debugPrint('❌ ${questionType == 'card_match' ? 'Card Match' : 'Sequence Builder'} counted as WRONG (score < 25)');
         }
       } else {
         if (isCorrect) {
@@ -849,10 +855,10 @@ class _QuizScreenState extends State<QuizScreen> {
       final userMatches = _matchAnswers[_currentQuestionIndex] ?? {};
       isAnswered = userMatches.length == pairs.length;
       debugPrint('🔵 Question $_currentQuestionIndex isAnswered = $isAnswered (matches: ${userMatches.length}/${pairs.length})');
-    } else if (questionType == 'card_match') {
-      // For card match, check if game is complete
+    } else if (questionType == 'card_match' || questionType == 'sequence_builder') {
+      // For card match and sequence builder, check if game is complete
       isAnswered = _isCardGameComplete;
-      debugPrint('🔵 Question $_currentQuestionIndex isAnswered = $isAnswered (card game complete: $_isCardGameComplete)');
+      debugPrint('🔵 Question $_currentQuestionIndex isAnswered = $isAnswered (game complete: $_isCardGameComplete)');
     }
     
     debugPrint('🔵 _answeredCorrectly map: $_answeredCorrectly');
@@ -1034,7 +1040,21 @@ class _QuizScreenState extends State<QuizScreen> {
                       // Question Content (Scrollable)
                       Expanded(
                         child: SingleChildScrollView(
-                          child: questionType == 'card_match'
+                          child: questionType == 'sequence_builder'
+                                  ? SizedBox(
+                                      height: 700,
+                                      child: SequenceBuilderWidget(
+                                        questionData: question,
+                                        onAnswerSubmitted: (score, isCorrect) {
+                                          setState(() {
+                                            _isCardGameComplete = true;
+                                            _gameScores[_currentQuestionIndex] = score;
+                                            _answeredCorrectly[_currentQuestionIndex] = isCorrect;
+                                          });
+                                        },
+                                      ),
+                                    )
+                                  : questionType == 'card_match'
                                   ? _isFlipCardGame(question)
                                       ? SizedBox(
                                           height: 700,
@@ -1178,6 +1198,64 @@ class _QuizScreenState extends State<QuizScreen> {
                                                 
                                                 setState(() {
                                                   _answeredCorrectly[_currentQuestionIndex] = accuracy >= 0.7;
+                                                  _gameScores[_currentQuestionIndex] = score;
+                                                });
+                                                
+                                                // Move to next question
+                                                if (_currentQuestionIndex < _questions.length - 1) {
+                                                  setState(() {
+                                                    _currentQuestionIndex++;
+                                                    _currentAttempt = 1;
+                                                    _isCardGameComplete = false; // Reset for next question
+                                                  });
+                                                  _startQuestionTimer();
+                                                } else {
+                                                  _submitQuiz();
+                                                }
+                                              },
+                                            ),
+                                          );
+                                        }
+                                        return;
+                                      }
+                                      
+                                      // Handle sequence builder games
+                                      if (questionType == 'sequence_builder' && _isCardGameComplete) {
+                                        // Get the game score from the state
+                                        final score = _gameScores[_currentQuestionIndex] ?? 0;
+                                        final isCorrect = _answeredCorrectly[_currentQuestionIndex] ?? false;
+                                        
+                                        // Stop timer
+                                        _questionTimer?.cancel();
+                                        
+                                        // Show celebration with score
+                                        await Future.delayed(const Duration(milliseconds: 300));
+                                        if (mounted) {
+                                          showDialog(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            barrierColor: Colors.black.withOpacity(0.7),
+                                            builder: (context) => CelebrationWidget(
+                                              show: true,
+                                              points: score,
+                                              onComplete: () async {
+                                                Navigator.of(context).pop();
+                                                
+                                                // Save progress
+                                                await _saveQuestionProgress(
+                                                  questionIndex: _currentQuestionIndex,
+                                                  question: question,
+                                                  isCorrect: isCorrect,
+                                                  userAnswer: {
+                                                    'type': 'sequence_builder',
+                                                    'score': score,
+                                                    'time_taken': _questionTimeLimit - _remainingSeconds,
+                                                  },
+                                                  pointsEarned: score,
+                                                );
+                                                
+                                                setState(() {
+                                                  _answeredCorrectly[_currentQuestionIndex] = isCorrect;
                                                   _gameScores[_currentQuestionIndex] = score;
                                                 });
                                                 

@@ -49,6 +49,9 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   // Card Match (Flip Card) Form Data
   final List<Map<String, TextEditingController>> _cardPairs = [];
 
+  // Sequence Builder Form Data
+  final List<Map<String, dynamic>> _sequenceSentences = [];
+
   void _addMatchPair() {
     if (_matchPairs.length < 6) {
       setState(() {
@@ -87,6 +90,30 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
         _cardPairs[index]['card1']!.dispose();
         _cardPairs[index]['card2']!.dispose();
         _cardPairs.removeAt(index);
+      });
+    }
+  }
+
+  void _addSequenceSentence() {
+    setState(() {
+      _sequenceSentences.add({
+        'id': _sequenceSentences.length + 1,
+        'controller': TextEditingController(),
+        'position': _sequenceSentences.length + 1,
+      });
+    });
+  }
+
+  void _removeSequenceSentence(int index) {
+    if (_sequenceSentences.length > 3) {
+      setState(() {
+        _sequenceSentences[index]['controller']!.dispose();
+        _sequenceSentences.removeAt(index);
+        // Renumber positions
+        for (int i = 0; i < _sequenceSentences.length; i++) {
+          _sequenceSentences[i]['id'] = i + 1;
+          _sequenceSentences[i]['position'] = i + 1;
+        }
       });
     }
   }
@@ -242,6 +269,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     if (_questionType == 'match_following') dbType = 'match';
     if (_questionType == 'scenario_decision') dbType = 'scenario_decision';
     if (_questionType == 'card_match') dbType = 'card_match';
+    if (_questionType == 'sequence_builder') dbType = 'sequence_builder';
     
     // Get type_id from quest_types table
     final typeRes = await Supabase.instance.client
@@ -320,7 +348,22 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
        }
        
        questionData['options'] = pairs;
-    } else if (_questionType == 'scenario_decision') {
+     } else if (_questionType == 'sequence_builder') {
+       final sentences = [];
+       for (int i = 0; i < _sequenceSentences.length; i++) {
+         final text = _sequenceSentences[i]['controller']!.text.trim();
+         if (text.isNotEmpty) {
+           sentences.add({'id': i + 1, 'text': text, 'correct_position': i + 1});
+         }
+       }
+       if (sentences.isEmpty) {
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please add at least one sentence'), backgroundColor: Colors.red));
+         setState(() => _isSaving = false);
+         return;
+       }
+       questionData['options'] = sentences;
+       debugPrint('📤 Sequence Builder sentences: $sentences');
+     } else if (_questionType == 'scenario_decision') {
       // Prepare options array with is_correct flags (same as multiple choice)
       final options = _optionControllers.asMap().entries.map((entry) {
         return {
@@ -436,6 +479,9 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       pair['card1']!.dispose();
       pair['card2']!.dispose();
     }
+    for (var sentence in _sequenceSentences) {
+      sentence['controller']!.dispose();
+    }
     super.dispose();
   }
 
@@ -463,140 +509,158 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
         child: _isLoadingPathways
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Pathway Selection
-                    DropdownButtonFormField<Pathway>(
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Select Pathway',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.route),
-                      ),
-                      value: _selectedPathway,
-                      items: _pathways.map((pathway) {
-                        return DropdownMenuItem(
-                          value: pathway,
-                          child: Text(
-                            pathway.title,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) _loadLevels(value);
-                      },
-                      validator: (v) => v == null ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 16),
+                padding: const EdgeInsets.all(16),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                            // Pathway Selection
+                            DropdownButtonFormField<Pathway>(
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Select Pathway',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.route),
+                              ),
+                              value: _selectedPathway,
+                              items: _pathways.map((pathway) {
+                                return DropdownMenuItem(
+                                  value: pathway,
+                                  child: Text(
+                                    pathway.title,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value != null) _loadLevels(value);
+                              },
+                              validator: (v) => v == null ? 'Required' : null,
+                            ),
+                            const SizedBox(height: 16),
 
-                    // Level Selection
-                    if (_selectedPathway != null)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _isLoadingLevels
-                              ? const Center(child: Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: CircularProgressIndicator(),
-                                ))
-                              : _levels.isNotEmpty 
-                                  ? DropdownButtonFormField<PathwayLevel>(
-                                      isExpanded: true,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Select Level',
-                                        border: OutlineInputBorder(),
-                                        prefixIcon: Icon(Icons.layers),
-                                      ),
-                                      value: _selectedLevel,
-                                      hint: const Text('Tap to select level'),
-                                      items: _levels.map((level) {
-                                        return DropdownMenuItem<PathwayLevel>(
-                                          value: level,
-                                          child: Text(
-                                            '${level.levelNumber} - ${level.levelName}',
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
-                                          ),
-                                        );
-                                      }).toList(),
-                                      onChanged: (value) {
-                                        debugPrint("Level selected: ${value?.levelName}");
-                                        setState(() => _selectedLevel = value);
-                                      },
-                                      validator: (v) => v == null ? 'Required' : null,
-                                    )
-                                  : const SizedBox.shrink(),
-                        ],
-                      ),
-                    const SizedBox(height: 16),
+                            // Level Selection
+                            if (_selectedPathway != null)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _isLoadingLevels
+                                      ? const Center(child: Padding(
+                                          padding: EdgeInsets.all(8.0),
+                                          child: CircularProgressIndicator(),
+                                        ))
+                                      : _levels.isNotEmpty 
+                                          ? DropdownButtonFormField<PathwayLevel>(
+                                              isExpanded: true,
+                                              decoration: const InputDecoration(
+                                                labelText: 'Select Level',
+                                                border: OutlineInputBorder(),
+                                                prefixIcon: Icon(Icons.layers),
+                                              ),
+                                              value: _selectedLevel,
+                                              hint: const Text('Tap to select level'),
+                                              items: _levels.map((level) {
+                                                return DropdownMenuItem<PathwayLevel>(
+                                                  value: level,
+                                                  child: Text(
+                                                    '${level.levelNumber} - ${level.levelName}',
+                                                    overflow: TextOverflow.ellipsis,
+                                                    maxLines: 1,
+                                                  ),
+                                                );
+                                              }).toList(),
+                                              onChanged: (value) {
+                                                debugPrint("Level selected: ${value?.levelName}");
+                                                setState(() => _selectedLevel = value);
+                                              },
+                                              validator: (v) => v == null ? 'Required' : null,
+                                            )
+                                          : const SizedBox.shrink(),
+                                ],
+                              ),
+                            const SizedBox(height: 16),
 
-                    // Question Type Dropdown
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.quiz),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                      value: _questionType,
-                      hint: const Text('Question Type'),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'card_match',
-                          child: Text('Card Match Game'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'multiple_choice',
-                          child: Text('Multiple Choice'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'match_following',
-                          child: Text('Match the Following'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'scenario_decision',
-                          child: Text('Scenario Decision'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _questionType = value);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 24),
 
-                    // Title (for all question types)
-                    TextFormField(
-                      controller: _titleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Title',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.title),
-                      ),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 16),
+                            // Question Type Dropdown
+                            DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.quiz),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              value: _questionType,
+                              hint: const Text('Question Type'),
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'card_match',
+                                  child: Text('Card Match Game'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'multiple_choice',
+                                  child: Text('Multiple Choice'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'match_following',
+                                  child: Text('Match the Following'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'scenario_decision',
+                                  child: Text('Scenario Decision'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'sequence_builder',
+                                  child: Text('Sequence Builder'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    _questionType = value;
+                                    // Initialize sequence builder with 3 default sentences
+                                    if (value == 'sequence_builder' && _sequenceSentences.isEmpty) {
+                                      for (int i = 0; i < 3; i++) {
+                                        _sequenceSentences.add({
+                                          'id': i + 1,
+                                          'controller': TextEditingController(),
+                                          'position': i + 1,
+                                        });
+                                      }
+                                    }
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 12),
 
-                    // Description (for all question types)
-                    TextFormField(
-                      controller: _descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Description',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.description),
-                      ),
-                      maxLines: 3,
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 16),
+                            // Title (for all question types)
+                            TextFormField(
+                              controller: _titleController,
+                              decoration: const InputDecoration(
+                                labelText: 'Title',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.title),
+                              ),
+                              maxLines: _questionType == 'sequence_builder' ? 1 : null,
+                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                            ),
+                            const SizedBox(height: 8),
+
+                            // Description (for all question types)
+                            TextFormField(
+                              controller: _descriptionController,
+                              decoration: const InputDecoration(
+                                labelText: 'Description',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.description),
+                              ),
+                              maxLines: _questionType == 'sequence_builder' ? 1 : 3,
+                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                            ),
+                            const SizedBox(height: 8),
 
                     // Conditional UI based on question type
                     if (_questionType == 'multiple_choice') ...[
@@ -802,6 +866,92 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                           fontStyle: FontStyle.italic,
                         ),
                       ),
+                    ] else if (_questionType == 'sequence_builder') ...[
+                      // Sequence Builder UI
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Sentences (in correct order)',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (_sequenceSentences.length < 9)
+                            ElevatedButton.icon(
+                              onPressed: _addSequenceSentence,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3B82F6),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ...List.generate(_sequenceSentences.length, (index) {
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          elevation: 1,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF00BCD4),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _sequenceSentences[index]['controller'],
+                                    decoration: InputDecoration(
+                                      labelText: 'Sentence ${index + 1}',
+                                      border: const OutlineInputBorder(),
+                                      hintText: 'Enter sentence',
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                      isDense: true,
+                                    ),
+                                    maxLines: 1,
+                                    validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                  ),
+                                ),
+                                if (_sequenceSentences.length > 3)
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                    onPressed: () => _removeSequenceSentence(index),
+                                    tooltip: 'Remove',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Add 3-9 sentences in order. Users drag numbers to match.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                     ] else ...[
                       // Match the Following UI
                       Row(
@@ -887,7 +1037,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                       ),
                     ],
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 40),
                     SizedBox(
                       width: double.infinity,
                       height: 50,
