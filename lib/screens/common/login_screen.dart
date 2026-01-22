@@ -17,13 +17,104 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String _errorMessage = '';
-  String _selectedRole = 'user'; // Default to user
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final emailController = TextEditingController();
+    bool isLoading = false;
+    String dialogError = '';
+
+    await showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Reset Password', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B))),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Enter your email address and we\'ll send you a link to reset your password.', style: TextStyle(fontSize: 14, color: Colors.black87)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      hintText: 'Email',
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      prefixIcon: const Icon(Icons.email_rounded, color: Color(0xFFFFA726)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFFA726), width: 2)),
+                    ),
+                  ),
+                  if (dialogError.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: const Color(0xFFF08A7E).withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFF08A7E).withOpacity(0.5))),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Color(0xFFF08A7E), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(dialogError, style: const TextStyle(color: Color(0xFFD32F2F), fontSize: 12))),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: isLoading ? null : () => Navigator.of(dialogContext).pop(), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+                ElevatedButton(
+                  onPressed: isLoading ? null : () async {
+                    final email = emailController.text.trim();
+                    if (email.isEmpty || !email.contains('@')) {
+                      setDialogState(() => dialogError = 'Please enter a valid email address');
+                      return;
+                    }
+                    setDialogState(() {
+                      isLoading = true;
+                      dialogError = '';
+                    });
+                    try {
+                      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+                      if (!mounted) return;
+                      Navigator.of(dialogContext).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(children: [const Icon(Icons.check_circle, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text('Password reset link sent to $email', style: const TextStyle(fontWeight: FontWeight.w600)))]),
+                          backgroundColor: const Color(0xFF6BCB9F),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    } catch (e) {
+                      setDialogState(() {
+                        isLoading = false;
+                        dialogError = 'Error: ${e.toString()}';
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFA726), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text('Send Reset Link', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    emailController.dispose();
   }
 
   Future<void> _login() async {
@@ -78,27 +169,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!mounted) return;
 
-        // Verify the selected role matches the user's actual role
-        // Note: In a real app, you might just redirect based on role
-        // If the user is an admin in DB, they can login as User or Admin (implied privilege)
-        // BUT strict check: request role must match DB role
-        if (profile['role'] != _selectedRole) {
-          // Allow Admin to login as User? usually yes, but let's stick to strict or allow
-          // If DB says 'admin', allow both. If DB says 'user', allow only 'user'.
-          if (profile['role'] == 'user' && _selectedRole == 'admin') {
-            setState(() {
-              _isLoading = false;
-              _errorMessage =
-                  'Access Denied: You do not have Admin privileges.';
-            });
-            await Supabase.instance.client.auth.signOut();
-            return;
-          }
-          // If profile is admin but selected user, it's fine, we just treat them as user for navigation
-          // If strict matching is desired:
-          // if (profile['role'] != _selectedRole) { ... }
-        }
-
+        // Get user's role from database
+        final userRole = profile['role'] ?? 'user';
+        
         // Get user's name for welcome message
         final userName =
             profile['full_name'] ??
@@ -163,8 +236,8 @@ class _LoginScreenState extends State<LoginScreen> {
         // Close dialog
         Navigator.of(context).pop();
 
-        // Navigate based on selected role
-        if (_selectedRole == 'admin') {
+        // Navigate based on user's role from database
+        if (userRole == 'admin') {
           Navigator.pushReplacementNamed(context, '/admin-dashboard');
         } else {
           Navigator.pushReplacementNamed(context, '/user-dashboard');
@@ -312,127 +385,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       SizedBox(height: padding * 1.33),
 
-                      // Role selection
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(
-                            color: Colors.grey.withOpacity(0.1),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _selectedRole = 'user';
-                                    _errorMessage = '';
-                                  });
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _selectedRole == 'user'
-                                        ? const Color(0xFFF4EF8B) // Yellow
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.person_rounded,
-                                        size: 20,
-                                        color: _selectedRole == 'user'
-                                            ? Colors.black
-                                            : const Color(
-                                                0xFF1A2F4B,
-                                              ).withOpacity(0.5),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'User',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: _selectedRole == 'user'
-                                              ? Colors.black
-                                              : const Color(
-                                                  0xFF1A2F4B,
-                                                ).withOpacity(0.5),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _selectedRole = 'admin';
-                                    _errorMessage = '';
-                                  });
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _selectedRole == 'admin'
-                                        ? const Color(0xFFE8D96F) // Darker yellow for admin
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.admin_panel_settings_rounded,
-                                        size: 20,
-                                        color: _selectedRole == 'admin'
-                                            ? Colors.black
-                                            : const Color(
-                                                0xFF1A2F4B,
-                                              ).withOpacity(0.5),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Admin',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: _selectedRole == 'admin'
-                                              ? Colors.black
-                                              : const Color(
-                                                  0xFF1A2F4B,
-                                                ).withOpacity(0.5),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 32),
-
                       // Form
                       Form(
                         key: _formKey,
@@ -536,7 +488,26 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 8),
+                            // Forgot Password link
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: _showForgotPasswordDialog,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFFFFA726),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                ),
+                                child: const Text(
+                                  'Forgot Password?',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
                             // Error message
                             if (_errorMessage.isNotEmpty)
                               Container(
@@ -567,7 +538,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       child: Text(
                                         _errorMessage,
                                         style: const TextStyle(
-                                          color: Color(0xFFE8D96F),
+                                          color: Color(0xFFD32F2F), // Dark red for visibility
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
                                         ),

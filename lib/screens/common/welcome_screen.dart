@@ -118,7 +118,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           // Diagonal squiggle
           const FloatingDecoration(
             shape: 'squiggle', 
-            color: Color(0xFFFFFFFF), // White squiggle
+            color: Colors.black, // Black squiggle for visibility
             size: 100, 
             top: 100,
             right: -30,
@@ -180,7 +180,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyLarge
                               ?.copyWith(
-                                color: Colors.white.withOpacity(0.9),
+                                color: Colors.black87, // Changed to black for visibility
                                 fontWeight: FontWeight.w500,
                                 fontSize: 16,
                               ),
