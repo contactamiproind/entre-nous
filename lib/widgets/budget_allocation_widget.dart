@@ -58,13 +58,18 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
       departments = [];
     }
 
+
     // Initialize allocations
     for (var dept in departments) {
       departmentAllocations[dept['id']] = null;
     }
 
-    // Create list of available amounts (shuffled)
-    availableAmounts = departments.map<int>((dept) => dept['correct_amount'] as int).toList();
+    // Create list of available amounts with indices (to handle duplicates)
+    // Each entry is a map with 'index' and 'amount'
+    availableAmounts = [];
+    for (int i = 0; i < departments.length; i++) {
+      availableAmounts.add(departments[i]['correct_amount'] as int);
+    }
     availableAmounts.shuffle();
 
     debugPrint('Budget simulation initialized: $totalBudget budget, ${departments.length} departments');
@@ -73,20 +78,17 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
 
   void _onAmountDropped(int deptId, int amount) {
     setState(() {
-      // Remove amount from any previous department
-      departmentAllocations.forEach((key, value) {
-        if (value == amount) {
-          departmentAllocations[key] = null;
-        }
-      });
-      
-      // Assign to new department
+      // Simply assign the amount to this department
+      // The display logic will automatically hide/show chips based on assignments
       departmentAllocations[deptId] = amount;
     });
   }
 
   bool get canSubmit {
-    return departmentAllocations.values.every((amount) => amount != null);
+    final result = departmentAllocations.values.every((amount) => amount != null);
+    debugPrint('🔘 canSubmit check: $result');
+    debugPrint('   Allocations: $departmentAllocations');
+    return result;
   }
 
   void _submitBudget() {
@@ -170,29 +172,6 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
 
     return Column(
       children: [
-        // Question Title
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            widget.questionData['title'] ?? 'Match budget amounts to departments',
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-        ),
-
-        // Description
-        if (widget.questionData['description'] != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              widget.questionData['description'],
-              style: const TextStyle(fontSize: 14, color: Colors.black87),
-              textAlign: TextAlign.center,
-            ),
-          ),
-
-        const SizedBox(height: 16),
-
         // Total Budget Display
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -239,151 +218,153 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
         const SizedBox(height: 24),
 
         // Department Drop Zones
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: departments.length,
-            itemBuilder: (context, index) {
-              final dept = departments[index];
-              final deptId = dept['id'];
-              final deptName = dept['name'];
-              final allocatedAmount = departmentAllocations[deptId];
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: departments.length,
+          itemBuilder: (context, index) {
+            final dept = departments[index];
+            final deptId = dept['id'];
+            final deptName = dept['name'];
+            final allocatedAmount = departmentAllocations[deptId];
 
-              Color cardColor = Colors.white;
-              IconData? resultIcon;
-              Color? resultColor;
+            Color cardColor = Colors.white;
+            IconData? resultIcon;
+            Color? resultColor;
 
-              if (isSubmitted) {
-                final isCorrect = departmentResults[deptId] ?? false;
-                if (isCorrect) {
-                  cardColor = const Color(0xFF6BCB9F).withOpacity(0.1);
-                  resultIcon = Icons.check_circle;
-                  resultColor = const Color(0xFF6BCB9F);
-                } else {
-                  cardColor = const Color(0xFFF08A7E).withOpacity(0.1);
-                  resultIcon = Icons.cancel;
-                  resultColor = const Color(0xFFF08A7E);
-                }
+            if (isSubmitted) {
+              final isCorrect = departmentResults[deptId] ?? false;
+              if (isCorrect) {
+                cardColor = const Color(0xFF6BCB9F).withOpacity(0.1);
+                resultIcon = Icons.check_circle;
+                resultColor = const Color(0xFF6BCB9F);
+              } else {
+                cardColor = const Color(0xFFF08A7E).withOpacity(0.1);
+                resultIcon = Icons.cancel;
+                resultColor = const Color(0xFFF08A7E);
               }
+            }
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: DragTarget<int>(
-                  onAccept: isSubmitted ? null : (amount) => _onAmountDropped(deptId, amount),
-                  builder: (context, candidateData, rejectedData) {
-                    final isHovering = candidateData.isNotEmpty;
-                    
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: isHovering ? const Color(0xFF6BCB9F).withOpacity(0.1) : cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isHovering 
-                              ? const Color(0xFF6BCB9F)
-                              : isSubmitted
-                                  ? (resultColor ?? Colors.grey.shade300)
-                                  : Colors.grey.shade300,
-                          width: isHovering ? 3 : 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: DragTarget<int>(
+                onAccept: isSubmitted ? null : (amount) => _onAmountDropped(deptId, amount),
+                builder: (context, candidateData, rejectedData) {
+                  final isHovering = candidateData.isNotEmpty;
+                  
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isHovering ? const Color(0xFF6BCB9F).withOpacity(0.1) : cardColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isHovering 
+                            ? const Color(0xFF6BCB9F)
+                            : isSubmitted
+                                ? (resultColor ?? Colors.grey.shade300)
+                                : Colors.grey.shade300,
+                        width: isHovering ? 3 : 2,
                       ),
-                      child: Row(
-                        children: [
-                          // Department Icon
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF6BCB9F).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.business,
-                              color: Color(0xFF6BCB9F),
-                              size: 24,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        // Department Icon
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6BCB9F).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.business,
+                            color: Color(0xFF6BCB9F),
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        
+                        // Department Name
+                        Expanded(
+                          child: Text(
+                            deptName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A2F4B),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          
-                          // Department Name
-                          Expanded(
-                            child: Text(
-                              deptName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A2F4B),
-                              ),
+                        ),
+                        
+                        // Allocated Amount or Drop Zone
+                        if (allocatedAmount != null)
+                          Draggable<int>(
+                            data: allocatedAmount,
+                            feedback: Material(
+                              color: Colors.transparent,
+                              child: _buildAmountChip(allocatedAmount, isDragging: true),
                             ),
-                          ),
-                          
-                          // Allocated Amount or Drop Zone
-                          if (allocatedAmount != null)
-                            Draggable<int>(
-                              data: allocatedAmount,
-                              feedback: Material(
-                                color: Colors.transparent,
-                                child: _buildAmountChip(allocatedAmount, isDragging: true),
-                              ),
-                              childWhenDragging: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey.shade400, width: 2, style: BorderStyle.solid),
-                                ),
-                                child: const Text(
-                                  'Dragging...',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              child: _buildAmountChip(allocatedAmount),
-                            )
-                          else
-                            Container(
+                            childWhenDragging: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                               decoration: BoxDecoration(
-                                color: isHovering ? const Color(0xFF6BCB9F).withOpacity(0.2) : Colors.grey.shade100,
+                                color: Colors.grey.shade200,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isHovering ? const Color(0xFF6BCB9F) : Colors.grey.shade400,
-                                  width: 2,
-                                ),
+                                border: Border.all(color: Colors.grey.shade400, width: 2, style: BorderStyle.solid),
                               ),
-                              child: Text(
-                                'Drop Here',
+                              child: const Text(
+                                'Dragging...',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: isHovering ? const Color(0xFF6BCB9F) : Colors.grey.shade600,
+                                  color: Colors.grey,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
-                          
-                          // Result Icon
-                          if (isSubmitted && resultIcon != null) ...[
-                            const SizedBox(width: 12),
-                            Icon(resultIcon, color: resultColor, size: 28),
-                          ],
+                            child: _buildAmountChip(allocatedAmount),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isHovering ? const Color(0xFF6BCB9F).withOpacity(0.2) : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isHovering ? const Color(0xFF6BCB9F) : Colors.grey.shade400,
+                                width: 2,
+                              ),
+                            ),
+                            child: Text(
+                              'Drop Here',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: isHovering ? const Color(0xFF6BCB9F) : Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        
+                        // Result Icon
+                        if (isSubmitted && resultIcon != null) ...[
+                          const SizedBox(width: 12),
+                          Icon(resultIcon, color: resultColor, size: 28),
                         ],
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            );
+          },
         ),
+
+        const SizedBox(height: 16),
 
         // Available Amounts (if not submitted)
         if (!isSubmitted) ...[
@@ -404,101 +385,153 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
               spacing: 12,
               runSpacing: 12,
               alignment: WrapAlignment.center,
-              children: availableAmounts.where((amount) {
-                // Only show amounts that haven't been assigned
-                return !departmentAllocations.values.contains(amount);
-              }).map((amount) {
-                return Draggable<int>(
-                  data: amount,
-                  feedback: Material(
-                    color: Colors.transparent,
-                    child: _buildAmountChip(amount, isDragging: true),
-                  ),
-                  childWhenDragging: Opacity(
-                    opacity: 0.3,
-                    child: _buildAmountChip(amount),
-                  ),
-                  child: _buildAmountChip(amount),
-                );
-              }).toList(),
+              children: () {
+                // Count how many of each amount are assigned
+                final assignedCounts = <int, int>{};
+                for (var amount in departmentAllocations.values) {
+                  if (amount != null) {
+                    assignedCounts[amount] = (assignedCounts[amount] ?? 0) + 1;
+                  }
+                }
+                
+                // Count how many of each amount we have total
+                final totalCounts = <int, int>{};
+                for (var amount in availableAmounts) {
+                  totalCounts[amount] = (totalCounts[amount] ?? 0) + 1;
+                }
+                
+                // Build chips for unassigned amounts
+                final chips = <Widget>[];
+                final usedAmounts = <int>[];
+                
+                for (var amount in availableAmounts) {
+                  // Count how many of this amount we've already shown
+                  final shownCount = usedAmounts.where((a) => a == amount).length;
+                  // Count how many of this amount are assigned
+                  final assignedCount = assignedCounts[amount] ?? 0;
+                  
+                  // Only show if we haven't shown all instances of this amount
+                  if (shownCount < (totalCounts[amount]! - assignedCount)) {
+                    chips.add(
+                      Draggable<int>(
+                        data: amount,
+                        feedback: Material(
+                          color: Colors.transparent,
+                          child: _buildAmountChip(amount, isDragging: true),
+                        ),
+                        childWhenDragging: Opacity(
+                          opacity: 0.3,
+                          child: _buildAmountChip(amount),
+                        ),
+                        child: _buildAmountChip(amount),
+                      ),
+                    );
+                    usedAmounts.add(amount);
+                  }
+                }
+                
+                return chips;
+              }(),
             ),
           ),
         ],
 
-        // Submit Button or Score Display
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: isSubmitted
-              ? Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: finalScore >= 70
-                        ? const Color(0xFF6BCB9F).withOpacity(0.1)
-                        : const Color(0xFFF08A7E).withOpacity(0.1),
+        // Submit Button (shown when all departments filled and not yet submitted)
+        if (!isSubmitted && canSubmit)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _submitBudget,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6BCB9F),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
+                  ),
+                ),
+                child: const Text(
+                  'SUBMIT ANSWER',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        // Score Display (only shown after submit)
+        if (isSubmitted)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: finalScore >= 70
+                    ? const Color(0xFF6BCB9F).withOpacity(0.1)
+                    : const Color(0xFFF08A7E).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: finalScore >= 70
+                      ? const Color(0xFF6BCB9F)
+                      : const Color(0xFFF08A7E),
+                  width: 2,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'Your Score: $finalScore/100',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                       color: finalScore >= 70
                           ? const Color(0xFF6BCB9F)
                           : const Color(0xFFF08A7E),
-                      width: 2,
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        finalScore >= 70 ? Icons.celebration : Icons.info_outline,
-                        size: 48,
-                        color: finalScore >= 70
-                            ? const Color(0xFF6BCB9F)
-                            : const Color(0xFFF08A7E),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Your Score: $finalScore/100',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: finalScore >= 70
-                              ? const Color(0xFF6BCB9F)
-                              : const Color(0xFFF08A7E),
+                  const SizedBox(height: 8),
+                  Text(
+                    finalScore >= 70
+                        ? 'Perfect! All budgets matched correctly!'
+                        : 'Some amounts don\'t match. Review the correct allocations above.',
+                    style: const TextStyle(fontSize: 14, color: Colors.black87),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (finalScore < 70) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            isSubmitted = false;
+                            departmentResults.clear();
+                            // Keep the allocations so user can see what they did wrong
+                          });
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('TRY AGAIN'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3B82F6),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        finalScore >= 70
-                            ? 'Great job! You matched the budgets correctly!'
-                            : 'Try to match the correct amounts to each department.',
-                        style: const TextStyle(fontSize: 14, color: Colors.black87),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                )
-              : SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: canSubmit ? _submitBudget : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6BCB9F),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      disabledBackgroundColor: Colors.grey.shade300,
                     ),
-                    child: const Text(
-                      'SUBMIT BUDGET',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                ),
-        ),
+                  ],
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
