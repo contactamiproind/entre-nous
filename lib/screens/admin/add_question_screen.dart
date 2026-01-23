@@ -52,6 +52,10 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   // Sequence Builder Form Data
   final List<Map<String, dynamic>> _sequenceSentences = [];
 
+  // Budget Simulation Form Data
+  final List<Map<String, dynamic>> _budgetDepartments = [];
+  final TextEditingController _totalBudgetController = TextEditingController(text: '10000');
+
   void _addMatchPair() {
     if (_matchPairs.length < 6) {
       setState(() {
@@ -113,6 +117,30 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
         for (int i = 0; i < _sequenceSentences.length; i++) {
           _sequenceSentences[i]['id'] = i + 1;
           _sequenceSentences[i]['position'] = i + 1;
+        }
+      });
+    }
+  }
+
+  void _addBudgetDepartment() {
+    setState(() {
+      _budgetDepartments.add({
+        'id': _budgetDepartments.length + 1,
+        'name': TextEditingController(),
+        'amount': TextEditingController(),
+      });
+    });
+  }
+
+  void _removeBudgetDepartment(int index) {
+    if (_budgetDepartments.length > 2) {
+      setState(() {
+        _budgetDepartments[index]['name']!.dispose();
+        _budgetDepartments[index]['amount']!.dispose();
+        _budgetDepartments.removeAt(index);
+        // Renumber IDs
+        for (int i = 0; i < _budgetDepartments.length; i++) {
+          _budgetDepartments[i]['id'] = i + 1;
         }
       });
     }
@@ -270,6 +298,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     if (_questionType == 'scenario_decision') dbType = 'scenario_decision';
     if (_questionType == 'card_match') dbType = 'card_match';
     if (_questionType == 'sequence_builder') dbType = 'sequence_builder';
+    if (_questionType == 'simulation') dbType = 'simulation';
     
     // Get type_id from quest_types table
     final typeRes = await Supabase.instance.client
@@ -374,6 +403,79 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       
       questionData['options'] = options;
       questionData['correct_answer'] = _optionControllers[_correctDisplayIndex].text.trim();
+    } else if (_questionType == 'simulation') {
+      // Budget Simulation save logic
+      if (_budgetDepartments.length < 2) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please add at least 2 departments'), backgroundColor: Colors.red),
+        );
+        setState(() => _isSaving = false);
+        return;
+      }
+
+      // Validate total budget
+      final totalBudget = int.tryParse(_totalBudgetController.text.trim());
+      if (totalBudget == null || totalBudget <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid total budget'), backgroundColor: Colors.red),
+        );
+        setState(() => _isSaving = false);
+        return;
+      }
+
+      // Build departments list and validate
+      final departments = [];
+      int totalAllocated = 0;
+
+      for (int i = 0; i < _budgetDepartments.length; i++) {
+        final dept = _budgetDepartments[i];
+        final name = dept['name']!.text.trim();
+        final amountStr = dept['amount']!.text.trim();
+
+        if (name.isEmpty || amountStr.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Please fill all fields for department ${i + 1}'), backgroundColor: Colors.red),
+          );
+          setState(() => _isSaving = false);
+          return;
+        }
+
+        final amount = int.tryParse(amountStr);
+        if (amount == null || amount < 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Invalid amount for $name'), backgroundColor: Colors.red),
+          );
+          setState(() => _isSaving = false);
+          return;
+        }
+
+        totalAllocated += amount;
+        departments.add({
+          'id': i + 1,
+          'name': name,
+          'correct_amount': amount,
+        });
+      }
+
+      // Validate that total allocated equals total budget
+      if (totalAllocated != totalBudget) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Department amounts ($totalAllocated) must equal total budget ($totalBudget)'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _isSaving = false);
+        return;
+      }
+
+      // Save budget simulation data
+      questionData['options'] = {
+        'total_budget': totalBudget,
+        'departments': departments,
+      };
+
+      debugPrint('📤 Budget Simulation data: ${questionData['options']}');
     }
 
     // Debug: Print the data being sent
@@ -615,6 +717,10 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                   value: 'sequence_builder',
                                   child: Text('Sequence Builder'),
                                 ),
+                                DropdownMenuItem(
+                                  value: 'simulation',
+                                  child: Text('Budget Simulation'),
+                                ),
                               ],
                               onChanged: (value) {
                                 if (value != null) {
@@ -627,6 +733,16 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                           'id': i + 1,
                                           'controller': TextEditingController(),
                                           'position': i + 1,
+                                        });
+                                      }
+                                    }
+                                    // Initialize budget simulation with 3 default departments
+                                    if (value == 'simulation' && _budgetDepartments.isEmpty) {
+                                      for (int i = 0; i < 3; i++) {
+                                        _budgetDepartments.add({
+                                          'id': i + 1,
+                                          'name': TextEditingController(),
+                                          'amount': TextEditingController(),
                                         });
                                       }
                                     }
@@ -950,6 +1066,162 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                           fontSize: 11,
                           color: Colors.grey[600],
                           fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ] else if (_questionType == 'simulation') ...[
+                      // Budget Simulation UI
+                      const Text(
+                        'Budget Configuration',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // Total Budget Field
+                      TextFormField(
+                        controller: _totalBudgetController,
+                        decoration: const InputDecoration(
+                          labelText: 'Total Budget',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.attach_money),
+                          hintText: '10000',
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          if (int.tryParse(v.trim()) == null) return 'Must be a number';
+                          return null;
+                        },
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Departments Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Departments',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (_budgetDepartments.length < 10)
+                            ElevatedButton.icon(
+                              onPressed: _addBudgetDepartment,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add Department'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3B82F6),
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
+                      // Department Cards
+                      ...List.generate(_budgetDepartments.length, (index) {
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Department ${index + 1}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    if (_budgetDepartments.length > 2)
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _removeBudgetDepartment(index),
+                                        tooltip: 'Remove department',
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _budgetDepartments[index]['name'],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Department Name',
+                                    border: OutlineInputBorder(),
+                                    hintText: 'e.g., Marketing, HR, IT',
+                                    prefixIcon: Icon(Icons.business),
+                                  ),
+                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _budgetDepartments[index]['amount'],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Correct Amount',
+                                    border: OutlineInputBorder(),
+                                    hintText: 'e.g., 2000',
+                                    prefixIcon: Icon(Icons.money),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) return 'Required';
+                                    if (int.tryParse(v.trim()) == null) return 'Must be a number';
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Tips Box
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 20, color: Colors.blue.shade700),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Budget Simulation Tips',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '• Department amounts must equal total budget\n'
+                              '• Add 2-10 departments\n'
+                              '• Players drag budget amounts to departments',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ] else ...[

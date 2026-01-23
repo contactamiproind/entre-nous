@@ -1,0 +1,172 @@
+                    ] else if (_questionType == 'simulation') ...[
+                      // Budget Simulation UI
+                      const Text(
+                        'Budget Configuration',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _totalBudgetController,
+                              decoration: const InputDecoration(
+                                labelText: 'Total Budget',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.attach_money),
+                                hintText: '10000',
+                              ),
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) return 'Required';
+                                if (int.tryParse(v.trim()) == null) return 'Must be a number';
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _toleranceController,
+                              decoration: const InputDecoration(
+                                labelText: 'Tolerance %',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.percent),
+                                hintText: '5',
+                              ),
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) return 'Required';
+                                final num = int.tryParse(v.trim());
+                                if (num == null || num < 0 || num > 100) return '0-100';
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Departments',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (_budgetDepartments.length < 10)
+                            ElevatedButton.icon(
+                              onPressed: _addBudgetDepartment,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add Department'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3B82F6),
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ...List.generate(_budgetDepartments.length, (index) {
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Department ${index + 1}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    if (_budgetDepartments.length > 2)
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _removeBudgetDepartment(index),
+                                        tooltip: 'Remove department',
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _budgetDepartments[index]['nameController'],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Department Name',
+                                    border: OutlineInputBorder(),
+                                    hintText: 'e.g., Marketing, HR, IT',
+                                    prefixIcon: Icon(Icons.business),
+                                  ),
+                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _budgetDepartments[index]['amountController'],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Correct Amount',
+                                    border: OutlineInputBorder(),
+                                    hintText: 'e.g., 2000',
+                                    prefixIcon: Icon(Icons.money),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) return 'Required';
+                                    if (int.tryParse(v.trim()) == null) return 'Must be a number';
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 20, color: Colors.blue.shade700),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Budget Simulation Tips',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '• Department amounts must equal total budget\n'
+                              '• Add 2-10 departments\n'
+                              '• Tolerance % allows partial credit for close answers\n'
+                              '• Players allocate budget using sliders',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[

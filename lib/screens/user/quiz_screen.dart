@@ -8,6 +8,7 @@ import '../../widgets/celebration_widget.dart';
 import '../../widgets/card_match_question_widget.dart';
 import '../../widgets/card_flip_game_widget.dart';
 import '../../widgets/sequence_builder_widget.dart';
+import '../../widgets/budget_allocation_widget.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class QuizScreen extends StatefulWidget {
@@ -471,6 +472,9 @@ class _QuizScreenState extends State<QuizScreen> {
         } else if (title.contains('sequence') || title.contains('arrange') || title.contains('order')) {
           inferredType = 'sequence_builder';
           debugPrint('   ✅ Sequence Builder detected by TITLE');
+        } else if (title.contains('simulation') || title.contains('budget')) {
+          inferredType = 'simulation';
+          debugPrint('   ✅ Budget Simulation detected by TITLE');
         } else if (title.contains('match')) {
           // Only set to match_following if it's not already identified as card_match
           inferredType = 'match_following';
@@ -483,8 +487,8 @@ class _QuizScreenState extends State<QuizScreen> {
       List<String> options = [];
       List<Map<String, dynamic>> optionsData = [];
       
-      // Skip options processing for card_match and sequence_builder questions - they use different structures
-      if (inferredType != 'card_match' && inferredType != 'sequence_builder' && questionData['options'] != null) {
+      // Skip options processing for card_match, sequence_builder, and simulation questions - they use different structures
+      if (inferredType != 'card_match' && inferredType != 'sequence_builder' && inferredType != 'simulation' && questionData['options'] != null) {
         final optionsRaw = questionData['options'];
         final correctAnswer = questionData['correct_answer']?.toString();
         
@@ -529,7 +533,7 @@ class _QuizScreenState extends State<QuizScreen> {
           'description': questionData['description'],
           'difficulty': questionData['difficulty'],
           'points': questionData['points'] ?? 10,
-          'options': (inferredType == 'card_match' || inferredType == 'sequence_builder') ? questionData['options'] : options, // Keep original structure for card_match and sequence_builder
+          'options': (inferredType == 'card_match' || inferredType == 'sequence_builder' || inferredType == 'simulation') ? questionData['options'] : options, // Keep original structure for card_match, sequence_builder, and simulation
           'options_data': optionsData, // Store full option data with is_correct flags
           'correct_answer': questionData['correct_answer'], // CRITICAL: Add for validation
           'question_type': inferredType, // Use inferred type
@@ -1123,6 +1127,20 @@ class _QuizScreenState extends State<QuizScreen> {
                                             });
                                           },
                                         )
+                                  : questionType == 'simulation'
+                                  ? SizedBox(
+                                      height: 700,
+                                      child: BudgetAllocationWidget(
+                                        questionData: question,
+                                        onAnswerSubmitted: (score, isCorrect) {
+                                          setState(() {
+                                            _isCardGameComplete = true;
+                                            _gameScores[_currentQuestionIndex] = score;
+                                            _answeredCorrectly[_currentQuestionIndex] = isCorrect;
+                                          });
+                                        },
+                                      ),
+                                    )
                                   : (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision')
                                       ? _buildMultipleChoiceOptions(question)
                                       : _buildMatchTheFollowing(question),

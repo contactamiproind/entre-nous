@@ -901,6 +901,11 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                 typeColor = const Color(0xFF00BCD4);
                                 bgColor = const Color(0xFF00BCD4).withOpacity(0.1);
                                 break;
+                              case 'simulation':
+                                typeName = 'Budget Simulation';
+                                typeColor = const Color(0xFF6BCB9F);
+                                bgColor = const Color(0xFF6BCB9F).withOpacity(0.1);
+                                break;
                               default:
                                 typeName = 'Unknown';
                                 typeColor = Colors.grey;

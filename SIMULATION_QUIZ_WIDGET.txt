@@ -1,0 +1,14 @@
+                                  : questionType == 'simulation'
+                                  ? SizedBox(
+                                      height: 700,
+                                      child: BudgetAllocationWidget(
+                                        questionData: question,
+                                        onAnswerSubmitted: (score, isCorrect) {
+                                          setState(() {
+                                            _isCardGameComplete = true;
+                                            _gameScores[_currentQuestionIndex] = score;
+                                            _answeredCorrectly[_currentQuestionIndex] = isCorrect;
+                                          });
+                                        },
+                                      ),
+                                    )
