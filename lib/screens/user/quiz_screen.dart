@@ -1295,6 +1295,64 @@ class _QuizScreenState extends State<QuizScreen> {
                                         return;
                                       }
                                       
+                                      // Handle simulation (budget allocation) games
+                                      if (questionType == 'simulation' && _isCardGameComplete) {
+                                        // Get the game score from the state
+                                        final score = _gameScores[_currentQuestionIndex] ?? 0;
+                                        final isCorrect = _answeredCorrectly[_currentQuestionIndex] ?? false;
+                                        
+                                        // Stop timer
+                                        _questionTimer?.cancel();
+                                        
+                                        // Show celebration with score
+                                        await Future.delayed(const Duration(milliseconds: 300));
+                                        if (mounted) {
+                                          showDialog(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            barrierColor: Colors.black.withOpacity(0.7),
+                                            builder: (context) => CelebrationWidget(
+                                              show: true,
+                                              points: score,
+                                              onComplete: () async {
+                                                Navigator.of(context).pop();
+                                                
+                                                // Save progress
+                                                await _saveQuestionProgress(
+                                                  questionIndex: _currentQuestionIndex,
+                                                  question: question,
+                                                  isCorrect: isCorrect,
+                                                  userAnswer: {
+                                                    'type': 'simulation',
+                                                    'score': score,
+                                                    'time_taken': _questionTimeLimit - _remainingSeconds,
+                                                  },
+                                                  pointsEarned: score,
+                                                );
+                                                
+                                                setState(() {
+                                                  _answeredCorrectly[_currentQuestionIndex] = isCorrect;
+                                                  _gameScores[_currentQuestionIndex] = score;
+                                                });
+                                                
+                                                // Move to next question
+                                                if (_currentQuestionIndex < _questions.length - 1) {
+                                                  setState(() {
+                                                    _currentQuestionIndex++;
+                                                    _currentAttempt = 1;
+                                                    _isCardGameComplete = false; // Reset for next question
+                                                  });
+                                                  _startQuestionTimer();
+                                                } else {
+                                                  _submitQuiz();
+                                                }
+                                              },
+                                            ),
+                                          );
+                                        }
+                                        return;
+                                      }
+                                      
                                       // Handle multiple choice questions
                                       // Get the selected answer
                                       final selectedIndex = _selectedAnswers[_currentQuestionIndex];
