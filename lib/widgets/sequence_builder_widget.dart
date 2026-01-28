@@ -39,6 +39,14 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
 
   void _initializeGame() {
     try {
+      // Reset game state
+      usedNumbers.clear();
+      lockedSentences.clear();
+      sentencePlacements.clear();
+      score = 0;
+      correctMatches = 0;
+      shakingSentenceId = null;
+      
       debugPrint('🎮 SequenceBuilderWidget._initializeGame()');
       debugPrint('   Options type: ${widget.questionData['options'].runtimeType}');
       debugPrint('   Options value: ${widget.questionData['options']}');
@@ -81,6 +89,15 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
       debugPrint('Stack trace: $stackTrace');
       debugPrint('Question data: ${widget.questionData}');
       sentences = [];
+    }
+  }
+
+  @override
+  void didUpdateWidget(SequenceBuilderWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-initialize if data changes (though Key in parent should handle this, this is a safety fallback)
+    if (widget.questionData['id'] != oldWidget.questionData['id']) {
+      _initializeGame();
     }
   }
 
@@ -165,19 +182,9 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
     
     return Column(
       children: [
-        // Question Text
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Text(
-            widget.questionData['title'] ?? 'Arrange the sentences in the correct order by dragging numbers',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
+        // Title removed (handled by parent screen)
         
+
         // Score Display
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -189,7 +196,7 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFFE8D96F),
+                  color: Colors.black,
                 ),
               ),
               Text(
@@ -205,175 +212,235 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
         
         const SizedBox(height: 12),
         
-        // Draggable Numbers
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: List.generate(sentences.length, (index) {
-              final number = index + 1;
-              final isUsed = usedNumbers.contains(number);
-              
-              if (isUsed) {
-                return const SizedBox.shrink();
-              }
-              
-              return Draggable<int>(
-                data: number,
-                feedback: Material(
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00BCD4),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: Center(
-                      child: Text(
-                        number.toString(),
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+        // Draggable Numbers Area
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Calculate responsive size based on screen width
+            final screenWidth = constraints.maxWidth;
+            final boxSize = (screenWidth / 5.5).clamp(55.0, 75.0);
+            final fontSize = (boxSize * 0.6).clamp(28.0, 40.0);
+            
+            debugPrint('📦 Draggable area - screenWidth: $screenWidth, boxSize: $boxSize, fontSize: $fontSize');
+            debugPrint('📦 Number of sentences: ${sentences.length}');
+            
+            return Container(
+              constraints: BoxConstraints(
+                minHeight: boxSize + 30,
+                maxHeight: boxSize * 2.5, // Allow wrapping to multiple rows
+              ),
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF9E6), // Light yellow background
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE8D96F), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: List.generate(sentences.length, (index) {
+                  final number = index + 1;
+                  final isUsed = usedNumbers.contains(number);
+                  
+                  if (isUsed) {
+                    return const SizedBox.shrink();
+                  }
+                  
+                  return Draggable<int>(
+                    data: number,
+                    feedback: Material(
+                      elevation: 8,
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        width: boxSize,
+                        height: boxSize,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.orange.shade400, Colors.orange.shade600],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.black, width: 3),
+                        ),
+                        child: Center(
+                          child: OverflowBox(
+                            minWidth: 0,
+                            maxWidth: double.infinity,
+                            minHeight: 0,
+                            maxHeight: double.infinity,
+                            child: Text(
+                              number.toString(),
+                              style: TextStyle(
+                                fontSize: boxSize * 0.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                decoration: TextDecoration.none,
+                                fontFamily: 'Roboto',
+                                shadows: const [
+                                  Shadow(
+                                    color: Colors.black,
+                                    offset: Offset(2, 2),
+                                    blurRadius: 3,
+                                  ),
+                                ],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-                childWhenDragging: Opacity(
-                  opacity: 0.3,
-                  child: _buildNumberBox(number),
-                ),
-                child: _buildNumberBox(number),
-              );
-            }),
-          ),
+                    childWhenDragging: Opacity(
+                      opacity: 0.3,
+                      child: _buildNumberBox(number, boxSize, fontSize),
+                    ),
+                    child: _buildNumberBox(number, boxSize, fontSize),
+                  );
+                }),
+              ),
+            );
+          },
         ),
         
         const SizedBox(height: 16),
         
         // Sentences with Drop Zones
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: sentences.length,
-            itemBuilder: (context, index) {
-              final sentence = sentences[index];
-              final sentenceId = sentence['id'];
-              final isLocked = lockedSentences.contains(sentenceId);
-              final isShaking = shakingSentenceId == sentenceId;
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Calculate responsive size based on screen width
+              final screenWidth = constraints.maxWidth;
+              final boxSize = (screenWidth / 6.0).clamp(50.0, 70.0);
+              final fontSize = (boxSize * 0.55).clamp(24.0, 35.0);
               
-              return AnimatedBuilder(
-                animation: _shakeController,
-                builder: (context, child) {
-                  final offset = isShaking
-                      ? sin(_shakeController.value * pi * 4) * 10
-                      : 0.0;
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: sentences.length,
+                itemBuilder: (context, index) {
+                  final sentence = sentences[index];
+                  final sentenceId = sentence['id'];
+                  final isLocked = lockedSentences.contains(sentenceId);
+                  final isShaking = shakingSentenceId == sentenceId;
                   
-                  return Transform.translate(
-                    offset: Offset(offset, 0),
-                    child: child,
-                  );
-                },
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isLocked ? Colors.green.shade50 : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isShaking 
-                          ? Colors.red 
-                          : isLocked 
-                              ? Colors.green 
-                              : const Color(0xFFE5E7EB),
-                      width: isShaking || isLocked ? 2 : 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isShaking 
-                            ? Colors.red.withOpacity(0.3) 
-                            : Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                  return AnimatedBuilder(
+                    animation: _shakeController,
+                    builder: (context, child) {
+                      final offset = isShaking
+                          ? sin(_shakeController.value * pi * 4) * 10
+                          : 0.0;
+                      
+                      return Transform.translate(
+                        offset: Offset(offset, 0),
+                        child: child,
+                      );
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isLocked ? Colors.green.shade50 : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isShaking 
+                              ? Colors.red 
+                              : isLocked 
+                                  ? Colors.green 
+                                  : const Color(0xFFE5E7EB),
+                          width: isShaking || isLocked ? 2 : 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isShaking 
+                                ? Colors.red.withOpacity(0.3) 
+                                : Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Drop Zone for Number
-                      DragTarget<int>(
-                        onAccept: (number) => _onNumberDropped(number, sentenceId),
-                        builder: (context, candidateData, rejectedData) {
-                          final isHovering = candidateData.isNotEmpty;
-                          final placedNumber = sentencePlacements[sentenceId];
+                      child: Row(
+                        children: [
+                          // Drop Zone for Number
+                          DragTarget<int>(
+                            onAccept: (number) => _onNumberDropped(number, sentenceId),
+                            builder: (context, candidateData, rejectedData) {
+                              final isHovering = candidateData.isNotEmpty;
+                              final placedNumber = sentencePlacements[sentenceId];
+                              
+                              return Container(
+                                width: boxSize,
+                                height: boxSize,
+                                decoration: BoxDecoration(
+                                  color: isLocked
+                                      ? Colors.green
+                                      : isHovering
+                                          ? const Color(0xFFE8D96F).withOpacity(0.5)
+                                          : Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isLocked
+                                        ? Colors.green
+                                        : isHovering
+                                            ? const Color(0xFFE8D96F)
+                                            : Colors.grey.shade400,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: placedNumber != null
+                                      ? Text(
+                                          placedNumber.toString(),
+                                          style: TextStyle(
+                                            fontSize: fontSize,
+                                            fontWeight: FontWeight.bold,
+                                            color: isLocked ? Colors.white : Colors.black,
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.add,
+                                          color: Colors.grey.shade400,
+                                          size: boxSize * 0.5,
+                                        ),
+                                ),
+                              );
+                            },
+                          ),
                           
-                          return Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: isLocked
-                                  ? Colors.green
-                                  : isHovering
-                                      ? const Color(0xFF00BCD4).withOpacity(0.3)
-                                      : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isLocked
-                                    ? Colors.green
-                                    : isHovering
-                                        ? const Color(0xFF00BCD4)
-                                        : Colors.grey.shade400,
-                                width: 2,
+                          const SizedBox(width: 12),
+                          
+                          // Sentence Text
+                          Expanded(
+                            child: Text(
+                              sentence['text'] ?? '',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: isLocked ? FontWeight.w600 : FontWeight.normal,
+                                color: isLocked ? Colors.green.shade900 : Colors.black,
                               ),
                             ),
-                            child: Center(
-                              child: placedNumber != null
-                                  ? Text(
-                                      placedNumber.toString(),
-                                      style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                        color: isLocked ? Colors.white : Colors.black,
-                                      ),
-                                    )
-                                  : Icon(
-                                      Icons.add,
-                                      color: Colors.grey.shade400,
-                                    ),
-                            ),
-                          );
-                        },
-                      ),
-                      
-                      const SizedBox(width: 12),
-                      
-                      // Sentence Text
-                      Expanded(
-                        child: Text(
-                          sentence['text'] ?? '',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: isLocked ? FontWeight.w600 : FontWeight.normal,
-                            color: isLocked ? Colors.green.shade900 : Colors.black,
                           ),
-                        ),
+                          
+                          // Check Icon for Locked
+                          if (isLocked)
+                            const Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                              size: 24,
+                            ),
+                        ],
                       ),
-                      
-                      // Check Icon for Locked
-                      if (isLocked)
-                        const Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 24,
-                        ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -408,29 +475,51 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
     );
   }
 
-  Widget _buildNumberBox(int number) {
+  Widget _buildNumberBox(int number, double boxSize, double fontSize) {
+    debugPrint('🔢 Building number box for: $number, size: $boxSize, fontSize: $fontSize');
+    
     return Container(
-      width: 50,
-      height: 50,
+      width: boxSize,
+      height: boxSize,
       decoration: BoxDecoration(
-        color: const Color(0xFF00BCD4),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white, width: 2),
+        gradient: LinearGradient(
+          colors: [Colors.orange.shade400, Colors.orange.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.black, width: 3),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Center(
-        child: Text(
-          number.toString(),
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+        child: OverflowBox(
+          minWidth: 0,
+          maxWidth: double.infinity,
+          minHeight: 0,
+          maxHeight: double.infinity,
+          child: Text(
+            number.toString(),
+            style: TextStyle(
+              fontSize: boxSize * 0.5,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              decoration: TextDecoration.none,
+              fontFamily: 'Roboto',
+              shadows: const [
+                Shadow(
+                  color: Colors.black,
+                  offset: Offset(2, 2),
+                  blurRadius: 3,
+                ),
+              ],
+            ),
+            textAlign: TextAlign.center,
           ),
         ),
       ),

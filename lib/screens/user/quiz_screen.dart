@@ -932,18 +932,23 @@ class _QuizScreenState extends State<QuizScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'Question ${_currentQuestionIndex + 1} of ${_questions.length}',
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  'Question ${_currentQuestionIndex + 1} of ${_questions.length}',
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -1048,6 +1053,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                   ? SizedBox(
                                       height: 700,
                                       child: SequenceBuilderWidget(
+                                        key: ValueKey('seq_${question['id']}'),
                                         questionData: question,
                                         onAnswerSubmitted: (score, isCorrect) {
                                           setState(() {
