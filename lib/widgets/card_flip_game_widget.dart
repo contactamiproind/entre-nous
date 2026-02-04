@@ -221,19 +221,20 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
           const SizedBox(height: 4),
           
           // Card Grid
-          Expanded(
-            child: GridView.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: gridSize.columns,
-                crossAxisSpacing: 6,
-                mainAxisSpacing: 6,
-                childAspectRatio: 1.0,
-              ),
-              itemCount: _cards.length,
-              itemBuilder: (context, index) {
-                return _buildCard(_cards[index]);
-              },
+          // Removed Expanded to allow fitting in content
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: gridSize.columns,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 1.0, // Square cards to allow more vertical space for text
             ),
+            itemCount: _cards.length,
+            itemBuilder: (context, index) {
+              return _buildCard(_cards[index]);
+            },
           ),
         ],
       ),
@@ -292,27 +293,37 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
     }
     
     return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Text(
-        card.content,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF1E293B),
+      padding: const EdgeInsets.all(4.0),
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              card.content,
+              textAlign: TextAlign.center,
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
   
   GridSize _calculateGridSize(int cardCount) {
-    // Calculate optimal grid dimensions
+    // Calculate optimal grid dimensions - prefer WIDER grids to save vertical space
     if (cardCount <= 4) return GridSize(2, 2);
-    if (cardCount <= 6) return GridSize(2, 3);
-    if (cardCount <= 8) return GridSize(2, 4);
-    if (cardCount <= 12) return GridSize(3, 4);
+    if (cardCount <= 6) return GridSize(3, 2); // Was 2,3 (tall) -> now 3,2 (wide)
+    if (cardCount <= 8) return GridSize(4, 2); // Was 2,4 (tall) -> now 4,2 (wide)
+    if (cardCount <= 12) return GridSize(4, 3); // Was 3,4 (tall) -> now 4,3 (wide)
     if (cardCount <= 16) return GridSize(4, 4);
-    return GridSize(4, 5);
+    return GridSize(5, 4); // Was 4,5 -> now 5,4
   }
 }
 

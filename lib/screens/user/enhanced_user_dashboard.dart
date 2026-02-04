@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../utils/stable_random.dart';
 import '../../models/pathway.dart';
 import '../../models/user_assignment.dart';
 import '../../services/pathway_service.dart';
@@ -7,6 +9,7 @@ import '../../services/assignment_service.dart';
 import '../../services/progress_service.dart';
 import 'profile_actions_screen.dart';
 import 'pathway_detail_screen.dart';
+import '../end_game/end_game_screen.dart';
 import 'quiz_screen.dart';
 
 class EnhancedUserDashboard extends StatefulWidget {
@@ -203,12 +206,56 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
           continue;
         }
         final usrDeptId = usrDeptData['id'];
-        final questionsData = await Supabase.instance.client.from('questions').select('id').eq('dept_id', deptId).order('created_at');
-        final totalQuestions = questionsData.length;
+        final questionsDataRaw = await Supabase.instance.client.from('questions').select('id').eq('dept_id', deptId).order('created_at').order('id', ascending: true); // Deterministic order
+        
+        // --- DUPLICATE SHUFFLE LOGIC FROM QUIZ_SCREEN ---
+        // This is critical to ensure the index matches what the user sees in the quiz
+        // Using StableRandom to ensure consistency across Web and Mobile
+        
+        final String seedString = '${_userId}_${deptId}';
+        final int seed = StableRandom.getStableHash(seedString);
+        
+        final stableRandom = StableRandom(seed);
+        final List<dynamic> questionsData = List.from(questionsDataRaw);
+        stableRandom.shuffle(questionsData);
+        // ------------------------------------------------
+        
+        // --- DYNAMIC REORDERING (MATCHING QUIZ SCREEN) ---
+        // We must apply the exact same "Answered First" logic here
+        // The progressData fetch above needs to be used for this sort
+        
         final progressData = await Supabase.instance.client.from('usr_progress').select('question_id, status').eq('usr_dept_id', usrDeptId).order('created_at');
+        
+        final Set<String> answeredQuestionIds = progressData
+            .where((p) => p['status'] == 'answered')
+            .map((p) => p['question_id'].toString())
+            .toSet();
+
+        final List<dynamic> answeredQuestions = [];
+        final List<dynamic> unansweredQuestions = [];
+
+        for (var q in questionsData) {
+          if (answeredQuestionIds.contains(q['id'].toString())) {
+            answeredQuestions.add(q);
+          } else {
+            unansweredQuestions.add(q);
+          }
+        }
+        
+        // Re-construct the list in-place to match Quiz Screen order
+        questionsData.clear();
+        questionsData.addAll(answeredQuestions);
+        questionsData.addAll(unansweredQuestions);
+        // ------------------------------------------------
+        
+        final totalQuestions = questionsData.length;
+        // Re-fetch or reuse progress data is fine, logic below iterates the *sorted* list
+        
         int answeredCount = 0;
         int firstUnansweredIndex = 0;
         bool foundUnanswered = false;
+        
+        // Iterate through REORDERED questions
         for (int i = 0; i < questionsData.length; i++) {
           final questionId = questionsData[i]['id'];
           final progress = progressData.firstWhere((p) => p['question_id'] == questionId, orElse: () => {'status': 'pending'});
@@ -222,7 +269,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
         if (!foundUnanswered && totalQuestions > 0) firstUnansweredIndex = 0;
         final progressPercentage = totalQuestions > 0 ? answeredCount / totalQuestions : 0.0;
         _categoryProgress[category] = {'total': totalQuestions, 'answered': answeredCount, 'firstUnansweredIndex': firstUnansweredIndex, 'progress': progressPercentage};
-        debugPrint('📊 $category Progress: $answeredCount/$totalQuestions (${(progressPercentage * 100).toStringAsFixed(0)}%), First unanswered: $firstUnansweredIndex');
+        debugPrint('📊 $category Progress: $answeredCount/$totalQuestions (${(progressPercentage * 100).toStringAsFixed(0)}%), First unanswered shuffled index: $firstUnansweredIndex');
       }
       if (mounted) setState(() {});
     } catch (e) {
@@ -447,17 +494,29 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
 
             const SizedBox(height: 20),
             // Stats Grid
-            Padding(
+                  Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 children: [
                   Row(
                     children: [
                       Expanded(
-                        child: _buildStatCard(
-                          'QUIZ COMPLETED',
-                          '${_userProgress?['completed_assignments'] ?? 0}',
-                          Colors.blue,
+                        child: Builder(
+                          builder: (context) {
+                            // Calculate completed categories dynamically
+                            int completedCount = 0;
+                            _categoryProgress.forEach((_, value) {
+                              if ((value['progress'] ?? 0.0) >= 1.0) {
+                                completedCount++;
+                              }
+                            });
+                            
+                            return _buildStatCard(
+                              'QUIZ COMPLETED',
+                              '$completedCount',
+                              Colors.blue,
+                            );
+                          }
                         ),
                       ),
                       const SizedBox(width: 15),
@@ -508,7 +567,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Orientation Category
+                    // Orientation Category
                   _buildCategoryCard(
                     category: 'Orientation',
                     icon: Icons.school_rounded,
@@ -516,7 +575,19 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                     description: 'Get started with the basics',
                     progress: _categoryProgress['Orientation']?['progress'] ?? 0.0,
                     isLocked: false,
+                    isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0,
                     onTap: () async {
+                      // Prevent retake if completed
+                      if ((_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('You have already completed the Orientation category!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                        return;
+                      }
+
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -552,8 +623,21 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                     color: const Color(0xFF3B82F6), // Blue
                     description: 'Standard workflows and procedures',
                     progress: _categoryProgress['Process']?['progress'] ?? 0.0,
-                    isLocked: true,
+                    // Unlock if Orientation is complete OR if Process itself is already complete (grandfathered)
+                    isLocked: (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0 && (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0,
+                    isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0, 
                     onTap: () async {
+                      // Prevent retake if completed
+                      if ((_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('You have already completed the Process category!'),
+                             backgroundColor: Colors.green,
+                          ),
+                        );
+                        return;
+                      }
+
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -589,8 +673,21 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                     color: const Color(0xFF10B981), // Green
                     description: 'Standard Operating Procedures',
                     progress: _categoryProgress['SOP']?['progress'] ?? 0.0,
-                    isLocked: true,
+                    // Unlock if Predecessors complete OR SOP itself is complete
+                    isLocked: ((_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0 || (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0) && (_categoryProgress['SOP']?['progress'] ?? 0.0) < 1.0,
+                    isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['SOP']?['progress'] ?? 0.0) < 1.0,
                     onTap: () async {
+                      // Prevent retake if completed
+                      if ((_categoryProgress['SOP']?['progress'] ?? 0.0) >= 1.0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('You have already completed the SOP category!'),
+                             backgroundColor: Colors.green,
+                          ),
+                        );
+                        return;
+                      }
+
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -616,6 +713,28 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                             if (mounted) _loadData();
                           }
                         : null,
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // End Game Category
+                  _buildCategoryCard(
+                    category: 'End Game',
+                    icon: Icons.games_rounded,
+                    color: const Color(0xFF8B5CF6), // Purple
+                    description: 'Final Verification Challenge',
+                    progress: 0.0,
+                    // Always unlocked as requested
+                    isLocked: false,
+                    isCurrent: false, 
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const EndGameScreen(),
+                        ),
+                      );
+                    },
+                    onContinue: null,
                   ),
                 ],
               ),
@@ -743,6 +862,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     required String description,
     required double progress,
     required bool isLocked,
+    bool isCurrent = false,
     required VoidCallback onTap,
     VoidCallback? onContinue,
     List<Map<String, String>>? subcategories,
@@ -795,15 +915,36 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                       children: [
                         Row(
                           children: [
-                            Text(
-                              category.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.black,
-                                letterSpacing: 0.5,
+                            Flexible(
+                              child: Text(
+                                category.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.black,
+                                  letterSpacing: 0.5,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            if (isCurrent) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF4EF8B),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'CURRENT',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                            ],
                             if (isLocked) ...[
                               const SizedBox(width: 8),
                               Icon(
@@ -1070,7 +1211,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               color: const Color(0xFF8B5CF6),
               progress: _categoryProgress['Orientation']?['progress'] ?? 0.0,
               isLocked: false,
-              isCurrent: true,
+              isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0,
             ),
             const SizedBox(height: 16),
             
@@ -1081,8 +1222,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               icon: Icons.settings_rounded,
               color: const Color(0xFF3B82F6),
               progress: _categoryProgress['Process']?['progress'] ?? 0.0,
-              isLocked: true,
-              isCurrent: false,
+              isLocked: (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0,
+              isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0,
             ),
             const SizedBox(height: 16),
             
@@ -1093,8 +1234,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               icon: Icons.description_rounded,
               color: const Color(0xFF10B981),
               progress: _categoryProgress['SOP']?['progress'] ?? 0.0,
-              isLocked: true,
-              isCurrent: false,
+              isLocked: (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0,
+              isCurrent: (_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['SOP']?['progress'] ?? 0.0) < 1.0,
             ),
           ],
         ),
@@ -1122,6 +1263,18 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
       ),
       child: InkWell(
         onTap: isLocked ? null : () async {
+          // Check if category is already completed
+          if (progress >= 1.0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('You have already completed the $category category!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            return;
+          }
+
+          // Navigate to quiz for this category
           // Navigate to quiz for this category
           await Navigator.push(
             context,
@@ -1164,12 +1317,15 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                       children: [
                         Row(
                           children: [
-                            Text(
-                              subcategory != null ? '$category - $subcategory' : category,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: isLocked ? Colors.grey.shade600 : const Color(0xFF1E293B),
+                            Flexible(
+                              child: Text(
+                                subcategory != null ? '$category - $subcategory' : category,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: isLocked ? Colors.grey.shade600 : const Color(0xFF1E293B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             if (isCurrent) ...[
@@ -1739,16 +1895,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             }
           },
         ),
-        _buildProfileOption(
-          icon: Icons.notifications_outlined,
-          title: 'Notifications',
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-            );
-          },
-        ),
+
         _buildProfileOption(
           icon: Icons.settings_outlined,
           title: 'Settings',

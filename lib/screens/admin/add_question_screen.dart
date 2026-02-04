@@ -590,11 +590,12 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFFF4EF8B), // Set yellow background for continuity
       appBar: AppBar(
         title: const Text('Add New Question'),
         backgroundColor: const Color(0xFFF4EF8B),
         foregroundColor: Colors.black,
+        elevation: 0,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -620,10 +621,12 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                             // Pathway Selection
                             DropdownButtonFormField<Pathway>(
                               isExpanded: true,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Select Pathway',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.route),
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.route),
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.6),
                               ),
                               value: _selectedPathway,
                               items: _pathways.map((pathway) {
@@ -656,10 +659,12 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                       : _levels.isNotEmpty 
                                           ? DropdownButtonFormField<PathwayLevel>(
                                               isExpanded: true,
-                                              decoration: const InputDecoration(
+                                              decoration: InputDecoration(
                                                 labelText: 'Select Level',
-                                                border: OutlineInputBorder(),
-                                                prefixIcon: Icon(Icons.layers),
+                                                border: const OutlineInputBorder(),
+                                                prefixIcon: const Icon(Icons.layers),
+                                                filled: true,
+                                                fillColor: Colors.white.withOpacity(0.6),
                                               ),
                                               value: _selectedLevel,
                                               hint: const Text('Tap to select level'),
@@ -688,11 +693,11 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                             // Question Type Dropdown
                             DropdownButtonFormField<String>(
                               isExpanded: true,
-                              decoration: const InputDecoration(
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.quiz),
+                              decoration: InputDecoration(
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.quiz),
                                 filled: true,
-                                fillColor: Colors.white,
+                                fillColor: Colors.white.withOpacity(0.6), // Consistent translucency
                               ),
                               value: _questionType,
                               hint: const Text('Question Type'),
@@ -755,10 +760,12 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                             // Title (for all question types)
                             TextFormField(
                               controller: _titleController,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Title',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.title),
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.title),
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.6),
                               ),
                               maxLines: _questionType == 'sequence_builder' ? 1 : null,
                               validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
@@ -768,10 +775,12 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                             // Description (for all question types)
                             TextFormField(
                               controller: _descriptionController,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Description',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.description),
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.description),
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.6),
                               ),
                               maxLines: _questionType == 'sequence_builder' ? 1 : 3,
                               validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,

@@ -198,13 +198,15 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
         
         // Cards
         ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 400),
+          constraints: const BoxConstraints(maxHeight: 700),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: GridView.builder(
+              physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: true,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                childAspectRatio: 2,
+                childAspectRatio: 0.8, // Tall cards
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
@@ -348,17 +350,24 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
           borderRadius: BorderRadius.circular(12),
           child: Container(
             width: 150,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE8D96F), width: 2),
             ),
-            child: Text(
-              card['text'],
-              style: const TextStyle(fontSize: 14),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 140),
+                child: Text(
+                  card['text'],
+                  style: const TextStyle(fontSize: 12),
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ),
           ),
         ),
@@ -373,7 +382,7 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
 
   Widget _buildCardContent(Map<String, dynamic> card, {bool isShaking = false}) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -390,15 +399,21 @@ class _CardMatchQuestionWidgetState extends State<CardMatchQuestionWidget> with 
         ],
       ),
       child: Center(
-        child: Text(
-          card['text'],
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: Text(
+              card['text'],
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 6,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          textAlign: TextAlign.center,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

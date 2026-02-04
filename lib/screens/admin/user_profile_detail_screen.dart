@@ -216,6 +216,274 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     }
   }
 
+  Future<void> _resetPathwayProgress(Map<String, dynamic> assignment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Pathway Progress'),
+        content: Text(
+          'Are you sure you want to reset progress for "${assignment['departments']?['title'] ?? 'this pathway'}"? \n\nThis will clear all answers and set the level back to 1.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        // Delete from usr_progress
+        await Supabase.instance.client
+            .from('usr_progress')
+            .delete()
+            .eq('usr_dept_id', assignment['id']); // Assuming 'id' is usr_dept primary key
+
+        // Update usr_dept
+        await Supabase.instance.client
+            .from('usr_dept')
+            .update({
+              'current_level': 1,
+              'completed_levels': 0,
+              // 'updated_at': DateTime.now().toIso8601String(), // Trigger should handle this
+            })
+            .eq('id', assignment['id']);
+
+        // Cascade Reset Logic
+        final title = assignment['departments']?['title'];
+        if (title != null) {
+          final downstreamTitles = <String>[];
+          if (title == 'Orientation') {
+            downstreamTitles.addAll(['Process', 'SOP', 'End Game']);
+          } else if (title == 'Process') {
+            downstreamTitles.addAll(['SOP', 'End Game']);
+          } else if (title == 'SOP') {
+             downstreamTitles.add('End Game');
+          }
+
+          if (downstreamTitles.isNotEmpty) {
+             // Find assignments for downstream titles
+             for (var downstreamTitle in downstreamTitles) {
+               final downstreamAssignment = _pathwayAssignments.firstWhere(
+                 (a) => a['departments']?['title'] == downstreamTitle,
+                 orElse: () => {},
+               );
+               
+               if (downstreamAssignment.isNotEmpty) {
+                  // Reset downstream progress
+                  await Supabase.instance.client
+                      .from('usr_progress')
+                      .delete()
+                      .eq('usr_dept_id', downstreamAssignment['id']);
+                  
+                  await Supabase.instance.client
+                      .from('usr_dept')
+                      .update({
+                        'current_level': 1,
+                        'completed_levels': 0,
+                      })
+                      .eq('id', downstreamAssignment['id']);
+               }
+             }
+          }
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pathway progress reset successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+
+        _loadUserData();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _reassignPathway(Map<String, dynamic> currentAssignment) async {
+    // Show ALL pathways (except SYSTEM_CONFIG) so user can re-assign/reset any of them
+    final targetPathways = _availablePathways
+        .where((p) => p['title'] != 'SYSTEM_CONFIG') // Only exclude System Config
+        .toList();
+
+    if (targetPathways.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No pathways available')),
+      );
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reassign Pathway'),
+        content: SizedBox(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Select pathway to assign and reset:'),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 300,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: targetPathways.length,
+                  itemBuilder: (dialogContext, index) { // Using dialogContext here too or just context is fine if not used
+                    final pathway = targetPathways[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        title: Text(
+                          pathway['title'] ?? 'Unknown',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          pathway['description'] ?? '',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                        ),
+                        trailing: IconButton(
+                        icon: const Icon(Icons.swap_horiz, color: Colors.blue),
+                        onPressed: () async {
+                           // Confirm Reassign
+                           final confirmReassign = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Confirm Assign'),
+                                content: Text('Are you sure you want to assign "${pathway['title']}"? \n\nExisting progress for this pathway will be reset.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Assign'),
+                                  ),
+                                ],
+                              )
+                           );
+
+                           if (confirmReassign == true) {
+                             if (context.mounted) Navigator.pop(dialogContext); // Close selection list
+                             
+                             // EXECUTE REASSIGN
+                             try {
+                                final adminId = Supabase.instance.client.auth.currentUser?.id;
+                                
+                                // 0. Check if assignment already exists
+                                final existingAssignment = await Supabase.instance.client
+                                    .from('usr_dept')
+                                    .select('id')
+                                    .eq('user_id', widget.userId)
+                                    .eq('dept_id', pathway['id'])
+                                    .maybeSingle();
+
+                                if (existingAssignment == null) {
+                                  // 1. Assign new pathway if not exists
+                                  await Supabase.instance.client.rpc(
+                                    'assign_pathway_with_questions',
+                                    params: {
+                                      'p_user_id': widget.userId,
+                                      'p_dept_id': pathway['id'],
+                                      'p_assigned_by': adminId,
+                                    },
+                                  );
+                                }
+                                
+                                // 3. Find and Reset the NEW assignment so user can solve it again
+                                final newAssignmentRes = await Supabase.instance.client
+                                    .from('usr_dept')
+                                    .select('id')
+                                    .eq('user_id', widget.userId)
+                                    .eq('dept_id', pathway['id'])
+                                    .maybeSingle();
+
+                                if (newAssignmentRes != null) {
+                                   final newId = newAssignmentRes['id'];
+                                   
+                                   // Reset progress for this new assignment
+                                   await Supabase.instance.client
+                                      .from('usr_progress')
+                                      .delete()
+                                      .eq('usr_dept_id', newId);
+                                    
+                                   await Supabase.instance.client
+                                      .from('usr_dept')
+                                      .update({
+                                        'current_level': 1,
+                                        'completed_levels': 0,
+                                        'is_current': true // Ensure it is active
+                                      })
+                                      .eq('id', newId);
+                                }
+                                
+                                // 3. Ensure new is set to active (just to be safe if RPC doesn't force it)
+                                // We might need to find the new assignment ID first, but usually RPC handles it.
+                                // For now, let's assume RPC does its job or we refresh.
+
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Pathway "${pathway['title']}" assigned and reset successfully!'),
+                                      backgroundColor: Colors.green,
+                                      duration: const Duration(seconds: 3),
+                                    ),
+                                  );
+                                  _loadUserData();
+                                }
+                             } catch (e) {
+                               debugPrint('Reassign error: $e');
+                               if (mounted) {
+                                 ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Reassign failed: $e'), backgroundColor: Colors.red),
+                                 );
+                               }
+                             }
+                           }
+                        },
+                      ),
+                    ),
+                  );
+                },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAssignPathwayDialog() {
     // Get departments not yet assigned
     debugPrint('Total pathways available: ${_availablePathways.length}');
@@ -225,7 +493,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     debugPrint('Assigned dept IDs: $assignedDeptIds');
     
     final unassignedPathways = _availablePathways
-        .where((p) => !assignedDeptIds.contains(p['id']))
+        .where((p) => !assignedDeptIds.contains(p['id']) && p['title'] != 'SYSTEM_CONFIG')
         .toList();
     
     debugPrint('Unassigned pathways: ${unassignedPathways.length}');
@@ -343,12 +611,15 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Pathway Assignments',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1A2F4B),
+                                const Expanded(
+                                  child: Text(
+                                    'Pathway Assignments',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1A2F4B),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 IconButton(
@@ -378,33 +649,112 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                             else
                               ..._pathwayAssignments.map((assignment) {
                                 final pathway = assignment['departments'];
-                                return ListTile(
-                                  leading: Icon(
-                                    Icons.school_rounded,
-                                    color: assignment['is_current'] == true
-                                        ? Colors.green
-                                        : Colors.grey,
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  title: Text(pathway?['title'] ?? 'Unknown'),
-                                  subtitle: Text(
-                                    assignment['is_current'] == true
-                                        ? 'Current Pathway'
-                                        : 'Assigned',
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                  child: Column(
                                     children: [
-                                      if (assignment['is_current'] == true)
-                                        const Chip(
-                                          label: Text('ACTIVE'),
-                                          backgroundColor: Colors.green,
-                                          labelStyle: TextStyle(color: Colors.white),
+                                      // Top Row: Icon + Title + Active Status
+                                      Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.school_rounded,
+                                              color: assignment['is_current'] == true
+                                                  ? Colors.green
+                                                  : Colors.grey,
+                                              size: 28,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    pathway?['title'] ?? 'Unknown',
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    assignment['is_current'] == true
+                                                        ? 'Current Pathway'
+                                                        : 'Assigned',
+                                                    style: TextStyle(
+                                                      color: Colors.grey[600],
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            if (assignment['is_current'] == true)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                  border: Border.all(color: Colors.green),
+                                                ),
+                                                child: const Text(
+                                                  'ACTIVE',
+                                                  style: TextStyle(
+                                                    color: Colors.green, 
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
                                         ),
-                                      const SizedBox(width: 8),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () => _deletePathway(assignment),
-                                        tooltip: 'Remove Pathway',
+                                      ),
+                                      const Divider(height: 1),
+                                      // Bottom Row: Actions
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                        child: Wrap(
+                                          alignment: WrapAlignment.end,
+                                          spacing: 8,
+                                          runSpacing: 4,
+                                          children: [
+                                            // Reset Button
+                                            OutlinedButton.icon(
+                                              icon: const Icon(Icons.restart_alt, size: 16, color: Colors.orange),
+                                              label: const Text('Reset', style: TextStyle(color: Colors.orange, fontSize: 12)),
+                                              onPressed: () => _resetPathwayProgress(assignment),
+                                              style: OutlinedButton.styleFrom(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                side: const BorderSide(color: Colors.orange),
+                                              ),
+                                            ),
+                                            // Reassign Button
+                                            OutlinedButton.icon(
+                                              icon: const Icon(Icons.swap_horiz, size: 16, color: Colors.blue),
+                                              label: const Text('Reassign', style: TextStyle(color: Colors.blue, fontSize: 12)),
+                                              onPressed: () => _reassignPathway(assignment),
+                                              style: OutlinedButton.styleFrom(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                side: const BorderSide(color: Colors.blue),
+                                              ),
+                                            ),
+                                            // Delete Button
+                                            IconButton(
+                                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                              onPressed: () => _deletePathway(assignment),
+                                              tooltip: 'Remove Pathway',
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(),
+                                              style: IconButton.styleFrom(
+                                                padding: const EdgeInsets.all(8),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -503,13 +853,68 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
   }
 
   Widget _buildInfoRow(String label, String value) {
+    if (label == 'User ID') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 100,
+              child: Text(
+                '$label:',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A2F4B),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        value,
+                        style: const TextStyle(
+                          color: Colors.black87, 
+                          fontFamily: 'monospace',
+                          fontSize: 12
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () {
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           const SnackBar(content: Text('User ID copied to clipboard')), // Placeholder logic
+                         );
+                      },
+                      child: const Icon(Icons.copy, size: 14, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 150,
+            width: 100,
             child: Text(
               '$label:',
               style: const TextStyle(

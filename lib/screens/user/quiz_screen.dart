@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +11,7 @@ import '../../widgets/card_flip_game_widget.dart';
 import '../../widgets/sequence_builder_widget.dart';
 import '../../widgets/budget_allocation_widget.dart';
 import 'package:audioplayers/audioplayers.dart';
+import '../../utils/stable_random.dart';
 
 class QuizScreen extends StatefulWidget {
   final String category; // 'Orientation', 'Process', or 'SOP'
@@ -49,8 +51,12 @@ class _QuizScreenState extends State<QuizScreen> {
   // Timer variables
   Timer? _questionTimer;
   int _remainingSeconds = 30;
-  static const int _questionTimeLimit = 30; // 30 seconds per question
+  int _questionTimeLimit = 30; // Default 30, loaded from DB
   int _questionStartTime = 30; // Track time when question started
+  
+  // Scoring thresholds
+  double _fullPointsThreshold = 0.5;
+  double _halfPointsThreshold = 0.75;
   
   // Attempt tracking
   int _currentAttempt = 1;
@@ -220,12 +226,12 @@ class _QuizScreenState extends State<QuizScreen> {
     final timePercentage = timeUsed / _questionStartTime;
     
     // Time-based scoring:
-    // < 50% time used: Full points (100)
-    // 50-75% time used: Half points (50)
-    // > 75% time used: Quarter points (25)
-    if (timePercentage < 0.5) {
+    // < fullPointsThreshold: Full points (100)
+    // < halfPointsThreshold: Half points (50)
+    // > halfPointsThreshold: Quarter points (25)
+    if (timePercentage < _fullPointsThreshold) {
       return 100; // Fast answer - full points
-    } else if (timePercentage < 0.75) {
+    } else if (timePercentage < _halfPointsThreshold) {
       return 50; // Moderate speed - half points
     } else {
       return 25; // Slow answer - quarter points
@@ -251,9 +257,9 @@ class _QuizScreenState extends State<QuizScreen> {
         
         // Calculate points based on time used
         int points;
-        if (timePercentage < 0.5) {
+        if (timePercentage < _fullPointsThreshold) {
           points = 100; // Fast answer - full points
-        } else if (timePercentage < 0.75) {
+        } else if (timePercentage < _halfPointsThreshold) {
           points = 50; // Moderate speed - half points
         } else {
           points = 25; // Slow answer - quarter points
@@ -345,6 +351,7 @@ class _QuizScreenState extends State<QuizScreen> {
     required bool isCorrect,
     required Map<String, dynamic> userAnswer,
     required int pointsEarned,
+    String status = 'answered',
   }) async {
     try {
       // Get or create usr_dept record
@@ -381,7 +388,7 @@ class _QuizScreenState extends State<QuizScreen> {
         'category': widget.category,
         'subcategory': widget.subcategory,
         'points': question['points'] ?? 10,
-        'status': 'answered',
+        'status': status,
         'user_answer': userAnswer.toString(),
         'is_correct': isCorrect,
         'score_earned': pointsEarned,
@@ -397,7 +404,49 @@ class _QuizScreenState extends State<QuizScreen> {
       debugPrint('💾 Saved progress for question $questionIndex: ${isCorrect ? "✅ Correct" : "❌ Wrong"} ($pointsEarned points)');
     } catch (e) {
       debugPrint('❌ Error saving question progress: $e');
-      // Don't throw - progress saving failure shouldn't block quiz completion
+    }
+  }
+
+  // Load the attempt count for the current question from DB
+  Future<void> _loadCurrentQuestionAttempt() async {
+    if (_questions.isEmpty || _currentQuestionIndex >= _questions.length) return;
+    
+    try {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user == null) return;
+        
+        final questionId = _questions[_currentQuestionIndex]['id'];
+        final usrDeptId = await _getOrCreateUsrDept();
+        
+        if (usrDeptId == null) return;
+        
+        final data = await Supabase.instance.client
+            .from('usr_progress')
+            .select('attempt_count, status')
+            .eq('usr_dept_id', usrDeptId)
+            .eq('question_id', questionId)
+            .maybeSingle();
+            
+        if (data != null) {
+          int savedAttempts = data['attempt_count'] ?? 1;
+          debugPrint('🔄 Loaded attempt count for Q$questionId: $savedAttempts (Status: ${data['status']})');
+          
+          if (mounted) {
+            setState(() {
+              // If we loaded a valid attempt count, use it.
+              // If the status is 'pending', it means we are in the middle of that attempt? 
+              // Or does 'attempt_count' store the COMPLETED attempts?
+              // Let's assume attempt_count stores "attempts MADE/USED".
+              // So if DB says 1, we are starting attempt 2.
+              _currentAttempt = savedAttempts + 1;
+            });
+          }
+        } else {
+           debugPrint('🆕 No previous progress for Q$questionId. Starting Attempt 1.');
+           if (mounted) setState(() => _currentAttempt = 1);
+        }
+    } catch (e) {
+      debugPrint('Error loading attempt count: $e');
     }
   }
 
@@ -407,6 +456,60 @@ class _QuizScreenState extends State<QuizScreen> {
       // Get current user
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception('Not logged in');
+      
+      // Load global quiz settings
+      try {
+        debugPrint('🔍 Fetching SYSTEM_CONFIG...');
+        final settingsResponse = await Supabase.instance.client
+            .from('departments')
+            .select('levels')
+            .eq('title', 'SYSTEM_CONFIG')
+            .limit(1)
+            .maybeSingle();
+            
+        debugPrint('📦 Settings Response: $settingsResponse');
+
+        if (settingsResponse != null && settingsResponse['levels'] != null) {
+          final levelsList = settingsResponse['levels'] as List;
+          if (levelsList.isNotEmpty) {
+            final settings = levelsList[0];
+            debugPrint('⚙️ Parsed Settings: $settings');
+            
+            if (mounted) {
+              setState(() {
+                if (settings['timer_seconds'] != null) {
+                  // Robust parsing: handle String or Int
+                  final val = settings['timer_seconds'];
+                  final parsed = val is int ? val : int.tryParse(val.toString()) ?? 30;
+                  
+                  _questionTimeLimit = parsed;
+                  _remainingSeconds = _questionTimeLimit;
+                  _questionStartTime = _questionTimeLimit;
+                  debugPrint('⏱️ SET Timer to: $_questionTimeLimit seconds');
+                }
+                
+                if (settings['full_points_threshold'] != null) {
+                   final val = settings['full_points_threshold'];
+                   _fullPointsThreshold = (val is num ? val : double.tryParse(val.toString()) ?? 0.5).toDouble();
+                }
+                
+                if (settings['half_points_threshold'] != null) {
+                   final val = settings['half_points_threshold'];
+                   _halfPointsThreshold = (val is num ? val : double.tryParse(val.toString()) ?? 0.75).toDouble();
+                }
+              });
+              
+            }
+          } else {
+             debugPrint('⚠️ SYSTEM_CONFIG levels list is empty');
+          }
+        } else {
+           debugPrint('⚠️ SYSTEM_CONFIG not found or levels null');
+        }
+      } catch (e) {
+        debugPrint('❌ Error loading settings (using defaults): $e');
+      }
+
       
       debugPrint('🔍 Loading questions for category: ${widget.category}');
       if (widget.subcategory != null) {
@@ -436,14 +539,86 @@ class _QuizScreenState extends State<QuizScreen> {
           .from('questions')
           .select('id, title, description, options, correct_answer, type_id, difficulty, points, dept_id')
           .eq('dept_id', deptId)
-          .order('created_at');
+          .eq('dept_id', deptId)
+          .order('created_at')
+          .order('id', ascending: true); // Deterministic sort before shuffle
       
       debugPrint('📊 Found ${questionsData.length} questions for this department');
+
+
+
+      // Create a specific random seed based on User ID and Department ID
+      // This ensures different users get different orders, but the same user always gets the SAME order
+      // (Critical for 'Resume Quiz' functionality)
+      // We use our custom StableRandom to ensure consistency across Web and Mobile
+      
+      // Use department ID string format to be safe
+      final String seedString = '${user.id}_$deptId';
+      final int seed = StableRandom.getStableHash(seedString);
+      
+      final stableRandom = StableRandom(seed);
+      
+      // Create a mutable copy and shuffle it randomly but consistently
+      final List<dynamic> questionsList = List.from(questionsData);
+      stableRandom.shuffle(questionsList);
+      
+      debugPrint('🔀 Randomized question order with seed: $seed (String: $seedString)');
+
+      // --- DYNAMIC REORDERING FOR VISUAL PROGRESS CONSISTENCY ---
+      // Fetch user progress to identify which questions are already answered
+      try {
+        // Get usr_dept_id
+        final usrDeptData = await Supabase.instance.client
+            .from('usr_dept')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('dept_id', deptId)
+            .maybeSingle();
+
+        if (usrDeptData != null) {
+          final usrDeptId = usrDeptData['id'];
+          // Get all answered question IDs for this user & department
+          final progressData = await Supabase.instance.client
+              .from('usr_progress')
+              .select('question_id, status')
+              .eq('usr_dept_id', usrDeptId)
+              .eq('status', 'answered'); // Only care about fully answered ones
+
+          final Set<String> answeredQuestionIds = progressData
+              .map((p) => p['question_id'].toString())
+              .toSet();
+
+          debugPrint('📋 Found ${answeredQuestionIds.length} answered questions. Reordering...');
+
+          // Partition the shuffled list
+          final List<dynamic> answeredQuestions = [];
+          final List<dynamic> unansweredQuestions = [];
+
+          for (var q in questionsList) {
+            if (answeredQuestionIds.contains(q['id'].toString())) {
+              answeredQuestions.add(q);
+            } else {
+              unansweredQuestions.add(q);
+            }
+          }
+
+          // Merge: Answered FIRST, then Unanswered
+          // Ideally, we keep the relative shuffled order within each group
+          questionsList.clear();
+          questionsList.addAll(answeredQuestions);
+          questionsList.addAll(unansweredQuestions);
+          
+          debugPrint('✅ Reordered: ${answeredQuestions.length} answered | ${unansweredQuestions.length} unanswered');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error fetching progress for reordering (skipping sort): $e');
+      }
+      // -----------------------------------------------------------
 
       List<Map<String, dynamic>> questions = [];
       
       // Process each question from the database
-      for (var questionData in questionsData) {
+      for (var questionData in questionsList) {
         
         // Infer question type from title AND options structure
         String inferredType = 'multiple_choice'; // Default type
@@ -555,7 +730,7 @@ class _QuizScreenState extends State<QuizScreen> {
       
       // Start timer for current question (may not be first if resuming)
       if (questions.isNotEmpty) {
-        _startQuestionTimer();
+        _loadCurrentQuestionAttempt().then((_) => _startQuestionTimer());
       }
     } catch (e) {
       debugPrint('❌ Error loading questions: $e');
@@ -889,22 +1064,38 @@ class _QuizScreenState extends State<QuizScreen> {
             children: [
               // Custom AppBar
               Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
                     IconButton(
                       icon: const Icon(Icons.arrow_back, color: Colors.black),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
-                    Expanded(
-                      child: Text(
-                        widget.subcategory != null 
-                            ? '${widget.category} - ${widget.subcategory}'
-                            : widget.category,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                          fontSize: 18,
+                    Text(
+                      widget.subcategory != null 
+                          ? '${widget.category} - ${widget.subcategory}'
+                          : widget.category,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const Spacer(),
+                    // Small Progress Bar
+                    Container(
+                      width: 80, 
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (_currentQuestionIndex + 1) / _questions.length,
+                          color: const Color(0xFFFBBF24), // Yellow
+                          backgroundColor: Colors.transparent,
                         ),
                       ),
                     ),
@@ -914,19 +1105,11 @@ class _QuizScreenState extends State<QuizScreen> {
               // Main content
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Progress Bar
-                      LinearProgressIndicator(
-                        value: (_currentQuestionIndex + 1) / _questions.length,
-                        color: const Color(0xFFFBBF24), // Yellow
-                        backgroundColor: Colors.white.withOpacity(0.3),
-                        minHeight: 12,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      const SizedBox(height: 24),
+                      // Progress Bar moved to header
                       
                       // Question Counter and Timer
                       Row(
@@ -1050,9 +1233,7 @@ class _QuizScreenState extends State<QuizScreen> {
                       Expanded(
                         child: SingleChildScrollView(
                           child: questionType == 'sequence_builder'
-                                  ? SizedBox(
-                                      height: 700,
-                                      child: SequenceBuilderWidget(
+                                      ? SequenceBuilderWidget(
                                         key: ValueKey('seq_${question['id']}'),
                                         questionData: question,
                                         onAnswerSubmitted: (score, isCorrect) {
@@ -1062,8 +1243,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                             _answeredCorrectly[_currentQuestionIndex] = isCorrect;
                                           });
                                         },
-                                      ),
-                                    )
+                                      )
                                   : questionType == 'card_match'
                                   ? _isFlipCardGame(question)
                                       ? SizedBox(
@@ -1232,7 +1412,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                                     _currentAttempt = 1;
                                                     _isCardGameComplete = false; // Reset for next question
                                                   });
-                                                  _startQuestionTimer();
+                                                  _loadCurrentQuestionAttempt().then((_) => _startQuestionTimer());
                                                 } else {
                                                   _submitQuiz();
                                                 }
@@ -1290,7 +1470,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                                     _currentAttempt = 1;
                                                     _isCardGameComplete = false; // Reset for next question
                                                   });
-                                                  _startQuestionTimer();
+                                                  _loadCurrentQuestionAttempt().then((_) => _startQuestionTimer());
                                                 } else {
                                                   _submitQuiz();
                                                 }
@@ -1348,7 +1528,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                                     _currentAttempt = 1;
                                                     _isCardGameComplete = false; // Reset for next question
                                                   });
-                                                  _startQuestionTimer();
+                                                  _loadCurrentQuestionAttempt().then((_) => _startQuestionTimer());
                                                 } else {
                                                   _submitQuiz();
                                                 }
@@ -1419,7 +1599,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                                     _currentQuestionIndex++;
                                                     _currentAttempt = 1;
                                                   });
-                                                  _startQuestionTimer();
+                                                  _loadCurrentQuestionAttempt().then((_) => _startQuestionTimer());
                                                 } else {
                                                   // Quiz complete
                                                   _submitQuiz();
@@ -1431,6 +1611,26 @@ class _QuizScreenState extends State<QuizScreen> {
                                       } else {
                                         // Wrong answer
                                         if (_currentAttempt < _maxAttempts) {
+                                          // Save failed attempt progress
+                                          final options = List<String>.from(question['options'] ?? []);
+                                          final selectedAnswerText = selectedIndex < options.length 
+                                              ? options[selectedIndex] 
+                                              : '';
+                                          
+                                          // We don't await this to avoid UI delay, but it runs in background
+                                          _saveQuestionProgress(
+                                            questionIndex: _currentQuestionIndex,
+                                            question: question,
+                                            isCorrect: false,
+                                            userAnswer: {
+                                              'type': 'mcq',
+                                              'selected_index': selectedIndex,
+                                              'selected_answer': selectedAnswerText,
+                                            },
+                                            pointsEarned: 0,
+                                            status: 'pending',
+                                          );
+
                                           // Show retry dialog
                                           _showRetryDialog();
                                         } else {

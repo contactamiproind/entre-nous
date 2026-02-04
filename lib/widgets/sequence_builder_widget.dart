@@ -217,21 +217,20 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
           builder: (context, constraints) {
             // Calculate responsive size based on screen width
             final screenWidth = constraints.maxWidth;
-            final boxSize = (screenWidth / 5.5).clamp(55.0, 75.0);
-            final fontSize = (boxSize * 0.6).clamp(28.0, 40.0);
+            // Further reduced size
+            final boxSize = (screenWidth / 7.5).clamp(35.0, 50.0);
+            final fontSize = (boxSize * 0.5).clamp(16.0, 24.0);
             
             debugPrint('📦 Draggable area - screenWidth: $screenWidth, boxSize: $boxSize, fontSize: $fontSize');
             debugPrint('📦 Number of sentences: ${sentences.length}');
             
             return Container(
-              constraints: BoxConstraints(
-                minHeight: boxSize + 30,
-                maxHeight: boxSize * 2.5, // Allow wrapping to multiple rows
-              ),
-              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              padding: const EdgeInsets.all(12),
+              width: double.infinity,
+              // Removed fixed height constraints to allow Wrap to size itself naturally
+              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF9E6), // Light yellow background
+                color: const Color(0xFFFFF9E6), 
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFE8D96F), width: 2),
                 boxShadow: [
@@ -243,61 +242,28 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
                 ],
               ),
               child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 8, // Decreased spacing
+                runSpacing: 8, // Decreased spacing
                 alignment: WrapAlignment.center,
                 children: List.generate(sentences.length, (index) {
                   final number = index + 1;
                   final isUsed = usedNumbers.contains(number);
                   
                   if (isUsed) {
-                    return const SizedBox.shrink();
+                     // Return an invisible box of same size to maintain row height if needed, 
+                     // or just shrink. Providing a small spacer might be better than complete shrink 
+                     // if we want to avoid jumpiness, but let's try shrink first as per original design.
+                     // However, to debug "missing" numbers, let's verify if logic holds.
+                     return const SizedBox.shrink();
                   }
-                  
+
                   return Draggable<int>(
                     data: number,
                     feedback: Material(
                       elevation: 8,
                       borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        width: boxSize,
-                        height: boxSize,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.orange.shade400, Colors.orange.shade600],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.black, width: 3),
-                        ),
-                        child: Center(
-                          child: OverflowBox(
-                            minWidth: 0,
-                            maxWidth: double.infinity,
-                            minHeight: 0,
-                            maxHeight: double.infinity,
-                            child: Text(
-                              number.toString(),
-                              style: TextStyle(
-                                fontSize: boxSize * 0.5,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                decoration: TextDecoration.none,
-                                fontFamily: 'Roboto',
-                                shadows: const [
-                                  Shadow(
-                                    color: Colors.black,
-                                    offset: Offset(2, 2),
-                                    blurRadius: 3,
-                                  ),
-                                ],
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ),
+                      color: Colors.transparent, 
+                      child: _buildNumberBox(number, boxSize, fontSize),
                     ),
                     childWhenDragging: Opacity(
                       opacity: 0.3,
@@ -314,136 +280,133 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
         const SizedBox(height: 16),
         
         // Sentences with Drop Zones
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Calculate responsive size based on screen width
-              final screenWidth = constraints.maxWidth;
-              final boxSize = (screenWidth / 6.0).clamp(50.0, 70.0);
-              final fontSize = (boxSize * 0.55).clamp(24.0, 35.0);
-              
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                itemCount: sentences.length,
-                itemBuilder: (context, index) {
-                  final sentence = sentences[index];
-                  final sentenceId = sentence['id'];
-                  final isLocked = lockedSentences.contains(sentenceId);
-                  final isShaking = shakingSentenceId == sentenceId;
-                  
-                  return AnimatedBuilder(
-                    animation: _shakeController,
-                    builder: (context, child) {
-                      final offset = isShaking
-                          ? sin(_shakeController.value * pi * 4) * 10
-                          : 0.0;
-                      
-                      return Transform.translate(
-                        offset: Offset(offset, 0),
-                        child: child,
-                      );
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isLocked ? Colors.green.shade50 : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Calculate responsive size based on screen width
+            final screenWidth = constraints.maxWidth;
+            // Reduced drop zone size
+            final boxSize = (screenWidth / 7.0).clamp(40.0, 55.0);
+            final fontSize = (boxSize * 0.5).clamp(16.0, 24.0);
+            
+            return Column(
+              children: List.generate(sentences.length, (index) {
+                final sentence = sentences[index];
+                final sentenceId = sentence['id'];
+                final isLocked = lockedSentences.contains(sentenceId);
+                final isShaking = shakingSentenceId == sentenceId;
+                
+                return AnimatedBuilder(
+                  animation: _shakeController,
+                  builder: (context, child) {
+                    final offset = isShaking
+                        ? sin(_shakeController.value * pi * 4) * 10
+                        : 0.0;
+                    
+                    return Transform.translate(
+                      offset: Offset(offset, 0),
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isLocked ? Colors.green.shade50 : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isShaking 
+                            ? Colors.red 
+                            : isLocked 
+                                ? Colors.green 
+                                : const Color(0xFFE5E7EB),
+                        width: isShaking || isLocked ? 2 : 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
                           color: isShaking 
-                              ? Colors.red 
-                              : isLocked 
-                                  ? Colors.green 
-                                  : const Color(0xFFE5E7EB),
-                          width: isShaking || isLocked ? 2 : 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isShaking 
-                                ? Colors.red.withOpacity(0.3) 
-                                : Colors.black.withOpacity(0.1),
+                              ? Colors.red.withOpacity(0.3) 
+                              : Colors.black.withOpacity(0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          // Drop Zone for Number
-                          DragTarget<int>(
-                            onAccept: (number) => _onNumberDropped(number, sentenceId),
-                            builder: (context, candidateData, rejectedData) {
-                              final isHovering = candidateData.isNotEmpty;
-                              final placedNumber = sentencePlacements[sentenceId];
-                              
-                              return Container(
-                                width: boxSize,
-                                height: boxSize,
-                                decoration: BoxDecoration(
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        // Drop Zone for Number
+                        DragTarget<int>(
+                          onAccept: (number) => _onNumberDropped(number, sentenceId),
+                          builder: (context, candidateData, rejectedData) {
+                            final isHovering = candidateData.isNotEmpty;
+                            final placedNumber = sentencePlacements[sentenceId];
+                            
+                            return Container(
+                              width: boxSize,
+                              height: boxSize,
+                              decoration: BoxDecoration(
+                                color: isLocked
+                                    ? Colors.green
+                                    : isHovering
+                                        ? const Color(0xFFE8D96F).withOpacity(0.5)
+                                        : Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
                                   color: isLocked
                                       ? Colors.green
                                       : isHovering
-                                          ? const Color(0xFFE8D96F).withOpacity(0.5)
-                                          : Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: isLocked
-                                        ? Colors.green
-                                        : isHovering
-                                            ? const Color(0xFFE8D96F)
-                                            : Colors.grey.shade400,
-                                    width: 2,
-                                  ),
+                                          ? const Color(0xFFE8D96F)
+                                          : Colors.grey.shade400,
+                                  width: 2,
                                 ),
-                                child: Center(
-                                  child: placedNumber != null
-                                      ? Text(
-                                          placedNumber.toString(),
-                                          style: TextStyle(
-                                            fontSize: fontSize,
-                                            fontWeight: FontWeight.bold,
-                                            color: isLocked ? Colors.white : Colors.black,
-                                          ),
-                                        )
-                                      : Icon(
-                                          Icons.add,
-                                          color: Colors.grey.shade400,
-                                          size: boxSize * 0.5,
-                                        ),
-                                ),
-                              );
-                            },
-                          ),
-                          
-                          const SizedBox(width: 12),
-                          
-                          // Sentence Text
-                          Expanded(
-                            child: Text(
-                              sentence['text'] ?? '',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: isLocked ? FontWeight.w600 : FontWeight.normal,
-                                color: isLocked ? Colors.green.shade900 : Colors.black,
                               ),
+                              child: Center(
+                                child: placedNumber != null
+                                    ? Text(
+                                        placedNumber.toString(),
+                                        style: TextStyle(
+                                          fontSize: fontSize,
+                                          fontWeight: FontWeight.bold,
+                                          color: isLocked ? Colors.white : Colors.black,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.add,
+                                        color: Colors.grey.shade400,
+                                        size: boxSize * 0.5,
+                                      ),
+                              ),
+                            );
+                          },
+                        ),
+                        
+                        const SizedBox(width: 12),
+                        
+                        // Sentence Text
+                        Expanded(
+                          child: Text(
+                            sentence['text'] ?? '',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: isLocked ? FontWeight.w600 : FontWeight.normal,
+                              color: isLocked ? Colors.green.shade900 : Colors.black,
                             ),
                           ),
-                          
-                          // Check Icon for Locked
-                          if (isLocked)
-                            const Icon(
-                              Icons.check_circle,
-                              color: Colors.green,
-                              size: 24,
-                            ),
-                        ],
-                      ),
+                        ),
+                        
+                        // Check Icon for Locked
+                        if (isLocked)
+                          const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 24,
+                          ),
+                      ],
                     ),
-                  );
-                },
-              );
-            },
-          ),
+                  ),
+                );
+              }),
+            );
+          },
         ),
         
         // Hint
@@ -479,9 +442,10 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
     debugPrint('🔢 Building number box for: $number, size: $boxSize, fontSize: $fontSize');
     
     return Container(
-      width: boxSize,
-      height: boxSize,
+      width: boxSize, // Ensure fix width
+      height: boxSize, // Ensure fix height
       decoration: BoxDecoration(
+        color: Colors.orange, // Fallback color
         gradient: LinearGradient(
           colors: [Colors.orange.shade400, Colors.orange.shade600],
           begin: Alignment.topLeft,
@@ -497,29 +461,31 @@ class _SequenceBuilderWidgetState extends State<SequenceBuilderWidget> with Sing
           ),
         ],
       ),
+      alignment: Alignment.center,
       child: Center(
-        child: OverflowBox(
-          minWidth: 0,
-          maxWidth: double.infinity,
-          minHeight: 0,
-          maxHeight: double.infinity,
-          child: Text(
-            number.toString(),
-            style: TextStyle(
-              fontSize: boxSize * 0.5,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              decoration: TextDecoration.none,
-              fontFamily: 'Roboto',
-              shadows: const [
-                Shadow(
-                  color: Colors.black,
-                  offset: Offset(2, 2),
-                  blurRadius: 3,
-                ),
-              ],
+        child: FittedBox(
+          fit: BoxFit.contain, // Scale to fit
+          child: Padding(
+            padding: EdgeInsets.all(boxSize * 0.1), // Add some padding inside
+            child: Text(
+              number.toString(),
+              style: TextStyle(
+                fontSize: 40, // Start large, let FittedBox scale down
+                fontWeight: FontWeight.w900, 
+                color: Colors.white,
+                decoration: TextDecoration.none,
+                fontFamily: 'Roboto',
+                // height: 1.1, // Removed height to let FittedBox handle centering
+                shadows: const [
+                   Shadow(
+                    color: Colors.black,
+                    offset: Offset(2, 2),
+                    blurRadius: 3,
+                  ),
+                ],
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
           ),
         ),
       ),

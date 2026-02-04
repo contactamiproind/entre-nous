@@ -31,6 +31,30 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
     super.initState();
     _loadStats();
     _loadPathways();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('departments')
+          .select('levels')
+          .eq('title', 'SYSTEM_CONFIG')
+          .maybeSingle();
+
+      if (response != null && response['levels'] != null && (response['levels'] as List).isNotEmpty) {
+        final settings = (response['levels'] as List)[0];
+        if (mounted) {
+          setState(() {
+            _quizTimerSeconds = settings['timer_seconds'] ?? 30;
+            _fullPointsThreshold = (settings['full_points_threshold'] ?? 0.5).toDouble();
+            _halfPointsThreshold = (settings['half_points_threshold'] ?? 0.75).toDouble();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading settings: $e');
+    }
   }
 
   Future<void> _loadPathways() async {
@@ -589,199 +613,80 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                 
                 const SizedBox(height: 40),
                 
-                // Scoring Thresholds Section
-                const Divider(thickness: 2),
-                const SizedBox(height: 24),
-                
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFBBF24).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.star,
-                        color: Color(0xFFFBBF24),
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Scoring Thresholds',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A2F4B),
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Configure time-based point breakpoints',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                
-                // Full Points Threshold
-                Row(
-                  children: [
-                    const Text(
-                      'Full Points (100):',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A2F4B),
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '< ${(_fullPointsThreshold * 100).toInt()}% time',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Slider(
-                  value: _fullPointsThreshold,
-                  min: 0.2,
-                  max: 0.8,
-                  divisions: 12,
-                  activeColor: Colors.green,
-                  label: '${(_fullPointsThreshold * 100).toInt()}%',
-                  onChanged: (value) {
-                    setState(() {
-                      _fullPointsThreshold = value;
-                      // Ensure half points threshold is always higher
-                      if (_halfPointsThreshold <= _fullPointsThreshold) {
-                        _halfPointsThreshold = (_fullPointsThreshold + 0.1).clamp(0.3, 0.9);
-                      }
-                    });
-                  },
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Half Points Threshold
-                Row(
-                  children: [
-                    const Text(
-                      'Half Points (50):',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A2F4B),
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '< ${(_halfPointsThreshold * 100).toInt()}% time',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Slider(
-                  value: _halfPointsThreshold,
-                  min: 0.3,
-                  max: 0.9,
-                  divisions: 12,
-                  activeColor: Colors.orange,
-                  label: '${(_halfPointsThreshold * 100).toInt()}%',
-                  onChanged: (value) {
-                    setState(() {
-                      _halfPointsThreshold = value;
-                      // Ensure full points threshold is always lower
-                      if (_fullPointsThreshold >= _halfPointsThreshold) {
-                        _fullPointsThreshold = (_halfPointsThreshold - 0.1).clamp(0.2, 0.8);
-                      }
-                    });
-                  },
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Quarter Points Info
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline, color: Colors.red, size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Quarter Points (25): ≥ ${(_halfPointsThreshold * 100).toInt()}% time',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
+                const SizedBox(height: 40),
                 
                 // Save Button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      final fullPct = (_fullPointsThreshold * 100).toInt();
-                      final halfPct = (_halfPointsThreshold * 100).toInt();
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            _quizTimerSeconds == 0
-                                ? 'Quiz timer disabled'
-                                : 'Settings saved!\nTimer: $_quizTimerSeconds sec\nFull pts: <$fullPct%, Half pts: <$halfPct%',
-                          ),
-                          backgroundColor: const Color(0xFF3B82F6),
-                          duration: const Duration(seconds: 3),
-                        ),
-                      );
+                    onPressed: () async {
+                      // Save settings to SYSTEM_CONFIG department
+                      try {
+                        setState(() => _isLoading = true);
+                        
+                        final settings = {
+                          'timer_seconds': _quizTimerSeconds,
+                          'full_points_threshold': _fullPointsThreshold,
+                          'half_points_threshold': _halfPointsThreshold,
+                          'updated_at': DateTime.now().toIso8601String(),
+                        };
+
+                        // Check if SYSTEM_CONFIG exists
+                        final existing = await Supabase.instance.client
+                            .from('departments')
+                            .select('id')
+                            .eq('title', 'SYSTEM_CONFIG')
+                            .limit(1)
+                            .maybeSingle();
+
+                        if (existing != null) {
+                          // Update
+                          await Supabase.instance.client
+                              .from('departments')
+                              .update({
+                                'levels': [settings], // Store in levels column
+                                'description': 'System Configuration - Do not delete',
+                              })
+                              .eq('id', existing['id']);
+                        } else {
+                          // Create
+                          await Supabase.instance.client
+                              .from('departments')
+                              .insert({
+                                'title': 'SYSTEM_CONFIG',
+                                'description': 'System Configuration - Do not delete',
+                                'levels': [settings],
+                                'category': 'SYSTEM',
+                                'subcategory': 'CONFIG',
+                              });
+                        }
+
+                        if (mounted) {
+                          setState(() => _isLoading = false);
+                          final fullPct = (_fullPointsThreshold * 100).toInt();
+                          final halfPct = (_halfPointsThreshold * 100).toInt();
+                          
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                _quizTimerSeconds == 0
+                                    ? 'Quiz timer disabled (Saved)'
+                                    : 'Settings saved!\nTimer: $_quizTimerSeconds sec',
+                              ),
+                              backgroundColor: const Color(0xFF3B82F6),
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        debugPrint('Error saving settings: $e');
+                        if (mounted) {
+                          setState(() => _isLoading = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error saving settings: $e')),
+                          );
+                        }
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1E293B),

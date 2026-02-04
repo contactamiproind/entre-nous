@@ -538,7 +538,7 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
 
   Widget _buildAmountChip(int amount, {bool isDragging = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), // Reduced vertical padding
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isDragging
@@ -560,9 +560,11 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
         '\$${amount.toStringAsFixed(0)}',
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 16,
+          fontSize: 14, // Slightly smaller font
           fontWeight: FontWeight.bold,
+          height: 1.0,  // Force tight height
         ),
+        textAlign: TextAlign.center,
       ),
     );
   }
