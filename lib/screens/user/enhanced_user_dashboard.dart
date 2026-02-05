@@ -727,11 +727,108 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                     isLocked: false,
                     isCurrent: false, 
                     onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const EndGameScreen(),
-                        ),
+                      // Show the introductory dialog first
+                      await showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (BuildContext dialogContext) {
+                          return Dialog(
+                            backgroundColor: Colors.transparent,
+                            child: Container(
+                              constraints: const BoxConstraints(maxWidth: 400),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: const Color(0xFFF4EF8B),
+                                  width: 4,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.3),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Title
+                                    const Text(
+                                      'What We\'ve Created Together',
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.black,
+                                        letterSpacing: 0.5,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 20),
+                                    
+                                    // Message
+                                    const Text(
+                                      'You\'ve laughed, played, posed, sung, and celebrated\n'
+                                      'not just an occasion, but a person.\n\n'
+                                      'Every moment tonight\n'
+                                      'from the flowers in full bloom to the music, memories, and madness\n'
+                                      'was a reflection of Deeksha and the people who love her.\n\n'
+                                      'As we head into the final game,\n'
+                                      'this is your last chance to go all in\n'
+                                      'one room, one energy, one unforgettable finish.\n\n'
+                                      'Let\'s end it the way we started.\n'
+                                      'Together. 💫',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        height: 1.6,
+                                        color: Colors.black87,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 30),
+                                    
+                                    // Button
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.of(dialogContext).pop();
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => const EndGameScreen(),
+                                            ),
+                                          );
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFFF4EF8B),
+                                          foregroundColor: Colors.black,
+                                          padding: const EdgeInsets.symmetric(vertical: 16),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          elevation: 4,
+                                        ),
+                                        child: const Text(
+                                          'END GAME',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
                     onContinue: null,

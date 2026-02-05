@@ -1,0 +1,58 @@
+Initialized native services in: C:\Users\naika\.gradle\native
+Initialized jansi services in: C:\Users\naika\.gradle\native
+Found daemon DaemonInfo{pid=22060, address=[6b9f9744-ba65-4e4b-bd59-45b8d0792a13 port:55427, addresses:[/127.0.0.1]], state=Idle, lastBusy=1770207313983, context=DefaultDaemonContext[uid=589677be-21ce-4f80-a05f-09f2557a8314,javaHome=C:\Program Files\Android\Android Studio2\jbr,javaVersion=21,javaVendor=JetBrains s.r.o.,daemonRegistryDir=C:\Users\naika\.gradle\daemon,pid=22060,idleTimeout=10800000,priority=NORMAL,applyInstrumentationAgent=true,nativeServicesMode=ENABLED,daemonOpts=-XX:MaxMetaspaceSize=4G,-XX:ReservedCodeCacheSize=512m,-XX:+HeapDumpOnOutOfMemoryError,-Xmx8G,-Dfile.encoding=UTF-8,-Duser.country=IN,-Duser.language=en,-Duser.variant]} however its context does not match the desired criteria.
+JVM is incompatible.
+Wanted: DaemonRequestContext{jvmCriteria=C:\Program Files\Java\jre-1.8 (no JDK specified, using current Java home), daemonOpts=[-XX:MaxMetaspaceSize=4G, -XX:ReservedCodeCacheSize=512m, -XX:+HeapDumpOnOutOfMemoryError, -Xmx8G, -Dfile.encoding=windows-1252, -Duser.country=IN, -Duser.language=en, -Duser.variant], applyInstrumentationAgent=true, nativeServicesMode=ENABLED, priority=NORMAL}
+Actual: DefaultDaemonContext[uid=589677be-21ce-4f80-a05f-09f2557a8314,javaHome=C:\Program Files\Android\Android Studio2\jbr,javaVersion=21,javaVendor=JetBrains s.r.o.,daemonRegistryDir=C:\Users\naika\.gradle\daemon,pid=22060,idleTimeout=10800000,priority=NORMAL,applyInstrumentationAgent=true,nativeServicesMode=ENABLED,daemonOpts=-XX:MaxMetaspaceSize=4G,-XX:ReservedCodeCacheSize=512m,-XX:+HeapDumpOnOutOfMemoryError,-Xmx8G,-Dfile.encoding=UTF-8,-Duser.country=IN,-Duser.language=en,-Duser.variant]
+
+  Looking for a different daemon...
+The client will now receive all logging from the daemon (pid: 22968). The daemon log file: C:\Users\naika\.gradle\daemon\8.12\daemon-22968.out.log
+Starting 2nd build in daemon [uptime: 47.672 secs, performance: 98%, GC rate: 0.31/s, heap usage: 0% of 5.3 GiB, non-heap usage: 2% of 4 GiB]
+Using 8 worker leases.
+Now considering [D:\Projects\entre-nous\android] as hierarchies to watch
+Watching the file system is configured to be enabled if available
+File system watching is active
+Starting Build
+Now considering [D:\Projects\entre-nous\flutter\packages\flutter_tools\gradle, D:\Projects\entre-nous\android] as hierarchies to watch
+
+> Configure project :gradle
+Evaluating project ':gradle' using build file 'D:\Projects\entre-nous\flutter\packages\flutter_tools\gradle\build.gradle.kts'.
+Resolved plugin [id: 'org.gradle.java-gradle-plugin']
+Resolved plugin [id: 'org.gradle.groovy']
+Resolved plugin [id: 'org.gradle.kotlin.kotlin-dsl', version: '5.1.2']
+Resolved plugin [id: 'org.jetbrains.kotlin.jvm', version: '1.9.20']
+Using Kotlin Gradle Plugin gradle85 variant
+kotlin scripting plugin: created the scripting discovery configuration: kotlinScriptDef
+kotlin scripting plugin: created the scripting discovery configuration: testKotlinScriptDef
+file or directory 'D:\Projects\entre-nous\flutter\packages\flutter_tools\gradle\src\main\java', not found
+Resolved plugin [id: 'dev.flutter.flutter-plugin-loader', version: '1.0.0']
+Resolved plugin [id: 'com.android.application', version: '8.9.1', apply: false]
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '2.1.0', apply: false]
+Variant Selection Exception: org.gradle.internal.component.resolution.failure.exception.VariantSelectionByAttributesException caused by Resolution Failure: org.gradle.internal.component.resolution.failure.type.NoCompatibleVariantsFailure
+
+[Incubating] Problems report is available at: file:///D:/Projects/entre-nous/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Could not resolve all dependencies for configuration 'classpath'.
+> Could not resolve project :gradle.
+  Required by:
+      unspecified:unspecified:unspecified
+   > Dependency requires at least JVM runtime version 11. This build uses a Java 8 JVM.
+
+* Try:
+> Run this build using a Java 11 or newer JVM.
+> Run with --stacktrace option to get the stack trace.
+> Run with --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.12/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 2s
+Watched directory hierarchies: []

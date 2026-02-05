@@ -542,7 +542,7 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                           _buildHeaderDivider(),
                           _buildHeaderStat('Alerts', '$_disruptionsHandled/5', Icons.warning_amber_rounded),
                           _buildHeaderDivider(),
-                          _buildHeaderStat('Score', '\', Icons.star_border_rounded),
+                          _buildHeaderStat('Score', '-', Icons.star_border_rounded),
                         ],
                       ),
                     ),
@@ -843,44 +843,7 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   
   
   
-  // Handle dropping a new item onto the venue
-  void _handleDrop(GameItemDef item, Offset localPos, Size venueSize) {
-    final xPercent = (localPos.dx / venueSize.width) * 100;
-    final yPercent = (localPos.dy / venueSize.height) * 100;
-    
-    setState(() {
-      _placedObjects.add(PlacedObject(
-        id: item.id,
-        category: item.category,
-        x: xPercent.clamp(0, 100),
-        y: yPercent.clamp(0, 100),
-      ));
-      // Recalculate placement score
-      _placementScore = _calculatePlacementScore();
-    });
-  }
-  
-  // Handle updating position of an existing placed object
-  void _updateObjectPosition(PlacedObject obj, Offset localPos, Size venueSize) {
-    final xPercent = (localPos.dx / venueSize.width) * 100;
-    final yPercent = (localPos.dy / venueSize.height) * 100;
-    
-    setState(() {
-      obj.x = xPercent.clamp(0, 100);
-      obj.y = yPercent.clamp(0, 100);
-      // Recalculate placement score
-      _placementScore = _calculatePlacementScore();
-    });
-  }
-  
-  // Handle removing an object
-  void _removeObject(String uniqueId) {
-    setState(() {
-      _placedObjects.removeWhere((obj) => obj.uniqueId == uniqueId);
-      // Recalculate placement score
-      _placementScore = _calculatePlacementScore();
-    });
-  }
+
   // Check if a placed object is in the correct zone
   bool _isInCorrectZone(PlacedObject obj) {
     final definition = obj.definition;
