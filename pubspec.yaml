@@ -68,6 +68,8 @@ flutter:
   assets:
     - assets/logo.png
     - assets/sounds/
+    - assets/end_game/
+    - assets/end_game/venues/
     - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see

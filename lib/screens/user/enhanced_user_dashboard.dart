@@ -195,9 +195,27 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   Future<void> _loadCategoryProgress() async {
     if (_userId == null) return;
     try {
-      final categories = ['Orientation', 'Process', 'SOP'];
-      for (final category in categories) {
-        final deptData = await Supabase.instance.client.from('departments').select('id').eq('title', category).maybeSingle();
+      // Get all departments assigned to this user from usr_dept
+      final userDeptsData = await Supabase.instance.client
+          .from('usr_dept')
+          .select('dept_id, departments(id, title, category)')
+          .eq('user_id', _userId!);
+      
+      debugPrint('📊 Found ${userDeptsData.length} assigned departments for user');
+      
+      // Extract unique categories from assigned departments
+      final assignedCategories = <String>{};
+      for (final userDept in userDeptsData) {
+        final dept = userDept['departments'];
+        if (dept != null && dept['category'] != null) {
+          assignedCategories.add(dept['category']);
+        }
+      }
+      
+      debugPrint('📋 Assigned categories: $assignedCategories');
+      
+      for (final category in assignedCategories) {
+        final deptData = await Supabase.instance.client.from('departments').select('id').eq('category', category).maybeSingle();
         if (deptData == null) continue;
         final deptId = deptData['id'];
         final usrDeptData = await Supabase.instance.client.from('usr_dept').select('id').eq('user_id', _userId!).eq('dept_id', deptId).maybeSingle();
@@ -277,6 +295,215 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     }
   }
 
+  // Helper method to get icon for each category
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'Orientation': return Icons.school_rounded;
+      case 'Process': return Icons.settings_rounded;
+      case 'SOP': return Icons.description_rounded;
+      case 'Production': return Icons.factory_rounded;
+      case 'Communication': return Icons.chat_rounded;
+      case 'Ideation': return Icons.lightbulb_rounded;
+      case 'Client Servicing': return Icons.support_agent_rounded;
+      case 'Creative': return Icons.palette_rounded;
+      default: return Icons.folder_rounded;
+    }
+  }
+
+  // Helper method to get color for each category
+  Color _getCategoryColor(String category) {
+    switch (category) {
+      case 'Orientation': return const Color(0xFFF4EF8B); // Yellow
+      case 'Process': return const Color(0xFF3B82F6); // Blue
+      case 'SOP': return const Color(0xFF10B981); // Green
+      case 'Production': return const Color(0xFFEF4444); // Red
+      case 'Communication': return const Color(0xFF8B5CF6); // Purple
+      case 'Ideation': return const Color(0xFFF59E0B); // Orange
+      case 'Client Servicing': return const Color(0xFF06B6D4); // Cyan
+      case 'Creative': return const Color(0xFFEC4899); // Pink
+      default: return Colors.grey;
+    }
+  }
+
+  // Helper method to get description for each category
+  String _getCategoryDescription(String category) {
+    switch (category) {
+      case 'Orientation': return 'Get started with the basics';
+      case 'Process': return 'Standard workflows and procedures';
+      case 'SOP': return 'Standard Operating Procedures';
+      case 'Production': return 'Production workflows and processes';
+      case 'Communication': return 'Communication skills and strategies';
+      case 'Ideation': return 'Creative thinking and ideation';
+      case 'Client Servicing': return 'Client management and servicing';
+      case 'Creative': return 'Creative design and execution';
+      default: return 'Department pathway';
+    }
+  }
+
+  // Helper method to determine if a category is locked
+  bool _isCategoryLocked(String category) {
+    // General departments: sequential locking
+    if (category == 'Orientation') return false; // Always unlocked
+    
+    if (category == 'Process') {
+      return (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0;
+    }
+    
+    if (category == 'SOP') {
+      return (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0;
+    }
+    
+    // Specific departments: must complete all General departments first
+    final orientationComplete = (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0;
+    final processComplete = (_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0;
+    final sopComplete = (_categoryProgress['SOP']?['progress'] ?? 0.0) >= 1.0;
+    
+    if (!orientationComplete || !processComplete || !sopComplete) {
+      return true; // Lock all specific departments until General is complete
+    }
+    
+    // TODO: Implement display_order based locking for specific departments
+    return false;
+  }
+
+  // Helper method to build dynamic category list items for Categories tab
+  List<Widget> _buildDynamicCategoryListItems() {
+    final List<Widget> items = [];
+    
+    // Define the order: General departments first, then specific departments
+    final generalOrder = ['Orientation', 'Process', 'SOP'];
+    final List<String> orderedCategories = [];
+    
+    // Add General departments in order (if assigned)
+    for (final category in generalOrder) {
+      if (_categoryProgress.containsKey(category)) {
+        orderedCategories.add(category);
+      }
+    }
+    
+    // Add specific departments (all others)
+    for (final category in _categoryProgress.keys) {
+      if (!generalOrder.contains(category)) {
+        orderedCategories.add(category);
+      }
+    }
+    
+    // Build list items for each category
+    for (int i = 0; i < orderedCategories.length; i++) {
+      final category = orderedCategories[i];
+      final progress = _categoryProgress[category]?['progress'] ?? 0.0;
+      final isLocked = _isCategoryLocked(category);
+      final isCurrent = !isLocked && progress < 1.0;
+      
+      items.add(
+        _buildCategoryListItem(
+          category: category,
+          subcategory: null,
+          icon: _getCategoryIcon(category),
+          color: _getCategoryColor(category),
+          progress: progress,
+          isLocked: isLocked,
+          isCurrent: isCurrent,
+        ),
+      );
+      
+      // Add spacing between items (except after the last one)
+      if (i < orderedCategories.length - 1) {
+        items.add(const SizedBox(height: 16));
+      }
+    }
+    
+    return items;
+  }
+
+
+  // Build category cards dynamically for all assigned departments
+  List<Widget> _buildDynamicCategoryCards() {
+    final List<Widget> cards = [];
+    
+    // Define the order: General departments first, then specific departments
+    final generalOrder = ['Orientation', 'Process', 'SOP'];
+    final List<String> orderedCategories = [];
+    
+    // Add General departments in order (if assigned)
+    for (final category in generalOrder) {
+      if (_categoryProgress.containsKey(category)) {
+        orderedCategories.add(category);
+      }
+    }
+    
+    // Add specific departments (all others)
+    for (final category in _categoryProgress.keys) {
+      if (!generalOrder.contains(category)) {
+        orderedCategories.add(category);
+      }
+    }
+    
+    debugPrint('🎨 Building cards for categories: $orderedCategories');
+    
+    // Build cards for each category
+    for (final category in orderedCategories) {
+      final progress = _categoryProgress[category];
+      if (progress == null) continue;
+      
+      final isLocked = _isCategoryLocked(category);
+      final progressValue = progress['progress'] ?? 0.0;
+      final isCurrent = !isLocked && progressValue < 1.0;
+      
+      cards.add(
+        _buildCategoryCard(
+          category: category,
+          icon: _getCategoryIcon(category),
+          color: _getCategoryColor(category),
+          description: _getCategoryDescription(category),
+          progress: progressValue,
+          isLocked: isLocked,
+          isCurrent: isCurrent,
+          onTap: () async {
+            // Prevent retake if completed
+            if (progressValue >= 1.0) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('You have already completed the $category category!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              return;
+            }
+
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => QuizScreen(
+                  category: category,
+                ),
+              ),
+            );
+            if (mounted) _loadData();
+          },
+          onContinue: progress['progress'] != null && progress['progress'] > 0 && progress['progress'] < 1.0
+              ? () async {
+                  final startIndex = progress['firstUnansweredIndex'] ?? 0;
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => QuizScreen(
+                        category: category,
+                        startQuestionIndex: startIndex,
+                      ),
+                    ),
+                  );
+                  if (mounted) _loadData();
+                }
+              : null,
+        ),
+      );
+      
+      cards.add(const SizedBox(height: 12));
+    }
+    
+    return cards;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -567,163 +794,17 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                   ),
                   const SizedBox(height: 16),
                   
-                    // Orientation Category
-                  _buildCategoryCard(
-                    category: 'Orientation',
-                    icon: Icons.school_rounded,
-                    color: const Color(0xFFF4EF8B), // Yellow
-                    description: 'Get started with the basics',
-                    progress: _categoryProgress['Orientation']?['progress'] ?? 0.0,
-                    isLocked: false,
-                    isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0,
-                    onTap: () async {
-                      // Prevent retake if completed
-                      if ((_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('You have already completed the Orientation category!'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                        return;
-                      }
-
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const QuizScreen(
-                            category: 'Orientation',
-                          ),
-                        ),
-                      );
-                      if (mounted) _loadData();
-                    },
-                    onContinue: _categoryProgress['Orientation']?['progress'] != null && _categoryProgress['Orientation']!['progress'] > 0 && _categoryProgress['Orientation']!['progress'] < 1.0
-                        ? () async {
-                            final startIndex = _categoryProgress['Orientation']!['firstUnansweredIndex'] ?? 0;
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => QuizScreen(
-                                  category: 'Orientation',
-                                  startQuestionIndex: startIndex,
-                                ),
-                              ),
-                            );
-                            if (mounted) _loadData();
-                          }
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
+                  // Dynamically build category cards for all assigned departments
+                  ..._buildDynamicCategoryCards(),
                   
-                  // Process Category
-                  _buildCategoryCard(
-                    category: 'Process',
-                    icon: Icons.settings_rounded,
-                    color: const Color(0xFF3B82F6), // Blue
-                    description: 'Standard workflows and procedures',
-                    progress: _categoryProgress['Process']?['progress'] ?? 0.0,
-                    // Unlock if Orientation is complete OR if Process itself is already complete (grandfathered)
-                    isLocked: (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0 && (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0,
-                    isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0, 
-                    onTap: () async {
-                      // Prevent retake if completed
-                      if ((_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('You have already completed the Process category!'),
-                             backgroundColor: Colors.green,
-                          ),
-                        );
-                        return;
-                      }
-
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const QuizScreen(
-                            category: 'Process',
-                          ),
-                        ),
-                      );
-                      if (mounted) _loadData();
-                    },
-                    onContinue: _categoryProgress['Process']?['progress'] != null && _categoryProgress['Process']!['progress'] > 0 && _categoryProgress['Process']!['progress'] < 1.0
-                        ? () async {
-                            final startIndex = _categoryProgress['Process']!['firstUnansweredIndex'] ?? 0;
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => QuizScreen(
-                                  category: 'Process',
-                                  startQuestionIndex: startIndex,
-                                ),
-                              ),
-                            );
-                            if (mounted) _loadData();
-                          }
-                        : null,
-                  ),
+                  // End Game Category (always shown, always unlocked)
                   const SizedBox(height: 12),
-                  
-                  // SOP Category
-                  _buildCategoryCard(
-                    category: 'SOP',
-                    icon: Icons.description_rounded,
-                    color: const Color(0xFF10B981), // Green
-                    description: 'Standard Operating Procedures',
-                    progress: _categoryProgress['SOP']?['progress'] ?? 0.0,
-                    // Unlock if Predecessors complete OR SOP itself is complete
-                    isLocked: ((_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0 || (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0) && (_categoryProgress['SOP']?['progress'] ?? 0.0) < 1.0,
-                    isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['SOP']?['progress'] ?? 0.0) < 1.0,
-                    onTap: () async {
-                      // Prevent retake if completed
-                      if ((_categoryProgress['SOP']?['progress'] ?? 0.0) >= 1.0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('You have already completed the SOP category!'),
-                             backgroundColor: Colors.green,
-                          ),
-                        );
-                        return;
-                      }
-
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const QuizScreen(
-                            category: 'SOP',
-                          ),
-                        ),
-                      );
-                      if (mounted) _loadData();
-                    },
-                    onContinue: _categoryProgress['SOP']?['progress'] != null && _categoryProgress['SOP']!['progress'] > 0 && _categoryProgress['SOP']!['progress'] < 1.0
-                        ? () async {
-                            final startIndex = _categoryProgress['SOP']!['firstUnansweredIndex'] ?? 0;
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => QuizScreen(
-                                  category: 'SOP',
-                                  startQuestionIndex: startIndex,
-                                ),
-                              ),
-                            );
-                            if (mounted) _loadData();
-                          }
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // End Game Category
                   _buildCategoryCard(
                     category: 'End Game',
                     icon: Icons.games_rounded,
                     color: const Color(0xFF8B5CF6), // Purple
                     description: 'Final Verification Challenge',
                     progress: 0.0,
-                    // Always unlocked as requested
                     isLocked: false,
                     isCurrent: false, 
                     onTap: () async {
@@ -1212,33 +1293,59 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
               ],
               
               // Locked Message
-              if (isLocked) ...[
+              if (isLocked) ...[ 
                 const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          category == 'Process' 
-                              ? 'Complete Orientation to unlock'
-                              : 'Complete Process to unlock',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange.shade700,
-                          ),
-                        ),
+                Builder(
+                  builder: (context) {
+                    // Determine the correct unlock message based on category
+                    String unlockMessage;
+                    if (category == 'Process') {
+                      unlockMessage = 'Complete Orientation to unlock';
+                    } else if (category == 'SOP') {
+                      unlockMessage = 'Complete Process to unlock';
+                    } else {
+                      // For specific departments (Production, Communication, etc.)
+                      // Check which General department is incomplete
+                      final orientationComplete = (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0;
+                      final processComplete = (_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0;
+                      final sopComplete = (_categoryProgress['SOP']?['progress'] ?? 0.0) >= 1.0;
+                      
+                      if (!orientationComplete) {
+                        unlockMessage = 'Complete Orientation to unlock';
+                      } else if (!processComplete) {
+                        unlockMessage = 'Complete Process to unlock';
+                      } else if (!sopComplete) {
+                        unlockMessage = 'Complete SOP to unlock';
+                      } else {
+                        unlockMessage = 'Complete all General departments to unlock';
+                      }
+                    }
+                    
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              unlockMessage,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.orange.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ],
             ],
@@ -1300,40 +1407,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
             ),
             const SizedBox(height: 24),
             
-            // Orientation Category
-            _buildCategoryListItem(
-              category: 'Orientation',
-              subcategory: null,
-              icon: Icons.school_rounded,
-              color: const Color(0xFF8B5CF6),
-              progress: _categoryProgress['Orientation']?['progress'] ?? 0.0,
-              isLocked: false,
-              isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0,
-            ),
-            const SizedBox(height: 16),
-            
-            // Process Category
-            _buildCategoryListItem(
-              category: 'Process',
-              subcategory: null,
-              icon: Icons.settings_rounded,
-              color: const Color(0xFF3B82F6),
-              progress: _categoryProgress['Process']?['progress'] ?? 0.0,
-              isLocked: (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0,
-              isCurrent: (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0,
-            ),
-            const SizedBox(height: 16),
-            
-            // SOP Category
-            _buildCategoryListItem(
-              category: 'SOP',
-              subcategory: null,
-              icon: Icons.description_rounded,
-              color: const Color(0xFF10B981),
-              progress: _categoryProgress['SOP']?['progress'] ?? 0.0,
-              isLocked: (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0,
-              isCurrent: (_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0 && (_categoryProgress['SOP']?['progress'] ?? 0.0) < 1.0,
-            ),
+            // Dynamically build category list items
+            ..._buildDynamicCategoryListItems(),
           ],
         ),
         ),

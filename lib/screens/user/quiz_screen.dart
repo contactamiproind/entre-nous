@@ -296,7 +296,7 @@ class _QuizScreenState extends State<QuizScreen> {
       final deptData = await Supabase.instance.client
           .from('departments')
           .select('id, title')
-          .eq('title', widget.category)
+          .eq('category', widget.category)
           .maybeSingle();
       
       if (deptData == null) {
@@ -368,7 +368,7 @@ class _QuizScreenState extends State<QuizScreen> {
       final deptData = await Supabase.instance.client
           .from('departments')
           .select('id')
-          .eq('title', widget.category)
+          .eq('category', widget.category)
           .maybeSingle();
       
       if (deptData == null) return;
@@ -520,7 +520,7 @@ class _QuizScreenState extends State<QuizScreen> {
       final departmentData = await Supabase.instance.client
           .from('departments')
           .select('id')
-          .eq('title', widget.category)
+          .eq('category', widget.category)
           .maybeSingle();
       
       if (departmentData == null) {
@@ -537,7 +537,7 @@ class _QuizScreenState extends State<QuizScreen> {
       // Load questions for this department
       final questionsData = await Supabase.instance.client
           .from('questions')
-          .select('id, title, description, options, correct_answer, type_id, difficulty, points, dept_id')
+          .select('id, title, description, options, correct_answer, type_id, level, points, dept_id')
           .eq('dept_id', deptId)
           .eq('dept_id', deptId)
           .order('created_at')
@@ -706,7 +706,7 @@ class _QuizScreenState extends State<QuizScreen> {
           'id': questionData['id'],
           'title': questionData['title'],
           'description': questionData['description'],
-          'difficulty': questionData['difficulty'],
+          'level': questionData['level'],
           'points': questionData['points'] ?? 10,
           'options': (inferredType == 'card_match' || inferredType == 'sequence_builder' || inferredType == 'simulation') ? questionData['options'] : options, // Keep original structure for card_match, sequence_builder, and simulation
           'options_data': optionsData, // Store full option data with is_correct flags

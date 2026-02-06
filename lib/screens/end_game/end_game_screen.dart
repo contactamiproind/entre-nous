@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'game_models.dart';
+import '../../models/end_game_config.dart';
+import '../../services/end_game_config_loader.dart';
 
 class EndGameScreen extends StatefulWidget {
   const EndGameScreen({super.key});
@@ -28,22 +30,53 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   
   late TabController _tabController;
   
-  // Constants for venue zones (percentages) - Based on SketchUp design
-  final Rect _stageZone = const Rect.fromLTWH(20, 2, 60, 12);    // Stage platform at top
-  final Rect _poolZone = const Rect.fromLTWH(35, 15, 30, 15);    // Pool centered below stage
-  final Rect _guestZone = const Rect.fromLTWH(15, 40, 70, 25);   // Dining area (center floor)
-  final Rect _theaterZone = const Rect.fromLTWH(15, 70, 70, 18); // Theater at bottom
-  final Rect _lawnLeftZone = const Rect.fromLTWH(0, 0, 10, 100); // Left lawn strip
-  final Rect _lawnRightZone = const Rect.fromLTWH(90, 0, 10, 100); // Right lawn strip
-  final Rect _entranceZone = const Rect.fromLTWH(30, 90, 40, 8); // Entrance at bottom
-  final Rect _barZone = const Rect.fromLTWH(11, 10, 15, 10);      // Bar top-left
-  final Rect _buffetZone = const Rect.fromLTWH(72, 10, 15, 10);   // Buffet top-right
+  // Configuration loaded from JSON
+  VenueConfig? _venueConfig;
+  ItemsConfig? _itemsConfig;
+  bool _isLoading = true;
+  Map<String, Rect> _zones = {}; // Zone key -> Rect mapping
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _updateStats();
+    _loadConfiguration();
+  }
+
+  Future<void> _loadConfiguration() async {
+    try {
+      final venue = await EndGameConfigLoader.loadActiveVenue();
+      final items = await EndGameConfigLoader.loadItems();
+      
+      // Build zones map
+      final zonesMap = <String, Rect>{};
+      for (final zone in venue.zones) {
+        zonesMap[zone.key] = zone.toRect();
+      }
+      
+      setState(() {
+        _venueConfig = venue;
+        _itemsConfig = items;
+        _zones = zonesMap;
+        _isLoading = false;
+      });
+      
+      _updateStats();
+    } catch (e) {
+      print('Error loading configuration: $e');
+      setState(() {
+        _isLoading = false;
+      });
+      // Show error to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load game configuration: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
   
   @override
@@ -140,7 +173,8 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
               id: 'move-cake',
               text: 'Move cake table closer to stage',
               effect: () {
-                _moveObjectToZone('cake-table', _stageZone);
+                final stageZone = _zones['stage'];
+                if (stageZone != null) _moveObjectToZone('cake-table', stageZone);
                 setState(() {
                   _guestScore += 10;
                   _eventScore += 5;
@@ -151,7 +185,8 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
               id: 'reroute-guests',
               text: 'Re-route guest seating',
               effect: () {
-                _moveObjectToZone('guest-seating', _guestZone);
+                final diningZone = _zones['dining'];
+                if (diningZone != null) _moveObjectToZone('guest-seating', diningZone);
                 setState(() {
                   _guestScore += 5;
                   _budgetScore -= 5;
@@ -276,7 +311,8 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                 id: 'shift-decor',
                 text: 'Shift décor to sheltered zone',
                 effect: () {
-                   _moveObjectToZone('candles', _guestZone);
+                   final diningZone = _zones['dining'];
+                   if (diningZone != null) _moveObjectToZone('candles', diningZone);
                    setState(() {
                     _safetyScore += 10;
                     _budgetScore -= 5;
@@ -316,7 +352,8 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                 id: 'move-bar',
                 text: 'Move bar setup slightly',
                 effect: () {
-                   _moveObjectToZone('bar-counter', _barZone);
+                   final barZone = _zones['bar'];
+                   if (barZone != null) _moveObjectToZone('bar-counter', barZone);
                    setState(() {
                     _safetyScore += 15;
                     _guestScore -= 5;
@@ -495,7 +532,32 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
             ],
           ),
         ),
-        child: Column(
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.black,
+                ),
+              )
+            : _venueConfig == null || _itemsConfig == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Failed to load game configuration',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Go Back'),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
           children: [
             // Safe Area for Status Bar
             SafeArea(
@@ -618,13 +680,13 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                                                    
                                                     
                                                     // Zone labels (text only, no colored overlays)
-                                                    _buildZoneLabel(_stageZone, 'STAGE', venueConstraints),
-                                                    _buildZoneLabel(_poolZone, 'POOL', venueConstraints),
-                                                    _buildZoneLabel(_guestZone, 'DINING AREA', venueConstraints),
-                                                    _buildZoneLabel(_theaterZone, 'THEATER', venueConstraints),
-                                                    _buildZoneLabel(_entranceZone, 'ENTRANCE', venueConstraints),
-                                                    _buildZoneLabel(_barZone, 'BAR', venueConstraints),
-                                                    _buildZoneLabel(_buffetZone, 'BUFFET', venueConstraints),
+
+
+
+
+
+
+
                                                    // Trash Zone (Only visible when dragging)
                                                   if (_isDraggingPlacedObject)
                                                     Positioned(
@@ -723,7 +785,11 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   }
   
   Widget _buildHorizontalList(String categoryId) {
-    final items = GameDefinitions.items.where((i) => i.category == categoryId).toList();
+    if (_itemsConfig == null) return const SizedBox.shrink();
+    
+    final items = _itemsConfig!.getItemsByCategory(categoryId)
+        .map((config) => GameItemDef.fromConfig(config))
+        .toList();
     return ListView.builder(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -846,22 +912,34 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
 
   // Check if a placed object is in the correct zone
   bool _isInCorrectZone(PlacedObject obj) {
-    final definition = obj.definition;
-    if (definition.validZones.isEmpty) return true; // No zone requirement
+    if (_itemsConfig == null) return false;
     
-    // Check which zone the object is in
+    // Find the item definition
+    final itemDef = _itemsConfig!.items.firstWhere(
+      (item) => item.id == obj.id,
+      orElse: () => ItemConfig(
+        id: obj.id,
+        category: obj.category,
+        icon: '',
+        name: '',
+        validZones: [],
+        points: 0,
+        displayOrder: 0,
+      ),
+    );
+    
+    if (itemDef.validZones.isEmpty) return true; // No zone requirement
+    
     final x = obj.x;
     final y = obj.y;
     
-    // Check each zone
-    if (_isInZone(x, y, _stageZone) && definition.validZones.contains('stage')) return true;
-    if (_isInZone(x, y, _poolZone) && definition.validZones.contains('pool')) return true;
-    if (_isInZone(x, y, _guestZone) && definition.validZones.contains('dining')) return true;
-    if (_isInZone(x, y, _theaterZone) && definition.validZones.contains('theater')) return true;
-    if (_isInZone(x, y, _entranceZone) && definition.validZones.contains('entrance')) return true;
-    if (_isInZone(x, y, _barZone) && definition.validZones.contains('bar')) return true;
-    if (_isInZone(x, y, _buffetZone) && definition.validZones.contains('buffet')) return true;
-    if ((_isInZone(x, y, _lawnLeftZone) || _isInZone(x, y, _lawnRightZone)) && definition.validZones.contains('lawn')) return true;
+    // Check each valid zone
+    for (final zoneKey in itemDef.validZones) {
+      final zone = _zones[zoneKey];
+      if (zone != null && _isInZone(x, y, zone)) {
+        return true;
+      }
+    }
     
     return false;
   }
@@ -1093,6 +1171,24 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   }
   
   Widget _buildPlacedObjectContent(PlacedObject obj, bool isFeedback) {
+    // Look up the item icon from config
+    String icon = '❓'; // Default icon
+    if (_itemsConfig != null) {
+      final itemDef = _itemsConfig!.items.firstWhere(
+        (item) => item.id == obj.id,
+        orElse: () => ItemConfig(
+          id: obj.id,
+          category: obj.category,
+          icon: '❓',
+          name: '',
+          validZones: [],
+          points: 0,
+          displayOrder: 0,
+        ),
+      );
+      icon = itemDef.icon;
+    }
+    
     return Container(
       width: 50,
       height: 50,
@@ -1103,7 +1199,7 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: Center(
-        child: Text(obj.definition.icon, style: const TextStyle(fontSize: 24)),
+        child: Text(icon, style: const TextStyle(fontSize: 24)),
       ),
     );
   }

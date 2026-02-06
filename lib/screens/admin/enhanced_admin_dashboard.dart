@@ -5,6 +5,7 @@ import '../../models/pathway.dart';
 import 'user_management_screen.dart';
 import 'question_bank_management_screen.dart';
 import 'department_management_screen.dart';
+import 'end_game_config_screen.dart';
 
 class EnhancedAdminDashboard extends StatefulWidget {
   const EnhancedAdminDashboard({super.key});
@@ -351,6 +352,20 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                 Icons.quiz_rounded,
                 const Color(0xFFF4EF8B),
                 () => setState(() => _selectedIndex = 2), // Navigate to Q-Bank tab
+              ),
+              const SizedBox(height: 12),
+              _buildActionButton(
+                'End Game Configuration',
+                Icons.videogame_asset_rounded,
+                const Color(0xFFFF7043), // Deep Orange
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EndGameConfigScreen(
+                      onBack: () => Navigator.pop(context),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

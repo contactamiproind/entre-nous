@@ -180,7 +180,7 @@ class _AssignPathwaysTabState extends State<AssignPathwaysTab> {
                       return DropdownMenuItem<String>(
                         value: pathway.id,
                         child: Text(
-                          pathway.title,
+                          pathway.displayName,
                           overflow: TextOverflow.ellipsis,
                         ),
                       );

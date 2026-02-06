@@ -28,17 +28,39 @@ class PathwayService {
     return Pathway.fromJson(response);
   }
 
-  // Get pathway levels
+  // Get pathway levels from the departments.levels JSONB column
   Future<List<PathwayLevel>> getPathwayLevels(String pathwayId) async {
     final response = await _supabase
-        .from('dept_levels')
-        .select()
-        .eq('dept_id', pathwayId)
-        .order('level_number');
+        .from('departments')
+        .select('id, levels')
+        .eq('id', pathwayId)
+        .maybeSingle();
 
-    return (response as List)
-        .map((json) => PathwayLevel.fromJson(json))
-        .toList();
+    if (response == null || response['levels'] == null) {
+      return [];
+    }
+
+    // Parse the levels JSONB array
+    final levelsJson = response['levels'] as List<dynamic>;
+    
+    return levelsJson.asMap().entries.map((entry) {
+      final index = entry.key;
+      final levelData = entry.value as Map<String, dynamic>;
+      
+      // Create a PathwayLevel from the JSONB data
+      // Generate an ID if not present
+      return PathwayLevel.fromJson({
+        'id': levelData['id']?.toString() ?? '${pathwayId}_level_${index + 1}',
+        'dept_id': pathwayId,
+        'level_number': levelData['number'] ?? levelData['level_number'] ?? (index + 1),
+        'level_name': levelData['name'] ?? levelData['level_name'] ?? 'Level ${index + 1}',
+        'title': levelData['name'] ?? levelData['title'] ?? levelData['level_name'] ?? 'Level ${index + 1}',
+        'required_score': levelData['score'] ?? levelData['required_score'] ?? 0,
+        'description': levelData['description'],
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    }).toList();
   }
 
   // Check if orientation is completed
@@ -74,14 +96,14 @@ class PathwayService {
     final response = await _supabase
         .from('departments')
         .select()
-        .eq('title', 'Orientation')
+        .eq('category', 'Orientation')
         .maybeSingle();
 
     if (response == null) return null;
     return Pathway.fromJson(response);
   }
 
-  // Create pathway level
+  // Create pathway level by updating the departments.levels JSONB array
   Future<void> createPathwayLevel({
     required String pathwayId,
     required int levelNumber,
@@ -89,12 +111,33 @@ class PathwayService {
     required int requiredScore,
     String? description,
   }) async {
-    await _supabase.from('dept_levels').insert({
-      'dept_id': pathwayId,
-      'level_number': levelNumber,
-      'level_name': levelName,
-      'required_score': requiredScore,
+    // Get current levels
+    final currentLevels = await getPathwayLevels(pathwayId);
+    
+    // Create new level object
+    final newLevel = {
+      'id': '${pathwayId}_level_$levelNumber',
+      'number': levelNumber,
+      'name': levelName,
+      'score': requiredScore,
       'description': description,
-    });
+    };
+    
+    // Add to levels array
+    final updatedLevels = [
+      ...currentLevels.map((l) => {
+        'id': l.id,
+        'number': l.levelNumber,
+        'name': l.levelName,
+        'score': l.requiredScore,
+        'description': l.description,
+      }),
+      newLevel,
+    ];
+    
+    // Update the department with new levels array
+    await _supabase.from('departments').update({
+      'levels': updatedLevels,
+    }).eq('id', pathwayId);
   }
 }

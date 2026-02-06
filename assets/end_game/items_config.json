@@ -1,0 +1,316 @@
+{
+    "categories": [
+        {
+            "id": "infrastructure",
+            "name": "INFRASTRUCTURE",
+            "displayOrder": 1
+        },
+        {
+            "id": "guest",
+            "name": "GUEST & FLOW",
+            "displayOrder": 2
+        },
+        {
+            "id": "decor",
+            "name": "DECOR",
+            "displayOrder": 3
+        },
+        {
+            "id": "utility",
+            "name": "UTILITY",
+            "displayOrder": 4
+        }
+    ],
+    "items": [
+        {
+            "id": "stage",
+            "category": "infrastructure",
+            "icon": "🎪",
+            "name": "Stage",
+            "validZones": [
+                "stage"
+            ],
+            "points": 10,
+            "displayOrder": 1
+        },
+        {
+            "id": "stage-steps",
+            "category": "infrastructure",
+            "icon": "🪜",
+            "name": "Stage Steps",
+            "validZones": [
+                "stage"
+            ],
+            "points": 10,
+            "displayOrder": 2
+        },
+        {
+            "id": "dance-floor",
+            "category": "infrastructure",
+            "icon": "💃",
+            "name": "Dance Floor",
+            "validZones": [
+                "stage",
+                "dining"
+            ],
+            "points": 10,
+            "displayOrder": 3
+        },
+        {
+            "id": "sound-console",
+            "category": "infrastructure",
+            "icon": "🎛️",
+            "name": "Sound Console",
+            "validZones": [
+                "stage"
+            ],
+            "points": 10,
+            "displayOrder": 4
+        },
+        {
+            "id": "speaker-left",
+            "category": "infrastructure",
+            "icon": "🔊",
+            "name": "Speaker (Left)",
+            "validZones": [
+                "stage",
+                "dining"
+            ],
+            "points": 10,
+            "displayOrder": 5
+        },
+        {
+            "id": "speaker-right",
+            "category": "infrastructure",
+            "icon": "🔊",
+            "name": "Speaker (Right)",
+            "validZones": [
+                "stage",
+                "dining"
+            ],
+            "points": 10,
+            "displayOrder": 6
+        },
+        {
+            "id": "delay-speaker",
+            "category": "infrastructure",
+            "icon": "📢",
+            "name": "Delay Speaker",
+            "validZones": [
+                "theater",
+                "dining"
+            ],
+            "points": 10,
+            "displayOrder": 7
+        },
+        {
+            "id": "genset",
+            "category": "infrastructure",
+            "icon": "⚡",
+            "name": "Genset",
+            "validZones": [
+                "lawn"
+            ],
+            "points": 10,
+            "displayOrder": 8
+        },
+        {
+            "id": "backup-genset",
+            "category": "infrastructure",
+            "icon": "🔋",
+            "name": "Backup Genset",
+            "validZones": [
+                "lawn"
+            ],
+            "points": 10,
+            "displayOrder": 9
+        },
+        {
+            "id": "distribution-box",
+            "category": "infrastructure",
+            "icon": "🔌",
+            "name": "Distribution Box",
+            "validZones": [
+                "lawn",
+                "stage"
+            ],
+            "points": 10,
+            "displayOrder": 10
+        },
+        {
+            "id": "entrance-arch",
+            "category": "guest",
+            "icon": "🏛️",
+            "name": "Entrance Arch",
+            "validZones": [
+                "entrance"
+            ],
+            "points": 10,
+            "displayOrder": 1
+        },
+        {
+            "id": "registration-desk",
+            "category": "guest",
+            "icon": "📋",
+            "name": "Registration Desk",
+            "validZones": [
+                "entrance"
+            ],
+            "points": 10,
+            "displayOrder": 2
+        },
+        {
+            "id": "guest-seating",
+            "category": "guest",
+            "icon": "🪑",
+            "name": "Guest Seating",
+            "validZones": [
+                "dining",
+                "theater"
+            ],
+            "points": 10,
+            "displayOrder": 3
+        },
+        {
+            "id": "lounge-tables",
+            "category": "guest",
+            "icon": "🪑",
+            "name": "Lounge Tables",
+            "validZones": [
+                "dining"
+            ],
+            "points": 10,
+            "displayOrder": 4
+        },
+        {
+            "id": "walkway",
+            "category": "guest",
+            "icon": "🚶",
+            "name": "Walkway",
+            "validZones": [
+                "entrance",
+                "dining"
+            ],
+            "points": 10,
+            "displayOrder": 5
+        },
+        {
+            "id": "backdrop",
+            "category": "decor",
+            "icon": "🖼️",
+            "name": "Backdrop",
+            "validZones": [
+                "stage"
+            ],
+            "points": 10,
+            "displayOrder": 1
+        },
+        {
+            "id": "fairy-lights",
+            "category": "decor",
+            "icon": "✨",
+            "name": "Fairy Lights",
+            "validZones": [
+                "stage",
+                "dining",
+                "entrance"
+            ],
+            "points": 10,
+            "displayOrder": 2
+        },
+        {
+            "id": "centerpieces",
+            "category": "decor",
+            "icon": "💐",
+            "name": "Centerpieces",
+            "validZones": [
+                "dining"
+            ],
+            "points": 10,
+            "displayOrder": 3
+        },
+        {
+            "id": "candles",
+            "category": "decor",
+            "icon": "🕯️",
+            "name": "Candles",
+            "validZones": [
+                "dining"
+            ],
+            "points": 10,
+            "displayOrder": 4
+        },
+        {
+            "id": "carpet",
+            "category": "decor",
+            "icon": "🟫",
+            "name": "Carpet",
+            "validZones": [
+                "stage",
+                "entrance"
+            ],
+            "points": 10,
+            "displayOrder": 5
+        },
+        {
+            "id": "bar-counter",
+            "category": "utility",
+            "icon": "🍸",
+            "name": "Bar Counter",
+            "validZones": [
+                "bar"
+            ],
+            "points": 10,
+            "displayOrder": 1
+        },
+        {
+            "id": "buffet-counter",
+            "category": "utility",
+            "icon": "🍽️",
+            "name": "Buffet Counter",
+            "validZones": [
+                "buffet"
+            ],
+            "points": 10,
+            "displayOrder": 2
+        },
+        {
+            "id": "cake-table",
+            "category": "utility",
+            "icon": "🎂",
+            "name": "Cake Table",
+            "validZones": [
+                "dining",
+                "buffet"
+            ],
+            "points": 10,
+            "displayOrder": 3
+        },
+        {
+            "id": "washroom-sign",
+            "category": "utility",
+            "icon": "🚻",
+            "name": "Washroom Sign",
+            "validZones": [
+                "entrance",
+                "lawn"
+            ],
+            "points": 10,
+            "displayOrder": 4
+        },
+        {
+            "id": "fire-extinguisher",
+            "category": "utility",
+            "icon": "🧯",
+            "name": "Fire Extinguisher",
+            "validZones": [
+                "entrance",
+                "stage",
+                "bar",
+                "buffet"
+            ],
+            "points": 10,
+            "displayOrder": 5
+        }
+    ]
+}

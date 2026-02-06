@@ -70,6 +70,17 @@ class _SignupScreenState extends State<SignupScreen> {
           print('Profile upsert note: $e');
         }
 
+        // Auto-assign General departments (Orientation, Process, SOP)
+        try {
+          await Supabase.instance.client.rpc(
+            'auto_assign_general_departments',
+            params: {'p_user_id': response.user!.id},
+          );
+        } catch (e) {
+          print('Auto-assignment note: $e');
+          // Continue even if auto-assignment fails
+        }
+
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(

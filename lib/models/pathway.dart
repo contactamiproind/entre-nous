@@ -2,6 +2,8 @@ class Pathway {
   final String id;
   final String title;
   final String? description;
+  final String? category;
+  final int displayOrder;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -9,15 +11,27 @@ class Pathway {
     required this.id,
     required this.title,
     this.description,
+    this.category,
+    this.displayOrder = 0,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  // Helper to display department name with category for "General" departments
+  String get displayName {
+    if (title == 'General' && category != null && category!.isNotEmpty) {
+      return 'General ($category)';
+    }
+    return title;
+  }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'title': title,
       'description': description,
+      'category': category,
+      'display_order': displayOrder,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -28,6 +42,8 @@ class Pathway {
       id: json['id'] ?? '',
       title: json['title'] ?? json['name'] ?? 'Unknown',
       description: json['description'],
+      category: json['category'],
+      displayOrder: json['display_order'] ?? 0,
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at']) 
           : DateTime.now(),

@@ -62,11 +62,8 @@ class _DepartmentQuestionsScreenState extends State<DepartmentQuestionsScreen> {
     }
     final tagsController = TextEditingController(text: tagsText);
     
-    // Capitalize difficulty to match dropdown items
-    String selectedDifficulty = question['difficulty'] ?? 'Easy';
-    if (selectedDifficulty.toLowerCase() == 'easy') selectedDifficulty = 'Easy';
-    if (selectedDifficulty.toLowerCase() == 'medium' || selectedDifficulty.toLowerCase() == 'mid') selectedDifficulty = 'Medium';
-    if (selectedDifficulty.toLowerCase() == 'hard') selectedDifficulty = 'Hard';
+    // Get level as integer
+    int selectedLevel = question['level'] ?? 1;
 
     await showDialog(
       context: context,
@@ -97,20 +94,21 @@ class _DepartmentQuestionsScreenState extends State<DepartmentQuestionsScreen> {
                     maxLines: 3,
                   ),
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: selectedDifficulty,
+                  DropdownButtonFormField<int>(
+                    value: selectedLevel,
                     decoration: const InputDecoration(
-                      labelText: 'Difficulty',
+                      labelText: 'Level',
                       border: OutlineInputBorder(),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'Easy', child: Text('Easy')),
-                      DropdownMenuItem(value: 'Medium', child: Text('Medium')),
-                      DropdownMenuItem(value: 'Hard', child: Text('Hard')),
+                      DropdownMenuItem(value: 1, child: Text('Level 1 (Easy)')),
+                      DropdownMenuItem(value: 2, child: Text('Level 2 (Medium)')),
+                      DropdownMenuItem(value: 3, child: Text('Level 3 (Hard)')),
+                      DropdownMenuItem(value: 4, child: Text('Level 4 (Expert)')),
                     ],
                     onChanged: (value) {
                       setDialogState(() {
-                        selectedDifficulty = value!;
+                        selectedLevel = value!;
                       });
                     },
                   ),
@@ -159,7 +157,7 @@ class _DepartmentQuestionsScreenState extends State<DepartmentQuestionsScreen> {
                       .update({
                         'title': titleController.text,
                         'description': descriptionController.text,
-                        'difficulty': selectedDifficulty.toLowerCase(),
+                        'level': selectedLevel,
                         'points': int.tryParse(pointsController.text) ?? 10,
                         'tags': tagsArray,
                       })

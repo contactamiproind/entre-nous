@@ -32,11 +32,18 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
       // Load departments first to create a lookup map
       final deptResponse = await Supabase.instance.client
           .from('departments')
-          .select('id, title');
+          .select('id, title, category');
       
       final deptMap = <String, String>{};
       for (var dept in deptResponse) {
-        deptMap[dept['id']] = dept['title'];
+        final title = dept['title'] ?? 'Unknown';
+        final category = dept['category'];
+        // For General departments, show "General - Category"
+        if (title == 'General' && category != null) {
+          deptMap[dept['id']] = 'General - $category';
+        } else {
+          deptMap[dept['id']] = title;
+        }
       }
       
       // Load questions
@@ -74,7 +81,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
     try {
       final response = await Supabase.instance.client
           .from('departments')
-          .select('id, title')
+          .select('id, title, category')
           .order('title');
       
       if (mounted) {
@@ -141,10 +148,17 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                       border: OutlineInputBorder(),
                     ),
                     items: _departments.map((dept) {
+                      final title = dept['title'] ?? 'Unknown';
+                      final category = dept['category'];
+                      // For General departments, show "General - Category"
+                      final displayName = (title == 'General' && category != null)
+                          ? 'General - $category'
+                          : title;
+                      
                       return DropdownMenuItem<String>(
                         value: dept['id'],
                         child: Text(
-                          dept['title'] ?? 'Unknown',
+                          displayName,
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -233,11 +247,11 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                 const SizedBox(height: 16),
               ],
               const Text(
-                'Difficulty:',
+                'Level:',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
-              Text(question['difficulty'] ?? 'Not set'),
+              Text('Level ${question['level'] ?? 1}'),
               const SizedBox(height: 16),
               const Text(
                 'Points:',
@@ -286,7 +300,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
     final descriptionController = TextEditingController(text: question['description']);
     final pointsController = TextEditingController(text: question['points']?.toString() ?? '10');
     
-    String selectedDifficulty = question['difficulty'] ?? 'easy';
+    int selectedLevel = question['level'] ?? 1;
     
     // Get question type
     String questionType = 'mcq'; // default
@@ -411,22 +425,23 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                     maxLines: 3,
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: selectedDifficulty,
+                  DropdownButtonFormField<int>(
+                    value: selectedLevel,
                     decoration: const InputDecoration(
-                      labelText: 'Difficulty',
+                      labelText: 'Level',
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                       isDense: true,
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'easy', child: Text('Easy')),
-                      DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                      DropdownMenuItem(value: 'hard', child: Text('Hard')),
+                      DropdownMenuItem(value: 1, child: Text('Level 1 (Easy)')),
+                      DropdownMenuItem(value: 2, child: Text('Level 2 (Medium)')),
+                      DropdownMenuItem(value: 3, child: Text('Level 3 (Hard)')),
+                      DropdownMenuItem(value: 4, child: Text('Level 4 (Expert)')),
                     ],
                     onChanged: (value) {
                       setDialogState(() {
-                        selectedDifficulty = value!;
+                        selectedLevel = value!;
                       });
                     },
                   ),
@@ -588,7 +603,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                 .update({
                                   'title': titleController.text,
                                   'description': descriptionController.text,
-                                  'difficulty': selectedDifficulty,
+                                  'level': selectedLevel,
                                   'points': int.tryParse(pointsController.text) ?? 10,
                                   'options': optionsData,
                                 })
@@ -768,10 +783,17 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                             child: Text('All Departments'),
                           ),
                           ..._departments.map((dept) {
+                            final title = dept['title'] ?? 'Unknown';
+                            final category = dept['category'];
+                            // For General departments, show "General - Category"
+                            final displayName = (title == 'General' && category != null)
+                                ? 'General - $category'
+                                : title;
+                            
                             return DropdownMenuItem<String>(
                               value: dept['id'],
                               child: Text(
-                                dept['title'] ?? 'Unknown',
+                                displayName,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             );

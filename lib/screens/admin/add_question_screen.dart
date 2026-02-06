@@ -28,6 +28,9 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   // Question Type
   String? _questionType; // nullable to show hint
   
+  // Question Level
+  int _selectedQuestionLevel = 1; // default to level 1
+  
   // Subcategory
   String? _selectedSubcategory;
 
@@ -278,18 +281,8 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     setState(() => _isSaving = true);
 
     try {
-      // Map level name to difficulty for backward compatibility
-    String difficulty = 'easy'; // default
-    final levelName = _selectedLevel?.levelName?.toLowerCase() ?? 'easy';
-    if (levelName.contains('mid') || levelName.contains('medium')) {
-      difficulty = 'medium';
-    } else if (levelName.contains('hard')) {
-      difficulty = 'hard';
-    } else if (levelName.contains('extreme')) {
-      difficulty = 'hard';
-    } else if (levelName.contains('easy')) {
-      difficulty = 'easy';
-    }
+      // Use the selected question level
+      int levelNumber = _selectedQuestionLevel;
 
     // Map UI types to DB types
     String dbType = _questionType ?? 'mcq';
@@ -316,7 +309,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
       'type_id': typeRes['id'], // Use type_id instead of question_type
-      'difficulty': difficulty,
+      'level': levelNumber,
       'points': 10,
       'created_at': DateTime.now().toIso8601String(),
     };
@@ -516,10 +509,10 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
             'question_id': questionId,
             'dept_id': deptId,
             'level_number': levelNumber,
-            'level_name': difficulty, // Use difficulty as level_name
+            'level_name': levelNumber.toString(), // Use levelNumber as level_name
             'question_text': _titleController.text.trim(),
             'question_type': _questionType,
-            'difficulty': difficulty,
+            'level': levelNumber,
             'category': 'Orientation',
             'subcategory': 'Vision',
             'points': 10,
@@ -633,7 +626,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                 return DropdownMenuItem(
                                   value: pathway,
                                   child: Text(
-                                    pathway.title,
+                                    pathway.displayName,
                                     overflow: TextOverflow.ellipsis,
                                     maxLines: 1,
                                   ),
@@ -754,8 +747,41 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                   });
                                 }
                               },
+                              validator: (value) {
+                                if (value == null) {
+                                  return 'Please select a question type';
+                                }
+                                return null;
+                              },
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 16),
+
+                            // Level Dropdown
+                            DropdownButtonFormField<int>(
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                labelText: 'Level',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.stairs),
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.6),
+                              ),
+                              value: _selectedQuestionLevel,
+                              items: const [
+                                DropdownMenuItem(value: 1, child: Text('Level 1 (Easy)')),
+                                DropdownMenuItem(value: 2, child: Text('Level 2 (Medium)')),
+                                DropdownMenuItem(value: 3, child: Text('Level 3 (Hard)')),
+                                DropdownMenuItem(value: 4, child: Text('Level 4 (Expert)')),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    _selectedQuestionLevel = value;
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
 
                             // Title (for all question types)
                             TextFormField(

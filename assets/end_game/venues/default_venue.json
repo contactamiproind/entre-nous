@@ -1,0 +1,79 @@
+{
+    "id": "default",
+    "name": "Classic Wedding Venue",
+    "description": "Traditional wedding setup with stage, dining, theater, and service areas",
+    "zones": [
+        {
+            "key": "stage",
+            "label": "STAGE",
+            "x": 20,
+            "y": 2,
+            "width": 60,
+            "height": 12,
+            "color": "#8B5CF6"
+        },
+        {
+            "key": "pool",
+            "label": "POOL",
+            "x": 35,
+            "y": 15,
+            "width": 30,
+            "height": 15,
+            "color": "#06B6D4"
+        },
+        {
+            "key": "dining",
+            "label": "DINING",
+            "x": 15,
+            "y": 40,
+            "width": 70,
+            "height": 25,
+            "color": "#3B82F6"
+        },
+        {
+            "key": "theater",
+            "label": "THEATER",
+            "x": 15,
+            "y": 70,
+            "width": 70,
+            "height": 18,
+            "color": "#8B5CF6"
+        },
+        {
+            "key": "lawn",
+            "label": "LAWN",
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 100,
+            "color": "#10B981"
+        },
+        {
+            "key": "entrance",
+            "label": "ENTRANCE",
+            "x": 30,
+            "y": 90,
+            "width": 40,
+            "height": 8,
+            "color": "#F59E0B"
+        },
+        {
+            "key": "bar",
+            "label": "BAR",
+            "x": 11,
+            "y": 10,
+            "width": 15,
+            "height": 10,
+            "color": "#EC4899"
+        },
+        {
+            "key": "buffet",
+            "label": "BUFFET",
+            "x": 72,
+            "y": 10,
+            "width": 15,
+            "height": 10,
+            "color": "#F59E0B"
+        }
+    ]
+}
