@@ -39,6 +39,23 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
     }
   }
 
+  @override
+  void didUpdateWidget(EndGameVisualEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialVenue != oldWidget.initialVenue) {
+      setState(() {
+        _venue = widget.initialVenue;
+        _selectedZone = null;
+        _selectedPlacement = null;
+      });
+    }
+    if (widget.itemConfig != oldWidget.itemConfig) {
+      setState(() {
+        _catalog = widget.itemConfig;
+      });
+    }
+  }
+
   Future<void> _loadCatalog() async {
     try {
       final config = await EndGameConfigLoader.loadItems();
@@ -52,7 +69,62 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
     }
   }
 
+  // Undo/Redo Stacks
+  final List<VenueConfig> _undoStack = [];
+  final List<VenueConfig> _redoStack = [];
+
+  void _saveForUndo() {
+    // Deep copy current state via JSON
+    final json = _venue.toJson();
+    final snapshot = VenueConfig.fromJson(json);
+    
+    _undoStack.add(snapshot);
+    _redoStack.clear();
+    
+    // Limit stack size
+    if (_undoStack.length > 20) {
+      _undoStack.removeAt(0);
+    }
+  }
+
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    
+    setState(() {
+      // Save current state to redo stack
+      final  currentJson = _venue.toJson();
+      _redoStack.add(VenueConfig.fromJson(currentJson));
+      
+      // Restore from undo stack
+      _venue = _undoStack.removeLast();
+      
+      // Clear selection if it no longer exists
+      // (Simple approach: just clear selection to be safe)
+      _selectedZone = null;
+      _selectedPlacement = null;
+    });
+    _notifyUpdate();
+  }
+
+  void _redo() {
+    if (_redoStack.isEmpty) return;
+    
+    setState(() {
+      // Save current to undo
+      final currentJson = _venue.toJson();
+      _undoStack.add(VenueConfig.fromJson(currentJson));
+      
+      // Restore from redo
+      _venue = _redoStack.removeLast();
+      
+      _selectedZone = null;
+      _selectedPlacement = null;
+    });
+    _notifyUpdate();
+  }
+
   void _addZone(String label, Color color) {
+    _saveForUndo();
     setState(() {
       final newZone = ZoneConfig(
         key: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -64,8 +136,6 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
         color: '#${color.value.toRadixString(16).substring(2)}',
       );
       
-      // Reassign list to modify venue since zones list itself might be final in VenueConfig?
-      // VenueConfig.zones is final List<ZoneConfig>. List is mutable.
       _venue.zones.add(newZone);
       
       _selectedZone = newZone;
@@ -74,38 +144,10 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
     _notifyUpdate();
   }
   
-  void _addItem(String type) {
-    // For now, we simulate an item ID since we might not have a real catalog item yet
-    // In a real app, we'd pick from _catalog.
-    // Let's create a placement for a "Speaker".
-    
-    // We need a dummy ItemConfig if one doesn't exist for "Speaker"
-    // Or we assume "Speaker" is a known type.
-    
-    // For this prototype, we'll generate a placement.
-    // We assume 'speaker_item' is the ID of the speaker item in the catalog.
-    // If not, we just use the type string as ID for visual purpose for now.
-    
-    setState(() {
-      final newPlacement = ItemPlacement(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        itemId: type == 'SPEAKER' ? 'speaker_1' : 'item_${DateTime.now().millisecondsSinceEpoch}',
-        x: 0.5,
-        y: 0.5,
-      );
-      
-      // We need to add this to _venue.placements
-      // Since _venue.placements is final list in model (likely), we might need to recreate list
-      // But usually in Dart List is mutable unless const.
-      _venue.placements.add(newPlacement);
-      
-      _selectedPlacement = newPlacement;
-      _selectedZone = null;
-    });
-    _notifyUpdate();
-  }
+
 
   void _deleteSelected() {
+    _saveForUndo();
     setState(() {
       if (_selectedZone != null) {
         _venue.zones.removeWhere((z) => z.key == _selectedZone!.key);
@@ -123,7 +165,27 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
     widget.onUpdate(_venue, _catalog?.items ?? []);
   }
 
+  void _moveItem(ItemPlacement item, double x, double y) {
+    _saveForUndo();
+    setState(() {
+       final index = _venue.placements.indexWhere((p) => p.id == item.id);
+       if (index != -1) {
+          final current = _venue.placements[index];
+          _venue.placements[index] = ItemPlacement(
+             id: current.id,
+             itemId: current.itemId,
+             x: x.clamp(0.0, 1.0),
+             y: y.clamp(0.0, 1.0),
+          );
+          _selectedPlacement = _venue.placements[index];
+          _selectedZone = null;
+       }
+    });
+    _notifyUpdate();
+  }
+
   void _addItemAtLocation(ItemConfig item, double relX, double relY) {
+    _saveForUndo();
     setState(() {
       final newItem = ItemPlacement(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -150,6 +212,17 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
+                IconButton(
+                  icon: Icon(Icons.undo, color: _undoStack.isEmpty ? Colors.grey : Colors.black),
+                  onPressed: _undoStack.isEmpty ? null : _undo,
+                  tooltip: 'Undo',
+                ),
+                IconButton(
+                  icon: Icon(Icons.redo, color: _redoStack.isEmpty ? Colors.grey : Colors.black),
+                  onPressed: _redoStack.isEmpty ? null : _redo,
+                  tooltip: 'Redo',
+                ),
+                const SizedBox(width: 16),
                 const Text('Add Zone:', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(width: 8),
                 _ToolButton(
@@ -167,18 +240,10 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
                   color: Colors.orange[100]!,
                   onTap: () => _addZone('BAR', const Color(0xFFFF9800)),
                 ),
-                 _ToolButton(
+                _ToolButton(
                   label: 'Buffet',
                   color: Colors.blue[100]!,
                   onTap: () => _addZone('BUFFET', const Color(0xFF2196F3)),
-                ),
-                const SizedBox(width: 16),
-                const Text('Add Item:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                _ToolButton(
-                  label: 'Speaker',
-                  color: Colors.red[100]!,
-                  onTap: () => _addItem('SPEAKER'),
                 ),
                 const SizedBox(width: 24),
                 if (_selectedZone != null || _selectedPlacement != null)
@@ -219,14 +284,19 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
                       return 0;
                     });
 
-                  return DragTarget<ItemConfig>(
+                  return DragTarget<Object>(
                     onAcceptWithDetails: (details) {
                         final RenderBox box = context.findRenderObject() as RenderBox;
                         final Offset localOffset = box.globalToLocal(details.offset);
-                        final double relativeX = localOffset.dx / constraints.maxWidth;
-                        final double relativeY = localOffset.dy / constraints.maxHeight;
+                        // Adjust for center of the dragged item (assuming 45x45 feedback)
+                        final double relativeX = (localOffset.dx) / constraints.maxWidth;
+                        final double relativeY = (localOffset.dy) / constraints.maxHeight;
                         
-                        _addItemAtLocation(details.data, relativeX, relativeY);
+                        if (details.data is ItemConfig) {
+                          _addItemAtLocation(details.data as ItemConfig, relativeX, relativeY);
+                        } else if (details.data is ItemPlacement) {
+                          _moveItem(details.data as ItemPlacement, relativeX, relativeY);
+                        }
                     },
                     builder: (context, candidateData, rejectedData) {
                       return Stack(
@@ -304,94 +374,20 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
                     ),
                   ],
                 ),
-                const Text('Drag or use sliders to move.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const Text('Drag to move.', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Text('X:'),
-                    Expanded(
-                      child: Slider(
-                        value: (_selectedZone?.x ?? _selectedPlacement?.x ?? 0.0).clamp(0.0, 1.0),
-                        min: 0.0,
-                        max: 1.0,
-                        onChanged: (val) {
-                           setState(() {
-                             if (_selectedZone != null) {
-                               final index = _venue.zones.indexWhere((z) => z.key == _selectedZone!.key);
-                               if (index != -1) {
-                                 final current = _venue.zones[index];
-                                 _venue.zones[index] = ZoneConfig(
-                                   key: current.key,
-                                   label: current.label,
-                                   x: val,
-                                   y: current.y,
-                                   width: current.width,
-                                   height: current.height,
-                                   color: current.color,
-                                 );
-                                 _selectedZone = _venue.zones[index];
-                               }
-                             } else if (_selectedPlacement != null) {
-                               final index = _venue.placements.indexWhere((p) => p.id == _selectedPlacement!.id);
-                               if (index != -1) {
-                                 final current = _venue.placements[index];
-                                 _venue.placements[index] = ItemPlacement(
-                                   id: current.id,
-                                   itemId: current.itemId,
-                                   x: val,
-                                   y: current.y,
-                                 );
-                                 _selectedPlacement = _venue.placements[index];
-                               }
-                             }
-                           });
-                        },
-                        onChangeEnd: (_) => _notifyUpdate(),
-                      ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _deleteSelected,
+                    icon: const Icon(Icons.delete, size: 16),
+                    label: Text('Remove ${_selectedZone != null ? "Zone" : "Item"}'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red[100],
+                      foregroundColor: Colors.red,
                     ),
-                    const SizedBox(width: 16),
-                    const Text('Y:'),
-                    Expanded(
-                      child: Slider(
-                        value: (_selectedZone?.y ?? _selectedPlacement?.y ?? 0.0).clamp(0.0, 1.0),
-                        min: 0.0,
-                        max: 1.0,
-                        onChanged: (val) {
-                           setState(() {
-                             if (_selectedZone != null) {
-                               final index = _venue.zones.indexWhere((z) => z.key == _selectedZone!.key);
-                               if (index != -1) {
-                                 final current = _venue.zones[index];
-                                 _venue.zones[index] = ZoneConfig(
-                                   key: current.key,
-                                   label: current.label,
-                                   x: current.x,
-                                   y: val,
-                                   width: current.width,
-                                   height: current.height,
-                                   color: current.color,
-                                 );
-                                 _selectedZone = _venue.zones[index];
-                               }
-                             } else if (_selectedPlacement != null) {
-                               final index = _venue.placements.indexWhere((p) => p.id == _selectedPlacement!.id);
-                               if (index != -1) {
-                                 final current = _venue.placements[index];
-                                 _venue.placements[index] = ItemPlacement(
-                                   id: current.id,
-                                   itemId: current.itemId,
-                                   x: current.x,
-                                   y: val,
-                                 );
-                                 _selectedPlacement = _venue.placements[index];
-                               }
-                             }
-                           });
-                        },
-                        onChangeEnd: (_) => _notifyUpdate(),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -399,7 +395,7 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
           
         // Item Palette (Bottom Tabs)
         Container(
-          height: 200,
+          height: 350, // Increased from 200 to show more items
           color: Colors.white,
           child: _catalog == null 
            ? const Center(child: CircularProgressIndicator())
@@ -428,40 +424,46 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final item = items[index];
-                          return Draggable<ItemConfig>(
-                            data: item,
-                            feedback: Material(
-                              elevation: 4,
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                width: 80,
-                                height: 80,
-                                padding: const EdgeInsets.all(8),
-                                color: Colors.white,
+                          return InkWell(
+                            onTap: () {
+                              // "Tap to Add" - adds to center
+                              _addItemAtLocation(item, 0.5, 0.5);
+                            },
+                            child: Draggable<ItemConfig>(
+                              data: item,
+                              feedback: Material(
+                                elevation: 4,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  width: 80,
+                                  height: 80,
+                                  padding: const EdgeInsets.all(8),
+                                  color: Colors.white,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(item.icon, style: const TextStyle(fontSize: 32)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              child: Card(
+                                elevation: 2,
+                                color: const Color(0xFFFFF9C4), // Yellow cards
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(item.icon, style: const TextStyle(fontSize: 32)),
+                                    Text(item.icon, style: const TextStyle(fontSize: 24)),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item.name, 
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
-                              ),
-                            ),
-                            child: Card(
-                              elevation: 2,
-                              color: const Color(0xFFFFF9C4), // Yellow cards
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(item.icon, style: const TextStyle(fontSize: 24)),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    item.name, 
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
                               ),
                             ),
                           );
@@ -484,57 +486,98 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
 
   Widget _buildPlacementWidget(ItemPlacement placement, BoxConstraints constraints) {
     final isSelected = _selectedPlacement?.id == placement.id;
-    IconData icon = Icons.volume_up;
-    Color color = Colors.red;
+    
+    // Lookup item icon
+    String iconText = '❓';
+    if (_catalog != null) {
+      final itemDef = _catalog!.items.firstWhere(
+        (i) => i.id == placement.itemId,
+        orElse: () => ItemConfig(
+          id: placement.itemId,
+          category: '',
+          icon: '❓',
+          name: '',
+          validZones: [],
+          points: 0,
+          displayOrder: 0,
+        ),
+      );
+      iconText = itemDef.icon;
+    }
     
     return Positioned(
       key: ValueKey('item_${placement.id}'),
-      left: placement.x * constraints.maxWidth - 12,
-      top: placement.y * constraints.maxHeight - 12,
-      width: 24,
-      height: 24,
+      left: placement.x * constraints.maxWidth - 22.5, // Centered (45/2)
+      top: placement.y * constraints.maxHeight - 22.5, // Centered (45/2)
+      width: 45,
+      height: 45,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() {
-          _selectedPlacement = placement;
-          _selectedZone = null;
-        }),
-        onScaleStart: (_) {
-           setState(() {});
-        },
-        onScaleEnd: (_) {
-           _notifyUpdate();
-        },
-        onScaleUpdate: (details) {
+        onTap: () {
           setState(() {
-            double dx = details.focalPointDelta.dx / constraints.maxWidth;
-            double dy = details.focalPointDelta.dy / constraints.maxHeight;
-            
-            final index = _venue.placements.indexWhere((p) => p.id == placement.id);
-            if (index != -1) {
-              final current = _venue.placements[index];
-              final newX = (current.x + dx).clamp(0.0, 1.0);
-              final newY = (current.y + dy).clamp(0.0, 1.0);
-              
-              _venue.placements[index] = ItemPlacement(
-                id: current.id,
-                itemId: current.itemId,
-                x: newX,
-                y: newY,
-              );
-              
-              _selectedPlacement = _venue.placements[index];
-            }
+            _selectedPlacement = placement;
+            _selectedZone = null;
           });
         },
-        child: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isSelected ? Colors.yellow : Colors.white,
-            border: Border.all(color: color, width: 2),
-            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+        child: Draggable<ItemPlacement>(
+          data: placement,
+          feedback: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 45,
+              height: 45,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? Colors.yellow.withOpacity(0.8) : Colors.white.withOpacity(0.8),
+                border: Border.all(color: Colors.black, width: 1),
+                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+              ),
+              child: Center(
+                child: Text(
+                  iconText,
+                  style: const TextStyle(fontSize: 24),
+                ),
+              ),
+            ),
           ),
-          child: Icon(icon, size: 16, color: color),
+          childWhenDragging: Opacity(
+            opacity: 0.3,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? Colors.yellow : Colors.white,
+                border: Border.all(color: Colors.black, width: 1),
+              ),
+              child: Center(
+                child: Text(
+                  iconText,
+                  style: const TextStyle(fontSize: 24),
+                ),
+              ),
+            ),
+          ),
+          onDragStarted: () {
+             // Select item when starting drag
+             _saveForUndo();
+             setState(() {
+              _selectedPlacement = placement;
+              _selectedZone = null;
+             });
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isSelected ? Colors.yellow : Colors.white,
+              border: Border.all(color: Colors.black, width: 1),
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+            ),
+            child: Center(
+              child: Text(
+                iconText,
+                style: const TextStyle(fontSize: 24),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -551,22 +594,26 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
       height: zone.height * constraints.maxHeight,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() {
-          _selectedZone = zone;
-          _selectedPlacement = null;
-        }),
-        onScaleStart: (_) {
-           setState(() {});
+        onTap: () {
+          setState(() {
+            _selectedZone = zone;
+            _selectedPlacement = null;
+          });
         },
-        onScaleEnd: (_) {
-           // Sync with parent only when drag finishes to avoid rebuild loop
+        onPanStart: (_) {
+           _saveForUndo();
+           setState(() {
+            _selectedZone = zone;
+            _selectedPlacement = null;
+           });
+        },
+        onPanEnd: (_) {
            _notifyUpdate();
         },
-        onScaleUpdate: (details) {
+        onPanUpdate: (details) {
           setState(() {
-             // Scale gesture includes pan logic via focalPointDelta
-             double dx = details.focalPointDelta.dx / constraints.maxWidth;
-             double dy = details.focalPointDelta.dy / constraints.maxHeight;
+             double dx = details.delta.dx / constraints.maxWidth;
+             double dy = details.delta.dy / constraints.maxHeight;
              
              final index = _venue.zones.indexWhere((z) => z.key == zone.key);
              if (index != -1) {

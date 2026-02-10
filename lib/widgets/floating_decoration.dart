@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:flutter_animate/flutter_animate.dart';
 
-class FloatingDecoration extends StatefulWidget {
+class FloatingDecoration extends StatelessWidget {
   final String shape; // 'circle', 'star', 'diamond', 'squiggle'
   final Color color;
   final double size;
@@ -28,75 +29,37 @@ class FloatingDecoration extends StatefulWidget {
   });
 
   @override
-  State<FloatingDecoration> createState() => _FloatingDecorationState();
-}
-
-class _FloatingDecorationState extends State<FloatingDecoration>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _floatAnimation;
-  late Animation<double> _rotateAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(duration: widget.duration, vsync: this);
-
-    _floatAnimation = Tween<double>(
-      begin: 0,
-      end: 20,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-    _rotateAnimation = Tween<double>(
-      begin: -0.1,
-      end: 0.1,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-    // Delayed start
-    Future.delayed(Duration(milliseconds: (widget.delay * 1000).toInt()), () {
-      if (mounted) {
-        _controller.repeat(reverse: true);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Positioned(
-      top: widget.top,
-      left: widget.left,
-      right: widget.right,
-      bottom: widget.bottom,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return Transform.translate(
-            offset: Offset(0, _floatAnimation.value),
-            child: Transform.rotate(
-              angle: _rotateAnimation.value,
-              child: _buildShape(),
-            ),
-          );
-        },
-      ),
+      top: top,
+      left: left,
+      right: right,
+      bottom: bottom,
+      child: _buildShape()
+          .animate(
+            onPlay: (controller) => controller.repeat(reverse: true),
+            delay: (delay * 1000).round().ms,
+          )
+          .moveY(
+            begin: 0, 
+            end: 20, 
+            duration: duration, 
+            curve: Curves.easeInOut
+          )
+          .rotate(
+            begin: -0.015, // approx -0.1 radians
+            end: 0.015,    // approx 0.1 radians
+            duration: duration, 
+            curve: Curves.easeInOut
+          ),
     );
   }
 
   Widget _buildShape() {
-    // Debug print
-    // debugPrint('Building shape: ${widget.shape} with size: ${widget.size}');
-    
-    final shapeColor = widget.color.withValues(alpha: widget.opacity);
+    final shapeColor = color.withValues(alpha: opacity);
 
     Widget shapeWidget;
-    switch (widget.shape) {
+    switch (shape) {
       case 'circle':
         shapeWidget = Container(
           decoration: BoxDecoration(color: shapeColor, shape: BoxShape.circle),
@@ -129,8 +92,8 @@ class _FloatingDecorationState extends State<FloatingDecoration>
     
     // STRICTLY enforce size
     return SizedBox(
-      width: widget.shape == 'squiggle' ? widget.size * 2 : widget.size,
-      height: widget.size,
+      width: shape == 'squiggle' ? size * 2 : size,
+      height: size,
       child: shapeWidget,
     );
   }

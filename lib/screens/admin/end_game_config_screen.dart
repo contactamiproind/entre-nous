@@ -57,12 +57,23 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
     super.dispose();
   }
 
+  Future<void> _refreshConfigList() async {
+    try {
+      final configs = await _service.loadAllConfigs();
+      setState(() {
+        _allConfigs = configs;
+      });
+    } catch (e) {
+      debugPrint('Error refreshing config list: $e');
+    }
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     
     try {
       // Load all configs
-      final configs = await _service.loadAllConfigs();
+      await _refreshConfigList();
       
       // Load all users
       final users = await _service.loadAllUsers();
@@ -74,7 +85,6 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
       const encoder = JsonEncoder.withIndent('  ');
       
       setState(() {
-        _allConfigs = configs;
         _allUsers = users;
         _currentVenue = venue;
         _itemsConfig = items;
@@ -161,8 +171,15 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
         );
       }
       
-      // Reload configs
-      _loadData();
+      // Reload configs list only (preserve current editor state)
+      await _refreshConfigList();
+      
+      // Update current ID if this was a new save
+      setState(() {
+         if (_currentConfigId == null) {
+            _currentConfigId = id;
+         }
+      });
     } catch (e) {
       setState(() => _isSaving = false);
       if (mounted) {
@@ -180,6 +197,21 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
       _selectedLevel = 1;
       _isActive = false;
       _selectedUserIds = [];
+      
+      // Reset to empty venue
+      _currentVenue = VenueConfig(
+        id: 'new_${DateTime.now().millisecondsSinceEpoch}',
+        name: 'New Venue',
+        description: '',
+        zones: [],
+        placements: [],
+      );
+      
+      const encoder = JsonEncoder.withIndent('  ');
+      _venueJsonController.text = encoder.convert(_currentVenue!.toJson());
+      if (_itemsConfig != null) {
+        _itemsJsonController.text = encoder.convert(_itemsConfig!.toJson());
+      }
     });
     
     // Switch to editor tab if on mobile
@@ -192,7 +224,10 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('End Game Configuration'),
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text('End Game Configuration'),
+        ),
         leading: widget.onBack != null
             ? IconButton(icon: const Icon(Icons.arrow_back), onPressed: widget.onBack)
             : null,
@@ -449,7 +484,7 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
             
             if (_currentVenue != null)
               SizedBox(
-                height: 800, // Increased height to accommodate properties panel and palette
+                height: 950, // Increased height to match taller visual editor
                 child: EndGameVisualEditor(
                   initialVenue: _currentVenue!,
                   itemConfig: _itemsConfig,

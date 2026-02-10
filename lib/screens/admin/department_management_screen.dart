@@ -264,6 +264,11 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
                           itemCount: _departments.length,
                           itemBuilder: (context, index) {
                             final dept = _departments[index];
+                            String displayTitle = dept['title'] ?? 'No title';
+                            final category = dept['category'];
+                            if (displayTitle == 'General' && category != null && category.toString().isNotEmpty) {
+                              displayTitle = 'General ($category)';
+                            }
                             
                             return Card(
                               margin: const EdgeInsets.only(bottom: 12),
@@ -275,7 +280,7 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
                                     MaterialPageRoute(
                                       builder: (context) => DepartmentQuestionsScreen(
                                         departmentId: dept['id'],
-                                        departmentName: dept['title'] ?? 'Department',
+                                        departmentName: displayTitle,
                                       ),
                                     ),
                                   );
@@ -291,7 +296,7 @@ class _DepartmentManagementScreenState extends State<DepartmentManagementScreen>
                                   ),
                                 ),
                                 title: Text(
-                                  dept['title'] ?? 'No title',
+                                  displayTitle,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,

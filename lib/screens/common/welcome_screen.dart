@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../services/storage_service.dart';
 import '../../utils/responsive_utils.dart';
 import '../../widgets/floating_decoration.dart';
@@ -11,36 +12,12 @@ class WelcomeScreen extends StatefulWidget {
   State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
-class _WelcomeScreenState extends State<WelcomeScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
-
+class _WelcomeScreenState extends State<WelcomeScreen> {
   @override
   void initState() {
     super.initState();
-
     // Initialize default users asynchronously (non-blocking)
     _initializeApp();
-
-    // Setup animation
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
-
-    _controller.forward();
   }
 
   Future<void> _initializeApp() async {
@@ -51,12 +28,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       // Silently fail - app will still work
       debugPrint('Initialization warning: $e');
     }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 
   void _navigateToLogin() {
@@ -128,100 +99,102 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             // Main content
           SafeArea(
             child: Center(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: Padding(
-                    padding: EdgeInsets.all(padding),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Logo with shadow
-                        Image.asset(
-                          'assets/logo.png',
-                          height: logoSize,
-                          width: logoSize,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: 40),
+              child: Padding(
+                padding: EdgeInsets.all(padding),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Logo with shadow
+                    Image.asset(
+                      'assets/logo.png',
+                      height: logoSize,
+                      width: logoSize,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 40),
 
-                        // Welcome text
-                        Text(
-                          'Welcome to',
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(
-                                color: const Color(0xFF1E293B), // Dark text
-                                fontWeight: FontWeight.w600,
+                    // Welcome text
+                    Text(
+                      'Welcome to',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            color: const Color(0xFF1E293B), // Dark text
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Entre Nous Experiences',
+                      style: Theme.of(context).textTheme.displayLarge
+                          ?.copyWith(
+                            color: const Color(0xFF1E293B),
+                            fontSize: titleSize,
+                            fontWeight: FontWeight.w900,
+                            shadows: [
+                              Shadow(
+                                color: Colors.white.withOpacity(0.3),
+                                offset: const Offset(0, 2),
+                                blurRadius: 4,
                               ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Entre Nous Experiences',
-                          style: Theme.of(context).textTheme.displayLarge
-                              ?.copyWith(
-                                color: const Color(0xFF1E293B),
-                                fontSize: titleSize,
-                                fontWeight: FontWeight.w900,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.white.withOpacity(0.3),
-                                    offset: const Offset(0, 2),
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                        ),
-                        const SizedBox(height: 16),
+                            ],
+                          ),
+                    ),
+                    const SizedBox(height: 16),
 
-                        // Subtitle
-                        Text(
-                          'Play, Learn, Level Up!',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(
-                                color: Colors.black87, // Changed to black for visibility
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16,
-                              ),
-                        ),
+                    // Subtitle
+                    Text(
+                      'Play, Learn, Level Up!',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge
+                          ?.copyWith(
+                            color: Colors.black87, // Changed to black for visibility
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
+                    ),
 
-                        const SizedBox(height: 60),
+                    const SizedBox(height: 60),
 
-                        // Get Started button with enhanced styling
-                        SizedBox(
-                          width: double.infinity,
-                          height: ResponsiveUtils.getButtonHeight(context) + 12,
-                          child: ElevatedButton(
-                            onPressed: _navigateToLogin,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFFA726), // Orange like LOGIN button
-                              foregroundColor: Colors.black,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'START',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                Icon(Icons.play_circle_fill_rounded, size: 24),
-                              ],
-                            ),
+                    // Get Started button with enhanced styling
+                    SizedBox(
+                      width: double.infinity,
+                      height: ResponsiveUtils.getButtonHeight(context) + 12,
+                      child: ElevatedButton(
+                        onPressed: _navigateToLogin,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFA726), // Orange like LOGIN button
+                          foregroundColor: Colors.black,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
                           ),
                         ),
-                      ],
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'START',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Icon(Icons.play_circle_fill_rounded, size: 24),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
+                )
+                .animate()
+                .fade(duration: 1500.ms, curve: Curves.easeIn)
+                .scale(
+                  begin: const Offset(0.8, 0.8),
+                  end: const Offset(1.0, 1.0),
+                  curve: Curves.easeOutBack,
+                  duration: 1500.ms,
                 ),
               ),
             ),

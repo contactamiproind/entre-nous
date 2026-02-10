@@ -24,6 +24,54 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   double _eventScore = 100;
   int _disruptionsHandled = 0;
   int _placementScore = 0; // Score for correct item placement
+
+  // Calculate placement score based on Exact Match
+  void _calculatePlacementScore() {
+    if (_venueConfig == null) return;
+    
+    int newScore = 0;
+    // Iterate through Admin's correct placements
+    for (var correctPlacement in _venueConfig!.placements) {
+        // Find if user has placed this item type
+        // We look for any user placed object of the same item ID that is "close enough"
+        
+        // Filter user objects by same Item ID
+        var matchingUserObjects = _placedObjects.where((obj) => obj.id == correctPlacement.itemId);
+        
+        // Check distance for each match
+        bool foundMatch = false;
+        for (var userObj in matchingUserObjects) {
+             // Calculate distance (Euclidean)
+             // Admin coordinates are 0.0-1.0 (float) in the config, converted to 0-100 for display? 
+             // Wait, let's check how they are stored.
+             // In EndGameVisualEditor, they are stored as 0.0-1.0.
+             // In EndGameScreen _placedObjects, they are stored as 0.0-100.0 (lines 95-96: x = (local.dx/width)*100).
+             // We need to normalize to compare.
+             
+             double adminX = correctPlacement.x * 100;
+             double adminY = correctPlacement.y * 100;
+             
+             double dist = sqrt(pow(userObj.x - adminX, 2) + pow(userObj.y - adminY, 2));
+             
+             // Threshold: 15% of screen width/height (increased from 10)
+             if (dist <= 15.0) {
+                 print('MATCH FOUND: ${userObj.id} at dist $dist');
+                 foundMatch = true;
+                 break;
+             } else {
+                 print('NO MATCH: ${userObj.id} at dist $dist (needs <= 15.0)');
+             }
+        }
+        
+        if (foundMatch) {
+            newScore += 10;
+        }
+    }
+    
+    setState(() {
+        _placementScore = newScore;
+    });
+  }
   
   // Drag State
   bool _isDraggingPlacedObject = false;
@@ -87,13 +135,21 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
 
   void _updateStats() {
     setState(() {
-      _eventScore = max(0, min(100, (_guestScore + _safetyScore + _budgetScore + _aestheticsScore) / 4));
+      _calculatePlacementScore(); // Recalculate placement score whenever stats update
+      // Total score now includes placement score
+      // Normalize: (Guest + Safety + Budget + Aesthetic + Placement) / 5 ?
+      // Or just add it as a bonus? Let's keep it simple for now and blend it in.
+      // The user wants "Exact Match" so this is likely the primary mechanic.
+      
+      // Let's make Event Score the average of all categories including Placement
+       _eventScore = max(0, min(100, (_guestScore + _safetyScore + _budgetScore + _aestheticsScore + _placementScore) / 5));
     });
   }
 
   void _handleDrop(GameItemDef item, Offset localPosition, Size venueSize) {
-    double x = (localPosition.dx / venueSize.width) * 100;
-    double y = (localPosition.dy / venueSize.height) * 100;
+    // Center the item (add 22.5px offset for 45x45 item)
+    double x = ((localPosition.dx + 22.5) / venueSize.width) * 100;
+    double y = ((localPosition.dy + 22.5) / venueSize.height) * 100;
 
     x = max(5, min(95, x));
     y = max(5, min(95, y));
@@ -113,8 +169,9 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   }
   
   void _updateObjectPosition(PlacedObject object, Offset localPosition, Size venueSize) {
-    double x = (localPosition.dx / venueSize.width) * 100;
-    double y = (localPosition.dy / venueSize.height) * 100;
+    // Center the item (add 22.5px offset for 45x45 item)
+    double x = ((localPosition.dx + 22.5) / venueSize.width) * 100;
+    double y = ((localPosition.dy + 22.5) / venueSize.height) * 100;
     
     setState(() {
       object.x = max(5, min(95, x));
@@ -153,9 +210,7 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   }
 
   void _checkGameEnd() {
-    if (_disruptionsHandled >= 5 && _placedObjects.length >= 30) {
-      Future.delayed(const Duration(milliseconds: 500), _showGameSummary);
-    }
+    // Auto-end disabled, user clicks DONE
   }
 
   void _checkForDisruptions(String objectId) {
@@ -429,8 +484,20 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   }
 
   void _showGameSummary() {
-    final readinessScore = (_placedObjects.length / 40 * 100).clamp(0, 100).toInt();
-    final finalScore = ((_guestScore + _safetyScore + _budgetScore + _aestheticsScore + readinessScore) / 5).toInt();
+    // 1. Calculate Event Readiness (based on config total)
+    int totalItems = _venueConfig?.placements.length ?? 40;
+    if (totalItems == 0) totalItems = 1; // Prevent division by zero
+    final readinessScore = (_placedObjects.length / totalItems * 100).clamp(0, 100).toInt();
+
+    // 2. Normalize Placement Score (Exact Match)
+    // Max Placement Score = totalItems * 10.
+    // Normalized = (current / max) * 100
+    int maxPlacementScore = totalItems * 10;
+    if (maxPlacementScore == 0) maxPlacementScore = 1;
+    final normalizedPlacementScore = ((_placementScore / maxPlacementScore) * 100).clamp(0, 100).toInt();
+    
+    // 3. Calculate Final Score (Based ONLY on Exact Match as requested)
+    final finalScore = normalizedPlacementScore;
 
     showDialog(
       context: context,
@@ -454,10 +521,11 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-             _buildSummaryRow('Guest Experience', _guestScore.toInt()),
-             _buildSummaryRow('Safety', _safetyScore.toInt()),
-             _buildSummaryRow('Budget Control', _budgetScore.toInt()),
-             _buildSummaryRow('Aesthetics', _aestheticsScore.toInt()),
+             // _buildSummaryRow('Guest Experience', _guestScore.toInt()),
+             // _buildSummaryRow('Safety', _safetyScore.toInt()),
+             // _buildSummaryRow('Budget Control', _budgetScore.toInt()),
+             // _buildSummaryRow('Aesthetics', _aestheticsScore.toInt()),
+             _buildSummaryRow('Exact Match', normalizedPlacementScore), // Display normalized score (0-100)
              _buildSummaryRow('Event Readiness', readinessScore),
              const Divider(color: Colors.grey),
              Container(
@@ -470,10 +538,16 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                ),
                child: Row(
                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                 children: [
-                   const Text('Final Score:', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
-                   Text('$finalScore/100', style: const TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.w900)),
-                 ],
+                  children: [
+                    const Text('Final Score:', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text('$finalScore/100', style: const TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.w900)),
+                      ),
+                    ),
+                  ],
                ),
              )
           ],
@@ -488,11 +562,15 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
               ),
               onPressed: () {
                 Navigator.of(context).pop();
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (c) => const EndGameScreen())
-                );
+                if (finalScore == 100) {
+                  Navigator.of(context).pop(); // Return to dashboard
+                } else {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (c) => const EndGameScreen())
+                  );
+                }
               },
-              child: const Text('PLAY AGAIN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              child: Text(finalScore == 100 ? 'RETURN TO DASHBOARD' : 'PLAY AGAIN', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           )
         ],
       ),
@@ -577,12 +655,27 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                           child: Text(
                             'EVENT VERIFICATION',
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: 18,
                               fontWeight: FontWeight.w900,
                               color: Colors.black,
                               letterSpacing: 1,
                             ),
                           ),
+                        ),
+                        
+                        // DONE Button
+                        ElevatedButton(
+                          onPressed: () {
+                             _showGameSummary();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: const Color(0xFFF4EF8B),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            minimumSize: const Size(0, 36),
+                          ),
+                          child: const Text('DONE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                         ),
                       ],
                     ),
@@ -600,11 +693,12 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildHeaderStat('Placed', '${_placedObjects.length}/40', Icons.check_circle_outline),
-                          _buildHeaderDivider(),
-                          _buildHeaderStat('Alerts', '$_disruptionsHandled/5', Icons.warning_amber_rounded),
-                          _buildHeaderDivider(),
-                          _buildHeaderStat('Score', '-', Icons.star_border_rounded),
+                          _buildHeaderStat('Placed', '${_placedObjects.length}/${_venueConfig?.placements.length ?? 0}', Icons.check_circle_outline),
+                          // _buildHeaderDivider(),
+                          // _buildHeaderStat('Alerts', '$_disruptionsHandled/5', Icons.warning_amber_rounded),
+                          // _buildHeaderDivider(),
+                          // Removed redundant Score placeholder as we have DONE button now
+                          // _buildHeaderStat('Score', '-', Icons.star_border_rounded),
                         ],
                       ),
                     ),
@@ -785,11 +879,25 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   }
   
   Widget _buildHorizontalList(String categoryId) {
-    if (_itemsConfig == null) return const SizedBox.shrink();
+    if (_itemsConfig == null || _venueConfig == null) return const SizedBox.shrink();
     
+    // Filter to only show items that exist in the admin's placement config
+    final allowedItemIds = _venueConfig!.placements.map((p) => p.itemId).toSet();
+
     final items = _itemsConfig!.getItemsByCategory(categoryId)
+        .where((config) => allowedItemIds.contains(config.id))
         .map((config) => GameItemDef.fromConfig(config))
         .toList();
+        
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          'No items in this category',
+          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+        ),
+      );
+    }
+    
     return ListView.builder(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -911,250 +1019,57 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
   
 
   // Check if a placed object is in the correct zone
-  bool _isInCorrectZone(PlacedObject obj) {
-    if (_itemsConfig == null) return false;
-    
-    // Find the item definition
-    final itemDef = _itemsConfig!.items.firstWhere(
-      (item) => item.id == obj.id,
-      orElse: () => ItemConfig(
-        id: obj.id,
-        category: obj.category,
-        icon: '',
-        name: '',
-        validZones: [],
-        points: 0,
-        displayOrder: 0,
-      ),
-    );
-    
-    if (itemDef.validZones.isEmpty) return true; // No zone requirement
-    
-    final x = obj.x;
-    final y = obj.y;
-    
-    // Check each valid zone
-    for (final zoneKey in itemDef.validZones) {
-      final zone = _zones[zoneKey];
-      if (zone != null && _isInZone(x, y, zone)) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
+
   
   // Helper to check if a point is within a zone
-  bool _isInZone(double x, double y, Rect zone) {
-    return x >= zone.left && x <= zone.right && y >= zone.top && y <= zone.bottom;
-  }
-  
-  // Calculate placement score
-  int _calculatePlacementScore() {
-    int score = 0;
-    for (var obj in _placedObjects) {
-      if (_isInCorrectZone(obj)) {
-        score += 10; // +10 points for correct placement
-      }
-    }
-    return score;
-  }
+
   Widget _buildVenueBackground(BoxConstraints constraints) {
+    if (_venueConfig == null) return Container(color: Colors.grey[200]);
 
     return Stack(
-
       children: [
-
-        // Base: Light gray tiled floor with grid
-
+        // Base grass/ground layer
         Container(
-
-          color: const Color(0xFFD3D3D3),
-
-          child: CustomPaint(
-
-            painter: TileGridPainter(),
-
-            size: Size(constraints.maxWidth, constraints.maxHeight),
-
-          ),
-
+          color: const Color(0xFF6aa882), // Default grass color
         ),
-
         
-
-        // Left lawn strip
-
-        Positioned(
-
-          left: 0,
-
-          top: 0,
-
-          width: constraints.maxWidth * 0.10,
-
-          height: constraints.maxHeight,
-
-          child: Container(color: const Color(0xFF4CAF50)),
-
-        ),
-
-        
-
-        // Right lawn strip
-
-        Positioned(
-
-          right: 0,
-
-          top: 0,
-
-          width: constraints.maxWidth * 0.10,
-
-          height: constraints.maxHeight,
-
-          child: Container(color: const Color(0xFF4CAF50)),
-
-        ),
-
-        
-
-        // Stage platform (top center, larger)
-
-        Positioned(
-
-          left: constraints.maxWidth * 0.22,
-
-          top: constraints.maxHeight * 0.05,
-
-          width: constraints.maxWidth * 0.56,
-
-          height: constraints.maxHeight * 0.15,
-
-          child: Container(
-
-            decoration: BoxDecoration(
-
-              color: const Color(0xFF5A5A5A),
-
-              borderRadius: BorderRadius.circular(4),
-
-              border: Border.all(color: Colors.black38, width: 2),
-
-            ),
-
-          ),
-
-        ),
-
-        
-
-        // Bar structure (top-left, detailed)
-
-        Positioned(
-
-          left: constraints.maxWidth * 0.11,
-
-          top: constraints.maxHeight * 0.10,
-
-          width: constraints.maxWidth * 0.14,
-
-          height: constraints.maxHeight * 0.10,
-
-          child: Container(
-
-            decoration: BoxDecoration(
-
-              color: Colors.white,
-
-              border: Border.all(color: Colors.black, width: 2),
-
-              borderRadius: BorderRadius.circular(2),
-
-            ),
-
-          ),
-
-        ),
-
-        
-
-        // Buffet structure (top-right, detailed)
-
-        Positioned(
-
-          right: constraints.maxWidth * 0.11,
-
-          top: constraints.maxHeight * 0.10,
-
-          width: constraints.maxWidth * 0.14,
-
-          height: constraints.maxHeight * 0.10,
-
-          child: Container(
-
-            decoration: BoxDecoration(
-
-              color: Colors.white,
-
-              border: Border.all(color: Colors.black, width: 2),
-
-              borderRadius: BorderRadius.circular(2),
-
-            ),
-
-          ),
-
-        ),
-
-        
-
-        // Pool (centered, below stage)
-
-        Positioned(
-
-          left: constraints.maxWidth * 0.37,
-
-          top: constraints.maxHeight * 0.22,
-
-          width: constraints.maxWidth * 0.26,
-
-          height: constraints.maxHeight * 0.12,
-
-          child: Container(
-
-            decoration: BoxDecoration(
-
-              gradient: LinearGradient(
-
-                colors: [const Color(0xFF87CEEB), const Color(0xFF4682B4)],
-
-                begin: Alignment.topLeft,
-
-                end: Alignment.bottomRight,
-
+        // Dynamically rendered zones from config
+        ..._venueConfig!.zones.map((zone) {
+          return Positioned(
+            left: zone.x * constraints.maxWidth,
+            top: zone.y * constraints.maxHeight,
+            width: zone.width * constraints.maxWidth,
+            height: zone.height * constraints.maxHeight,
+            child: Container(
+              decoration: BoxDecoration(
+                color: zone.getColor(),
+                border: Border.all(color: Colors.black.withOpacity(0.3), width: 1),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 2))
+                ],
               ),
-
-              border: Border.all(color: const Color(0xFF2C3E50), width: 3),
-
-              borderRadius: BorderRadius.circular(4),
-
+              child: Center(
+                child: Text(
+                  zone.label,
+                  style: TextStyle(
+                    color: Colors.black.withOpacity(0.6),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10 * (constraints.maxWidth / 400),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ),
-
-          ),
-
-        ),
-
+          );
+        }).toList(),
       ],
-
     );
-
   }
   
   Widget _buildPlacedWidget(PlacedObject obj, BoxConstraints constraints) {
      return Positioned(
-       left: (obj.x / 100) * constraints.maxWidth - 25, 
-       top: (obj.y / 100) * constraints.maxHeight - 25, 
+       left: (obj.x / 100) * constraints.maxWidth - 22.5, // Offset by half size (22.5)
+       top: (obj.y / 100) * constraints.maxHeight - 22.5, 
        child: GestureDetector(
          onDoubleTap: () => _removeObject(obj.id),
          child: Draggable<PlacedObject>(
@@ -1190,16 +1105,16 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
     }
     
     return Container(
-      width: 50,
-      height: 50,
+      width: 45, // Reduced size (was 60)
+      height: 45,
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: Colors.black),
-        borderRadius: BorderRadius.circular(25), // Circled placed objects
+        borderRadius: BorderRadius.circular(22.5), // Circled placed objects
         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: Center(
-        child: Text(icon, style: const TextStyle(fontSize: 24)),
+        child: Text(icon, style: const TextStyle(fontSize: 24)), // Smaller icon size
       ),
     );
   }

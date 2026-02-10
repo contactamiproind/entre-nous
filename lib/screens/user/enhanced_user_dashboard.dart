@@ -412,6 +412,127 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
         items.add(const SizedBox(height: 16));
       }
     }
+
+    // Add End Game Category at the end
+    items.add(const SizedBox(height: 16));
+    items.add(
+      _buildCategoryListItem(
+        category: 'End Game',
+        subcategory: null,
+        icon: Icons.games_rounded,
+        color: const Color(0xFF8B5CF6), // Purple
+        progress: 0.0,
+        isLocked: false, // Always unlocked as per previous logic
+        isCurrent: false,
+        customOnTap: () async {
+           // Show the introductory dialog first
+           await showDialog(
+             context: context,
+             barrierDismissible: false,
+             builder: (BuildContext dialogContext) {
+               return Dialog(
+                 backgroundColor: Colors.transparent,
+                 child: Container(
+                   constraints: const BoxConstraints(maxWidth: 400),
+                   decoration: BoxDecoration(
+                     color: Colors.white,
+                     borderRadius: BorderRadius.circular(24),
+                     border: Border.all(
+                       color: const Color(0xFFF4EF8B),
+                       width: 4,
+                     ),
+                     boxShadow: [
+                       BoxShadow(
+                         color: Colors.black.withOpacity(0.3),
+                         blurRadius: 20,
+                         offset: const Offset(0, 10),
+                       ),
+                     ],
+                   ),
+                   child: Padding(
+                     padding: const EdgeInsets.all(24),
+                     child: SingleChildScrollView(
+                       child: Column(
+                         mainAxisSize: MainAxisSize.min,
+                         children: [
+                           // Title
+                           const Text(
+                             'What We\'ve Created Together',
+                             style: TextStyle(
+                               fontSize: 24,
+                               fontWeight: FontWeight.w900,
+                               color: Colors.black,
+                               letterSpacing: 0.5,
+                             ),
+                             textAlign: TextAlign.center,
+                           ),
+                           const SizedBox(height: 20),
+                           
+                           // Message
+                           const Text(
+                             'You\'ve laughed, played, posed, sung, and celebrated\n'
+                             'not just an occasion, but a person.\n\n'
+                             'Every moment tonight\n'
+                             'from the flowers in full bloom to the music, memories, and madness\n'
+                             'was a reflection of Deeksha and the people who love her.\n\n'
+                             'As we head into the final game,\n'
+                             'this is your last chance to go all in\n'
+                             'one room, one energy, one unforgettable finish.\n\n'
+                             'Let\'s end it the way we started.\n'
+                             'Together. 💫',
+                             style: TextStyle(
+                               fontSize: 15,
+                               height: 1.6,
+                               color: Colors.black87,
+                               fontWeight: FontWeight.w500,
+                             ),
+                             textAlign: TextAlign.center,
+                           ),
+                           const SizedBox(height: 30),
+                           
+                           // Button
+                           SizedBox(
+                             width: double.infinity,
+                             child: ElevatedButton(
+                               onPressed: () {
+                                 Navigator.of(dialogContext).pop();
+                                 Navigator.push(
+                                   context,
+                                   MaterialPageRoute(
+                                     builder: (context) => const EndGameScreen(),
+                                   ),
+                                 );
+                               },
+                               style: ElevatedButton.styleFrom(
+                                 backgroundColor: const Color(0xFFF4EF8B),
+                                 foregroundColor: Colors.black,
+                                 padding: const EdgeInsets.symmetric(vertical: 16),
+                                 shape: RoundedRectangleBorder(
+                                   borderRadius: BorderRadius.circular(16),
+                                 ),
+                                 elevation: 0,
+                               ),
+                               child: const Text(
+                                 'LET\'S DO THIS',
+                                 style: TextStyle(
+                                   fontSize: 16,
+                                   fontWeight: FontWeight.w900,
+                                   letterSpacing: 1,
+                                 ),
+                               ),
+                             ),
+                           ),
+                         ],
+                       ),
+                     ),
+                   ),
+                 ),
+               );
+             },
+           );
+        },
+      ),
+    );
     
     return items;
   }
@@ -834,77 +955,79 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.all(24),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Title
-                                    const Text(
-                                      'What We\'ve Created Together',
-                                      style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w900,
-                                        color: Colors.black,
-                                        letterSpacing: 0.5,
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Title
+                                      const Text(
+                                        'What We\'ve Created Together',
+                                        style: TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.black,
+                                          letterSpacing: 0.5,
+                                        ),
+                                        textAlign: TextAlign.center,
                                       ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 20),
-                                    
-                                    // Message
-                                    const Text(
-                                      'You\'ve laughed, played, posed, sung, and celebrated\n'
-                                      'not just an occasion, but a person.\n\n'
-                                      'Every moment tonight\n'
-                                      'from the flowers in full bloom to the music, memories, and madness\n'
-                                      'was a reflection of Deeksha and the people who love her.\n\n'
-                                      'As we head into the final game,\n'
-                                      'this is your last chance to go all in\n'
-                                      'one room, one energy, one unforgettable finish.\n\n'
-                                      'Let\'s end it the way we started.\n'
-                                      'Together. 💫',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        height: 1.6,
-                                        color: Colors.black87,
-                                        fontWeight: FontWeight.w500,
+                                      const SizedBox(height: 20),
+                                      
+                                      // Message
+                                      const Text(
+                                        'You\'ve laughed, played, posed, sung, and celebrated\n'
+                                        'not just an occasion, but a person.\n\n'
+                                        'Every moment tonight\n'
+                                        'from the flowers in full bloom to the music, memories, and madness\n'
+                                        'was a reflection of Deeksha and the people who love her.\n\n'
+                                        'As we head into the final game,\n'
+                                        'this is your last chance to go all in\n'
+                                        'one room, one energy, one unforgettable finish.\n\n'
+                                        'Let\'s end it the way we started.\n'
+                                        'Together. 💫',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          height: 1.6,
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        textAlign: TextAlign.center,
                                       ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 30),
-                                    
-                                    // Button
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          Navigator.of(dialogContext).pop();
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => const EndGameScreen(),
+                                      const SizedBox(height: 30),
+                                      
+                                      // Button
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            Navigator.of(dialogContext).pop();
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => const EndGameScreen(),
+                                              ),
+                                            );
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFFF4EF8B),
+                                            foregroundColor: Colors.black,
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
                                             ),
-                                          );
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFFF4EF8B),
-                                          foregroundColor: Colors.black,
-                                          padding: const EdgeInsets.symmetric(vertical: 16),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                            elevation: 4,
                                           ),
-                                          elevation: 4,
-                                        ),
-                                        child: const Text(
-                                          'END GAME',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 1,
+                                          child: const Text(
+                                            'END GAME',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 1,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -1424,6 +1547,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     required double progress,
     required bool isLocked,
     required bool isCurrent,
+    VoidCallback? customOnTap,
   }) {
     return Card(
       elevation: isCurrent ? 4 : 2,
@@ -1435,6 +1559,11 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
       ),
       child: InkWell(
         onTap: isLocked ? null : () async {
+          if (customOnTap != null) {
+            customOnTap();
+            return;
+          }
+
           // Check if category is already completed
           if (progress >= 1.0) {
             ScaffoldMessenger.of(context).showSnackBar(
