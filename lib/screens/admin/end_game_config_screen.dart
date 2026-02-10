@@ -362,9 +362,13 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
                             config['name'] ?? 'Unnamed',
                             style: TextStyle(
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: Colors.black, // Force black text
                             ),
                           ),
-                          subtitle: Text('Level ${config['level']}'),
+                          subtitle: Text(
+                            'Level ${config['level']}',
+                            style: const TextStyle(color: Colors.black87), // Force black text
+                          ),
                           trailing: config['is_active'] == true
                               ? Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
