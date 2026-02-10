@@ -6,12 +6,14 @@ class EndGameVisualEditor extends StatefulWidget {
   final VenueConfig initialVenue;
   final ItemsConfig? itemConfig; // Changed from List<ItemConfig> to ItemsConfig
   final Function(VenueConfig, List<ItemConfig>) onUpdate;
+  final VoidCallback? onAddCustomZone;
 
   const EndGameVisualEditor({
     super.key,
     required this.initialVenue,
     this.itemConfig,
     required this.onUpdate,
+    this.onAddCustomZone,
   });
 
   @override
@@ -244,6 +246,11 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
                   label: 'Buffet',
                   color: Colors.blue[100]!,
                   onTap: () => _addZone('BUFFET', const Color(0xFF2196F3)),
+                ),
+                _ToolButton(
+                  label: 'Custom',
+                  color: Colors.grey[300]!,
+                  onTap: () => widget.onAddCustomZone?.call(),
                 ),
                 const SizedBox(width: 24),
                 if (_selectedZone != null || _selectedPlacement != null)

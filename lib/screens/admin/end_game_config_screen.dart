@@ -467,7 +467,7 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 ElevatedButton.icon(
-                  onPressed: _showAddItemDialog,
+                  onPressed: _showAddElementDialog,
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Add Element', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
@@ -488,6 +488,7 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
                 child: EndGameVisualEditor(
                   initialVenue: _currentVenue!,
                   itemConfig: _itemsConfig,
+                  onAddCustomZone: () => _showAddElementDialog(initialType: 'zone'),
                   onUpdate: (updatedVenue, updatedItems) {
                      // We update the local state. updatedItems is List<ItemConfig>.
                      // We need to sync this back to _itemsConfig if items order changed?
@@ -652,10 +653,15 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
       ),
     );
   }
-  void _showAddItemDialog() {
+  void _showAddElementDialog({String initialType = 'item'}) {
     final nameController = TextEditingController();
     final iconController = TextEditingController();
     final pointsController = TextEditingController(text: '10');
+    
+    // Zone specific
+    String elementType = initialType; // 'item' or 'zone'
+    Color selectedColor = Colors.purple;
+    
     // Default to first category if available
     String selectedCategory = _itemsConfig?.categories.firstOrNull?.id ?? 'infrastructure';
     if (_itemsConfig != null && _itemsConfig!.categories.isNotEmpty) {
@@ -664,56 +670,121 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Element'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Name (e.g. DJ Booth)'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: iconController,
-                decoration: const InputDecoration(labelText: 'Icon (Emoji e.g. 🎧)'),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: selectedCategory,
-                items: (_itemsConfig?.categories ?? []).map((c) => DropdownMenuItem(
-                  value: c.id,
-                  child: Text(c.name),
-                )).toList(),
-                onChanged: (v) => selectedCategory = v!,
-                decoration: const InputDecoration(labelText: 'Category'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: pointsController,
-                decoration: const InputDecoration(labelText: 'Points'),
-                keyboardType: TextInputType.number,
-              ),
-            ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add New Element'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Type Selector
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Item'),
+                      selected: elementType == 'item',
+                      onSelected: (b) => setDialogState(() => elementType = 'item'),
+                    ),
+                    const SizedBox(width: 16),
+                    ChoiceChip(
+                      label: const Text('Zone'),
+                      selected: elementType == 'zone',
+                      onSelected: (b) => setDialogState(() => elementType = 'zone'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // Common Fields
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: elementType == 'item' ? 'Name (e.g. DJ Booth)' : 'Zone Name (e.g. VIP Area)',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Item Specific Fields
+                if (elementType == 'item') ...[
+                  TextField(
+                    controller: iconController,
+                    decoration: const InputDecoration(
+                      labelText: 'Icon (Emoji e.g. 🎧)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedCategory,
+                    items: (_itemsConfig?.categories ?? []).map((c) => DropdownMenuItem(
+                      value: c.id,
+                      child: Text(c.name),
+                    )).toList(),
+                    onChanged: (v) => setDialogState(() => selectedCategory = v!),
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: pointsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Points',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+                
+                // Zone Specific Fields
+                if (elementType == 'zone') ...[
+                  const Text('Zone Color'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _ColorOption(color: Colors.purple, selected: selectedColor == Colors.purple, onTap: () => setDialogState(() => selectedColor = Colors.purple)),
+                      _ColorOption(color: Colors.green, selected: selectedColor == Colors.green, onTap: () => setDialogState(() => selectedColor = Colors.green)),
+                      _ColorOption(color: Colors.orange, selected: selectedColor == Colors.orange, onTap: () => setDialogState(() => selectedColor = Colors.orange)),
+                      _ColorOption(color: Colors.blue, selected: selectedColor == Colors.blue, onTap: () => setDialogState(() => selectedColor = Colors.blue)),
+                      _ColorOption(color: Colors.red, selected: selectedColor == Colors.red, onTap: () => setDialogState(() => selectedColor = Colors.red)),
+                      _ColorOption(color: Colors.teal, selected: selectedColor == Colors.teal, onTap: () => setDialogState(() => selectedColor = Colors.teal)),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (nameController.text.isEmpty) return;
+                
+                if (elementType == 'item') {
+                   if (iconController.text.isEmpty) return;
+                   _addNewItem(
+                    nameController.text,
+                    iconController.text,
+                    selectedCategory,
+                    int.tryParse(pointsController.text) ?? 10,
+                  );
+                } else {
+                  _addNewZone(nameController.text, selectedColor);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isEmpty || iconController.text.isEmpty) return;
-              _addNewItem(
-                nameController.text,
-                iconController.text,
-                selectedCategory,
-                int.tryParse(pointsController.text) ?? 10,
-              );
-              Navigator.pop(context);
-            },
-            child: const Text('Add'),
-          ),
-        ],
       ),
     );
   }
@@ -740,7 +811,75 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
     });
     
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Added $name')),
+      SnackBar(content: Text('Added item: $name')),
+    );
+  }
+  
+  void _addNewZone(String name, Color color) {
+    if (_currentVenue == null) return;
+    
+    setState(() {
+      final newZone = ZoneConfig(
+        key: DateTime.now().millisecondsSinceEpoch.toString(),
+        label: name,
+        x: 0.3, // Default center-ish
+        y: 0.3,
+        width: 0.3, 
+        height: 0.2,
+        color: '#${color.value.toRadixString(16).substring(2)}',
+      );
+      
+      _currentVenue!.zones.add(newZone);
+      
+      // Update JSON controller
+      const encoder = JsonEncoder.withIndent('  ');
+      _venueJsonController.text = encoder.convert(_currentVenue!.toJson());
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Added zone: $name')),
+    );
+  }
+}
+
+class _ColorOption extends StatelessWidget {
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ColorOption({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected ? Colors.black : Colors.transparent,
+            width: 3,
+          ),
+          boxShadow: [
+            if (selected)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
+        child: selected 
+          ? const Icon(Icons.check, color: Colors.white) 
+          : null,
+      ),
     );
   }
 }
