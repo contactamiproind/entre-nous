@@ -66,8 +66,13 @@ class _QuizScreenState extends State<QuizScreen> {
   String? _usrDeptId; // ID of the usr_dept record for saving progress
   
   // Card game tracking
-  bool _isCardGameComplete = false; // Track if current card game is complete
-
+  // State variables for Question Type specific logic
+  final Map<int, Set<String>> _droppedItems = {};
+  bool _isCardGameComplete = false;
+  
+  // Department ID to track progress
+  String? _deptId;
+  
   @override
   void initState() {
     super.initState();
@@ -532,18 +537,38 @@ class _QuizScreenState extends State<QuizScreen> {
       }
       
       final deptId = departmentData['id'];
+      _deptId = deptId; // Store for submission
       debugPrint('📁 Found department ID: $deptId');
       
-      // Load questions for this department
+      
+      // Get current level for this user and department
+      int currentLevel = 1;
+      try {
+        final usrDeptData = await Supabase.instance.client
+            .from('usr_dept')
+            .select('current_level')
+            .eq('user_id', user.id)
+            .eq('dept_id', deptId)
+            .maybeSingle();
+            
+        if (usrDeptData != null && usrDeptData['current_level'] != null) {
+          currentLevel = usrDeptData['current_level'];
+        }
+        debugPrint('📈 User is at Level $currentLevel for this department');
+      } catch (e) {
+        debugPrint('⚠️ Error fetching current level (defaulting to 1): $e');
+      }
+
+      // Load questions for this department AND up to current level
       final questionsData = await Supabase.instance.client
           .from('questions')
           .select('id, title, description, options, correct_answer, type_id, level, points, dept_id')
           .eq('dept_id', deptId)
-          .eq('dept_id', deptId)
+          .eq('level', currentLevel) // Filter by CURRENT level only
           .order('created_at')
           .order('id', ascending: true); // Deterministic sort before shuffle
       
-      debugPrint('📊 Found ${questionsData.length} questions for this department');
+      debugPrint('📊 Found ${questionsData.length} questions for this department (Level <= $currentLevel)');
 
 
 
@@ -955,9 +980,19 @@ class _QuizScreenState extends State<QuizScreen> {
             debugPrint('Error unlocking next category: $e');
           }
         }
-      }
-    } catch (e) {
-      debugPrint('Error saving quiz result (Background): $e');
+        
+        // --- ATTEMPT LEVEL PROMOTION ---
+        // If this quiz completed the level requirements, promote user!
+        if (_deptId != null) {
+           debugPrint('🔍 Attempting level promotion check for dept $_deptId...');
+           // We need to use ProgressService instance or create one
+           final progressService = ProgressService(); // Or inject/locate it
+           await progressService.attemptLevelPromotion(user.id, _deptId!);
+        }
+        // -------------------------------
+        }
+      } catch (e) {
+      debugPrint('❌ Error saving final progress / promoting: $e');
       // Do not show error to user, they have their results
     }
   }

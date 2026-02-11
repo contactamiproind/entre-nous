@@ -19,7 +19,7 @@ class EnhancedUserDashboard extends StatefulWidget {
   State<EnhancedUserDashboard> createState() => _EnhancedUserDashboardState();
 }
 
-class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
+class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with WidgetsBindingObserver {
   final PathwayService _pathwayService = PathwayService();
   final AssignmentService _assignmentService = AssignmentService();
   final ProgressService _progressService = ProgressService();
@@ -43,7 +43,24 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Refresh data when app resumes (user returns from End Game)
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('🔄 App resumed, refreshing dashboard data...');
+      _loadData();
+    }
   }
 
   Future<void> _loadData() async {
@@ -212,19 +229,108 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
         }
       }
       
-      debugPrint('📋 Assigned categories: $assignedCategories');
+      debugPrint('📋 Assigned categories from usr_dept: $assignedCategories');
+
+      // Check for End Game assignment based on CURRENT LEVEL
+      try {
+        debugPrint('🔍 Checking End Game assignment for user: $_userId');
+        
+        // 1. Get user's highest level across departments
+        final userLevelData = await Supabase.instance.client
+            .from('usr_dept')
+            .select('current_level')
+            .eq('user_id', _userId!)
+            .order('current_level', ascending: false)
+            .limit(1)
+            .maybeSingle();
+            
+        final int currentLevel = userLevelData != null ? (userLevelData['current_level'] as int) : 1;
+        debugPrint('🔍 User is at Level $currentLevel. Checking for matching End Game...');
+
+        // 2. Get the active End Game Config for this level
+        final endGameConfig = await Supabase.instance.client
+            .from('end_game_configs')
+            .select('id')
+            .eq('level', currentLevel)
+            .eq('is_active', true)
+            .maybeSingle();
+            
+        if (endGameConfig != null) {
+          final endGameId = endGameConfig['id'];
+          
+          // 3. Get the assignment for THIS specific End Game
+          final assignment = await Supabase.instance.client
+              .from('end_game_assignments')
+              .select('id, completed_at, assigned_at')
+              .eq('user_id', _userId!)
+              .eq('end_game_id', endGameId)
+              .maybeSingle();
+          
+          if (assignment != null) {
+            debugPrint('🎮 User has End Game assignment for Level $currentLevel!');
+            debugPrint('🎮 Assignment details: $assignment');
+            assignedCategories.add('End Game');
+            
+            final isCompleted = assignment['completed_at'] != null;
+            
+            // Initialize progress for End Game
+            _categoryProgress['End Game'] = {
+              'total': 1, 
+              'answered': isCompleted ? 1 : 0, 
+              'firstUnansweredIndex': 0, 
+              'progress': isCompleted ? 1.0 : 0.0
+            };
+            debugPrint('✅ End Game added with progress: ${isCompleted ? "100%" : "0%"}');
+          } else {
+            debugPrint('❌ No assignment found for active End Game (Level $currentLevel)');
+          }
+        } else {
+          debugPrint('❌ No active End Game config found for Level $currentLevel');
+        }
+      } catch (e) {
+        debugPrint('❌ Error checking End Game assignment: $e');
+      }
       
       for (final category in assignedCategories) {
+        // Skip End Game in the standard loop as it doesn't have a department entry
+        if (category == 'End Game') continue;
+
         final deptData = await Supabase.instance.client.from('departments').select('id').eq('category', category).maybeSingle();
         if (deptData == null) continue;
         final deptId = deptData['id'];
-        final usrDeptData = await Supabase.instance.client.from('usr_dept').select('id').eq('user_id', _userId!).eq('dept_id', deptId).maybeSingle();
-        if (usrDeptData == null) {
-          _categoryProgress[category] = {'total': 0, 'answered': 0, 'firstUnansweredIndex': 0, 'progress': 0.0};
-          continue;
+      
+      // Fetch usr_dept data including current_level
+      final usrDeptData = await Supabase.instance.client
+          .from('usr_dept')
+          .select('id, current_level')
+          .eq('user_id', _userId!)
+          .eq('dept_id', deptId)
+          .maybeSingle();
+
+      if (usrDeptData == null) {
+        _categoryProgress[category] = {'total': 0, 'answered': 0, 'firstUnansweredIndex': 0, 'progress': 0.0};
+        continue;
+      }
+      final usrDeptId = usrDeptData['id'];
+      
+      // Get current level (default to 1)
+      int currentLevel = usrDeptData['current_level'] ?? 1;
+      debugPrint('🔍 [Category: $category] Current Level from DB: $currentLevel');
+        
+        // Load questions filtered by level
+        final questionsDataRaw = await Supabase.instance.client
+            .from('questions')
+            .select('id, level')
+            .eq('dept_id', deptId)
+            .eq('level', currentLevel) // Filter by CURRENT level only
+            .order('created_at')
+            .order('id', ascending: true); // Deterministic order
+            
+        debugPrint('🔍 [Category: $category] Found ${questionsDataRaw.length} questions for Level <= $currentLevel');
+        if (questionsDataRaw.isNotEmpty) {
+           final levels = questionsDataRaw.map((q) => q['level']).toSet().toList();
+           debugPrint('🔍 [Category: $category] Question levels found: $levels');
         }
-        final usrDeptId = usrDeptData['id'];
-        final questionsDataRaw = await Supabase.instance.client.from('questions').select('id').eq('dept_id', deptId).order('created_at').order('id', ascending: true); // Deterministic order
         
         // --- DUPLICATE SHUFFLE LOGIC FROM QUIZ_SCREEN ---
         // This is critical to ensure the index matches what the user sees in the quiz
@@ -383,7 +489,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     
     // Add specific departments (all others)
     for (final category in _categoryProgress.keys) {
-      if (!generalOrder.contains(category)) {
+      if (!generalOrder.contains(category) && category != 'End Game') {
         orderedCategories.add(category);
       }
     }
@@ -413,126 +519,128 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
       }
     }
 
-    // Add End Game Category at the end
-    items.add(const SizedBox(height: 16));
-    items.add(
-      _buildCategoryListItem(
-        category: 'End Game',
-        subcategory: null,
-        icon: Icons.games_rounded,
-        color: const Color(0xFF8B5CF6), // Purple
-        progress: 0.0,
-        isLocked: false, // Always unlocked as per previous logic
-        isCurrent: false,
-        customOnTap: () async {
-           // Show the introductory dialog first
-           await showDialog(
-             context: context,
-             barrierDismissible: false,
-             builder: (BuildContext dialogContext) {
-               return Dialog(
-                 backgroundColor: Colors.transparent,
-                 child: Container(
-                   constraints: const BoxConstraints(maxWidth: 400),
-                   decoration: BoxDecoration(
-                     color: Colors.white,
-                     borderRadius: BorderRadius.circular(24),
-                     border: Border.all(
-                       color: const Color(0xFFF4EF8B),
-                       width: 4,
-                     ),
-                     boxShadow: [
-                       BoxShadow(
-                         color: Colors.black.withOpacity(0.3),
-                         blurRadius: 20,
-                         offset: const Offset(0, 10),
+    // Add End Game Category at the end if assigned
+    if (_categoryProgress.containsKey('End Game')) {
+      items.add(const SizedBox(height: 16));
+      items.add(
+        _buildCategoryListItem(
+          category: 'End Game',
+          subcategory: null,
+          icon: Icons.games_rounded,
+          color: const Color(0xFF8B5CF6), // Purple
+          progress: _categoryProgress['End Game']?['progress'] ?? 0.0,
+          isLocked: false, // Always unlocked as per previous logic
+          isCurrent: false,
+          customOnTap: () async {
+             // Show the introductory dialog first
+             await showDialog(
+               context: context,
+               barrierDismissible: false,
+               builder: (BuildContext dialogContext) {
+                 return Dialog(
+                   backgroundColor: Colors.transparent,
+                   child: Container(
+                     constraints: const BoxConstraints(maxWidth: 400),
+                     decoration: BoxDecoration(
+                       color: Colors.white,
+                       borderRadius: BorderRadius.circular(24),
+                       border: Border.all(
+                         color: const Color(0xFFF4EF8B),
+                         width: 4,
                        ),
-                     ],
-                   ),
-                   child: Padding(
-                     padding: const EdgeInsets.all(24),
-                     child: SingleChildScrollView(
-                       child: Column(
-                         mainAxisSize: MainAxisSize.min,
-                         children: [
-                           // Title
-                           const Text(
-                             'What We\'ve Created Together',
-                             style: TextStyle(
-                               fontSize: 24,
-                               fontWeight: FontWeight.w900,
-                               color: Colors.black,
-                               letterSpacing: 0.5,
+                       boxShadow: [
+                         BoxShadow(
+                           color: Colors.black.withOpacity(0.3),
+                           blurRadius: 20,
+                           offset: const Offset(0, 10),
+                         ),
+                       ],
+                     ),
+                     child: Padding(
+                       padding: const EdgeInsets.all(24),
+                       child: SingleChildScrollView(
+                         child: Column(
+                           mainAxisSize: MainAxisSize.min,
+                           children: [
+                             // Title
+                             const Text(
+                               'What We\'ve Created Together',
+                               style: TextStyle(
+                                 fontSize: 24,
+                                 fontWeight: FontWeight.w900,
+                                 color: Colors.black,
+                                 letterSpacing: 0.5,
+                               ),
+                               textAlign: TextAlign.center,
                              ),
-                             textAlign: TextAlign.center,
-                           ),
-                           const SizedBox(height: 20),
-                           
-                           // Message
-                           const Text(
-                             'You\'ve laughed, played, posed, sung, and celebrated\n'
-                             'not just an occasion, but a person.\n\n'
-                             'Every moment tonight\n'
-                             'from the flowers in full bloom to the music, memories, and madness\n'
-                             'was a reflection of Deeksha and the people who love her.\n\n'
-                             'As we head into the final game,\n'
-                             'this is your last chance to go all in\n'
-                             'one room, one energy, one unforgettable finish.\n\n'
-                             'Let\'s end it the way we started.\n'
-                             'Together. 💫',
-                             style: TextStyle(
-                               fontSize: 15,
-                               height: 1.6,
-                               color: Colors.black87,
-                               fontWeight: FontWeight.w500,
+                             const SizedBox(height: 20),
+                             
+                             // Message
+                             const Text(
+                               'You\'ve laughed, played, posed, sung, and celebrated\n'
+                               'not just an occasion, but a person.\n\n'
+                               'Every moment tonight\n'
+                               'from the flowers in full bloom to the music, memories, and madness\n'
+                               'was a reflection of Deeksha and the people who love her.\n\n'
+                               'As we head into the final game,\n'
+                               'this is your last chance to go all in\n'
+                               'one room, one energy, one unforgettable finish.\n\n'
+                               'Let\'s end it the way we started.\n'
+                               'Together. 💫',
+                               style: TextStyle(
+                                 fontSize: 15,
+                                 height: 1.6,
+                                 color: Colors.black87,
+                                 fontWeight: FontWeight.w500,
+                               ),
+                               textAlign: TextAlign.center,
                              ),
-                             textAlign: TextAlign.center,
-                           ),
-                           const SizedBox(height: 30),
-                           
-                           // Button
-                           SizedBox(
-                             width: double.infinity,
-                             child: ElevatedButton(
-                               onPressed: () {
-                                 Navigator.of(dialogContext).pop();
-                                 Navigator.push(
-                                   context,
-                                   MaterialPageRoute(
-                                     builder: (context) => const EndGameScreen(),
+                             const SizedBox(height: 30),
+                             
+                             // Button
+                             SizedBox(
+                               width: double.infinity,
+                               child: ElevatedButton(
+                                 onPressed: () {
+                                   Navigator.of(dialogContext).pop();
+                                   Navigator.push(
+                                     context,
+                                     MaterialPageRoute(
+                                       builder: (context) => const EndGameScreen(),
+                                     ),
+                                   );
+                                 },
+                                 style: ElevatedButton.styleFrom(
+                                   backgroundColor: const Color(0xFFF4EF8B),
+                                   foregroundColor: Colors.black,
+                                   padding: const EdgeInsets.symmetric(vertical: 16),
+                                   shape: RoundedRectangleBorder(
+                                     borderRadius: BorderRadius.circular(16),
                                    ),
-                                 );
-                               },
-                               style: ElevatedButton.styleFrom(
-                                 backgroundColor: const Color(0xFFF4EF8B),
-                                 foregroundColor: Colors.black,
-                                 padding: const EdgeInsets.symmetric(vertical: 16),
-                                 shape: RoundedRectangleBorder(
-                                   borderRadius: BorderRadius.circular(16),
+                                   elevation: 0,
                                  ),
-                                 elevation: 0,
-                               ),
-                               child: const Text(
-                                 'LET\'S DO THIS',
-                                 style: TextStyle(
-                                   fontSize: 16,
-                                   fontWeight: FontWeight.w900,
-                                   letterSpacing: 1,
+                                 child: const Text(
+                                   'LET\'S DO THIS',
+                                   style: TextStyle(
+                                     fontSize: 16,
+                                     fontWeight: FontWeight.w900,
+                                     letterSpacing: 1,
+                                   ),
                                  ),
                                ),
                              ),
-                           ),
-                         ],
+                           ],
+                         ),
                        ),
                      ),
                    ),
-                 ),
-               );
-             },
-           );
-        },
-      ),
-    );
+                 );
+               },
+             );
+          },
+        ),
+      );
+    }
     
     return items;
   }
@@ -555,7 +663,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
     
     // Add specific departments (all others)
     for (final category in _categoryProgress.keys) {
-      if (!generalOrder.contains(category)) {
+      if (!generalOrder.contains(category) && category != 'End Game') {
         orderedCategories.add(category);
       }
     }
@@ -918,125 +1026,127 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> {
                   // Dynamically build category cards for all assigned departments
                   ..._buildDynamicCategoryCards(),
                   
-                  // End Game Category (always shown, always unlocked)
-                  const SizedBox(height: 12),
-                  _buildCategoryCard(
-                    category: 'End Game',
-                    icon: Icons.games_rounded,
-                    color: const Color(0xFF8B5CF6), // Purple
-                    description: 'Final Verification Challenge',
-                    progress: 0.0,
-                    isLocked: false,
-                    isCurrent: false, 
-                    onTap: () async {
-                      // Show the introductory dialog first
-                      await showDialog(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (BuildContext dialogContext) {
-                          return Dialog(
-                            backgroundColor: Colors.transparent,
-                            child: Container(
-                              constraints: const BoxConstraints(maxWidth: 400),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: const Color(0xFFF4EF8B),
-                                  width: 4,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.3),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
+                  // End Game Category (only shown if assigned)
+                  if (_categoryProgress.containsKey('End Game')) ...[
+                    const SizedBox(height: 12),
+                    _buildCategoryCard(
+                      category: 'End Game',
+                      icon: Icons.games_rounded,
+                      color: const Color(0xFF8B5CF6), // Purple
+                      description: 'Final Verification Challenge',
+                      progress: _categoryProgress['End Game']?['progress'] ?? 0.0,
+                      isLocked: false,
+                      isCurrent: false, 
+                      onTap: () async {
+                        // Show the introductory dialog first
+                        await showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (BuildContext dialogContext) {
+                            return Dialog(
+                              backgroundColor: Colors.transparent,
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 400),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: const Color(0xFFF4EF8B),
+                                    width: 4,
                                   ),
-                                ],
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(24),
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // Title
-                                      const Text(
-                                        'What We\'ve Created Together',
-                                        style: TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.black,
-                                          letterSpacing: 0.5,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.3),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Title
+                                        const Text(
+                                          'What We\'ve Created Together',
+                                          style: TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.w900,
+                                            color: Colors.black,
+                                            letterSpacing: 0.5,
+                                          ),
+                                          textAlign: TextAlign.center,
                                         ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 20),
-                                      
-                                      // Message
-                                      const Text(
-                                        'You\'ve laughed, played, posed, sung, and celebrated\n'
-                                        'not just an occasion, but a person.\n\n'
-                                        'Every moment tonight\n'
-                                        'from the flowers in full bloom to the music, memories, and madness\n'
-                                        'was a reflection of Deeksha and the people who love her.\n\n'
-                                        'As we head into the final game,\n'
-                                        'this is your last chance to go all in\n'
-                                        'one room, one energy, one unforgettable finish.\n\n'
-                                        'Let\'s end it the way we started.\n'
-                                        'Together. 💫',
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          height: 1.6,
-                                          color: Colors.black87,
-                                          fontWeight: FontWeight.w500,
+                                        const SizedBox(height: 20),
+                                        
+                                        // Message
+                                        const Text(
+                                          'You\'ve laughed, played, posed, sung, and celebrated\n'
+                                          'not just an occasion, but a person.\n\n'
+                                          'Every moment tonight\n'
+                                          'from the flowers in full bloom to the music, memories, and madness\n'
+                                          'was a reflection of Deeksha and the people who love her.\n\n'
+                                          'As we head into the final game,\n'
+                                          'this is your last chance to go all in\n'
+                                          'one room, one energy, one unforgettable finish.\n\n'
+                                          'Let\'s end it the way we started.\n'
+                                          'Together. 💫',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            height: 1.6,
+                                            color: Colors.black87,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          textAlign: TextAlign.center,
                                         ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 30),
-                                      
-                                      // Button
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                          onPressed: () {
-                                            Navigator.of(dialogContext).pop();
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => const EndGameScreen(),
+                                        const SizedBox(height: 30),
+                                        
+                                        // Button
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: ElevatedButton(
+                                            onPressed: () {
+                                              Navigator.of(dialogContext).pop();
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => const EndGameScreen(),
+                                                ),
+                                              );
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFFF4EF8B),
+                                              foregroundColor: Colors.black,
+                                              padding: const EdgeInsets.symmetric(vertical: 16),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(12),
                                               ),
-                                            );
-                                          },
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFFF4EF8B),
-                                            foregroundColor: Colors.black,
-                                            padding: const EdgeInsets.symmetric(vertical: 16),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(12),
+                                              elevation: 4,
                                             ),
-                                            elevation: 4,
-                                          ),
-                                          child: const Text(
-                                            'END GAME',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                              letterSpacing: 1,
+                                            child: const Text(
+                                              'END GAME',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 1,
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                    onContinue: null,
-                  ),
+                            );
+                          },
+                        );
+                      },
+                      onContinue: null,
+                    ),
+                  ],
                 ],
               ),
             ),

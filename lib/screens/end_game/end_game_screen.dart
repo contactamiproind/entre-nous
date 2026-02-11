@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'game_models.dart';
 import '../../models/end_game_config.dart';
 import '../../services/end_game_config_loader.dart';
+import '../../services/end_game_service.dart';
+import '../../services/progress_service.dart';
 
 class EndGameScreen extends StatefulWidget {
   const EndGameScreen({super.key});
@@ -12,6 +15,10 @@ class EndGameScreen extends StatefulWidget {
 }
 
 class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateMixin {
+  final EndGameService _endGameService = EndGameService();
+  final ProgressService _progressService = ProgressService();
+  String? _activeEndGameId;
+
   // Game State
   final List<PlacedObject> _placedObjects = [];
   final Set<String> _disruptionsTriggered = {};
@@ -42,24 +49,15 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
         bool foundMatch = false;
         for (var userObj in matchingUserObjects) {
              // Calculate distance (Euclidean)
-             // Admin coordinates are 0.0-1.0 (float) in the config, converted to 0-100 for display? 
-             // Wait, let's check how they are stored.
-             // In EndGameVisualEditor, they are stored as 0.0-1.0.
-             // In EndGameScreen _placedObjects, they are stored as 0.0-100.0 (lines 95-96: x = (local.dx/width)*100).
-             // We need to normalize to compare.
-             
              double adminX = correctPlacement.x * 100;
              double adminY = correctPlacement.y * 100;
              
              double dist = sqrt(pow(userObj.x - adminX, 2) + pow(userObj.y - adminY, 2));
              
-             // Threshold: 15% of screen width/height (increased from 10)
+             // Threshold: 15% of screen width/height
              if (dist <= 15.0) {
-                 print('MATCH FOUND: ${userObj.id} at dist $dist');
                  foundMatch = true;
                  break;
-             } else {
-                 print('NO MATCH: ${userObj.id} at dist $dist (needs <= 15.0)');
              }
         }
         
@@ -93,8 +91,32 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
 
   Future<void> _loadConfiguration() async {
     try {
-      final venue = await EndGameConfigLoader.loadActiveVenue();
-      final items = await EndGameConfigLoader.loadItems();
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      
+      VenueConfig? venue;
+      ItemsConfig? items;
+      
+      if (userId != null) {
+        // Try loading from DB first to get the ID
+        final config = await _endGameService.getActiveConfigForUser(userId);
+        if (config != null) {
+          _activeEndGameId = config['id'];
+          if (config['venue_data'] != null) {
+             venue = VenueConfig.fromJson(config['venue_data']);
+          }
+          if (config['items_data'] != null) {
+             items = ItemsConfig.fromJson(config['items_data']);
+          }
+        }
+      }
+      
+      // Fallback if not found in DB
+      if (venue == null) {
+         venue = await EndGameConfigLoader.loadActiveVenue();
+      }
+      if (items == null) {
+         items = await EndGameConfigLoader.loadItems();
+      }
       
       // Build zones map
       final zonesMap = <String, Rect>{};
@@ -111,19 +133,36 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
       
       _updateStats();
     } catch (e) {
-      print('Error loading configuration: $e');
-      setState(() {
-        _isLoading = false;
-      });
-      // Show error to user
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load game configuration: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      debugPrint('Error loading configuration: $e');
+      // ... error handling ...
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _markGameAsCompleted(int score) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null && _activeEndGameId != null) {
+       try {
+         // 1. Mark End Game as completed
+         await _endGameService.markAsCompleted(user.id, _activeEndGameId!, score);
+         debugPrint('✅ End Game marked as completed!');
+         
+         // 2. Attempt Level Promotion
+         // We must promote EACH restricted department individually because
+         // each department has its own 'current_level' in the usr_dept table.
+         
+         final userDepts = await Supabase.instance.client
+             .from('usr_dept')
+             .select('dept_id')
+             .eq('user_id', user.id);
+             
+         for (var row in userDepts) {
+           await _progressService.attemptLevelPromotion(user.id, row['dept_id']);
+         }
+         
+       } catch (e) {
+         debugPrint('❌ Error marking game complete/promoting: $e');
+       }
     }
   }
   
@@ -560,11 +599,20 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                 minimumSize: const Size(double.infinity, 50),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              onPressed: () {
-                Navigator.of(context).pop();
+              onPressed: () async {
                 if (finalScore == 100) {
-                  Navigator.of(context).pop(); // Return to dashboard
+                  // Save navigator reference before closing dialog
+                  final navigator = Navigator.of(context);
+                  // Close dialog
+                  navigator.pop();
+                  // Mark as completed and wait for promotion
+                  await _markGameAsCompleted(finalScore);
+                  // Return to dashboard using saved navigator reference
+                  if (mounted) {
+                    navigator.pop(true); // Pass true to indicate refresh needed
+                  }
                 } else {
+                  Navigator.of(context).pop();
                   Navigator.of(context).pushReplacement(
                     MaterialPageRoute(builder: (c) => const EndGameScreen())
                   );

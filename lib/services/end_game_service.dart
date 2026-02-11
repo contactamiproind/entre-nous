@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/end_game_config.dart';
 
@@ -135,6 +136,66 @@ class EndGameService {
       }
     } catch (e) {
       throw Exception('Failed to assign End Game to users: $e');
+    }
+  }
+
+  /// Mark End Game assignment as completed
+  Future<void> markAsCompleted(String userId, String endGameId, int score) async {
+    try {
+      debugPrint('🎮 Marking End Game $endGameId as completed for user $userId with score $score');
+      
+      final response = await _supabase
+          .from('end_game_assignments')
+          .update({
+            'completed_at': DateTime.now().toIso8601String(),
+            'score': score,
+          })
+          .eq('user_id', userId)
+          .eq('end_game_id', endGameId)
+          .select();
+          
+      debugPrint('🎮 Update response: $response');
+      
+      if (response.isEmpty) {
+        debugPrint('❌ WARNING: No execution rows updated! Check if user_id and end_game_id match exactly.');
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to mark End Game as completed: $e');
+      throw Exception('Failed to mark End Game as completed: $e');
+    }
+  }
+
+  /// Check if End Game for a specific level is completed
+  Future<bool> isLevelCompleted(String userId, int level) async {
+    try {
+      // 1. Find the active End Game config for this level
+      final config = await _supabase
+          .from('end_game_configs')
+          .select('id')
+          .eq('level', level)
+          .eq('is_active', true)
+          .maybeSingle();
+
+      if (config == null) return true; // No End Game for this level -> considered complete
+
+      final endGameId = config['id'];
+
+      // 2. Check if user has completed this assignment
+      final assignment = await _supabase
+          .from('end_game_assignments')
+          .select('completed_at')
+          .eq('user_id', userId)
+          .eq('end_game_id', endGameId)
+          .maybeSingle();
+
+      if (assignment != null && assignment['completed_at'] != null) {
+        return true;
+      }
+      
+      return false;
+    } catch (e) {
+      // If error, assume not completed to be safe
+      return false;
     }
   }
 

@@ -248,9 +248,28 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = false;
       });
     } on AuthException catch (e) {
+      String msg = e.message;
+      
+      // If generic invalid credentials error, check if email exists to give specific feedback
+      if (msg.contains('Invalid login credentials')) {
+        try {
+          final bool emailExists = await Supabase.instance.client
+              .rpc('check_email_exists', params: {'email_check': _emailController.text.trim()});
+          
+          if (emailExists) {
+            msg = 'Incorrect password. Please try again.';
+          } else {
+            msg = 'Email not registered. Please sign up or contact admin.';
+          }
+        } catch (_) {
+          // If RPC fails (e.g. not deployed yet), fall back to generic message
+          // msg remains 'Invalid login credentials'
+        }
+      }
+
       setState(() {
         _isLoading = false;
-        _errorMessage = e.message;
+        _errorMessage = msg;
       });
     } catch (e) {
       setState(() {

@@ -508,7 +508,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Assign Pathway'),
+        title: const Text('Assign'),
         content: SizedBox(
           width: 300,
           child: ListView.builder(
@@ -516,14 +516,20 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
             itemCount: unassignedPathways.length,
             itemBuilder: (context, index) {
               final pathway = unassignedPathways[index];
+              final title = pathway['title'] ?? 'Unknown';
+              final category = pathway['category'];
+              final displayTitle = (title == 'General' && category != null)
+                  ? 'General ($category)'
+                  : title;
+
               return ListTile(
-                title: Text(pathway['title'] ?? 'Unknown'),
+                title: Text(displayTitle),
                 subtitle: Text(pathway['description'] ?? ''),
                 trailing: IconButton(
                   icon: const Icon(Icons.add_circle, color: Colors.green),
                   onPressed: () {
                     Navigator.pop(context);
-                    _assignPathway(pathway['id'], pathway['title']);
+                    _assignPathway(pathway['id'], displayTitle);
                   },
                 ),
               );

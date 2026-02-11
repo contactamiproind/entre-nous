@@ -14,10 +14,9 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
   List<Map<String, dynamic>> _questions = [];
   List<Map<String, dynamic>> _allQuestions = []; // Store all questions
   bool _isLoading = true;
-  bool _selectionMode = false;
-  Set<String> _selectedQuestions = {};
   List<Map<String, dynamic>> _departments = [];
   String? _selectedDepartmentFilter; // Filter by department
+  int? _selectedLevelFilter; // Filter by level
 
   @override
   void initState() {
@@ -68,6 +67,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
           _questions = _allQuestions; // Initially show all
           _isLoading = false;
         });
+        _filterQuestions();
       }
     } catch (e) {
       debugPrint('Error loading questions: $e');
@@ -96,136 +96,24 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
 
   void _filterQuestions() {
     setState(() {
-      if (_selectedDepartmentFilter == null || _selectedDepartmentFilter!.isEmpty) {
-        _questions = _allQuestions;
-      } else {
-        _questions = _allQuestions.where((q) => q['dept_id'] == _selectedDepartmentFilter).toList();
-      }
+      _questions = _allQuestions.where((q) {
+        bool matchesDept = true;
+        bool matchesLevel = true;
+
+        if (_selectedDepartmentFilter != null && _selectedDepartmentFilter!.isNotEmpty) {
+          matchesDept = q['dept_id'] == _selectedDepartmentFilter;
+        }
+
+        if (_selectedLevelFilter != null) {
+          matchesLevel = (q['level'] ?? 1) == _selectedLevelFilter;
+        }
+
+        return matchesDept && matchesLevel;
+      }).toList();
     });
   }
 
-  void _toggleSelectionMode() {
-    setState(() {
-      _selectionMode = !_selectionMode;
-      if (!_selectionMode) {
-        _selectedQuestions.clear();
-      }
-    });
-  }
 
-  void _toggleQuestionSelection(String questionId) {
-    setState(() {
-      if (_selectedQuestions.contains(questionId)) {
-        _selectedQuestions.remove(questionId);
-      } else {
-        _selectedQuestions.add(questionId);
-      }
-    });
-  }
-
-  Future<void> _showBulkAssignDialog() async {
-    String? selectedDeptId;
-    
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Assign ${_selectedQuestions.length} Questions'),
-          content: SizedBox(
-            width: 300,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Select department to assign these questions to:'),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: selectedDeptId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Department',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: _departments.map((dept) {
-                      final title = dept['title'] ?? 'Unknown';
-                      final category = dept['category'];
-                      // For General departments, show "General - Category"
-                      final displayName = (title == 'General' && category != null)
-                          ? 'General - $category'
-                          : title;
-                      
-                      return DropdownMenuItem<String>(
-                        value: dept['id'],
-                        child: Text(
-                          displayName,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setDialogState(() {
-                        selectedDeptId = value;
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: selectedDeptId == null
-                  ? null
-                  : () async {
-                      await _bulkAssignQuestions(selectedDeptId!);
-                      if (mounted) Navigator.pop(context);
-                    },
-              child: const Text('Assign'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _bulkAssignQuestions(String deptId) async {
-    try {
-      for (String questionId in _selectedQuestions) {
-        await Supabase.instance.client
-            .from('questions')
-            .update({'dept_id': deptId})
-            .eq('id', questionId);
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${_selectedQuestions.length} questions assigned successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        setState(() {
-          _selectionMode = false;
-          _selectedQuestions.clear();
-        });
-        _loadQuestions();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error assigning questions: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   Future<void> _showQuestionDetails(Map<String, dynamic> question) async {
     await showDialog(
@@ -766,7 +654,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                 Row(
                   children: [
                     Expanded(
-                      flex: 2,
+                      flex: 3,
                       child: DropdownButtonFormField<String>(
                         value: _selectedDepartmentFilter,
                         decoration: const InputDecoration(
@@ -808,32 +696,40 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (_selectionMode)
-                      Flexible(
-                        flex: 1,
-                        child: TextButton.icon(
-                          onPressed: _toggleSelectionMode,
-                          icon: const Icon(Icons.close, size: 18),
-                          label: Text('Cancel (${_selectedQuestions.length})'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
+
+
+                    // Level Filter
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<int>(
+                        value: _selectedLevelFilter,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          isDense: true,
                         ),
-                      )
-                    else
-                      Flexible(
-                        flex: 1,
-                        child: TextButton.icon(
-                          onPressed: _toggleSelectionMode,
-                          icon: const Icon(Icons.checklist, size: 18),
-                          label: const Text('Select'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF3B82F6),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        isExpanded: true,
+                        hint: const Text('All Levels'),
+                        items: [
+                          const DropdownMenuItem<int>(
+                            value: null,
+                            child: Text('Levels'),
                           ),
-                        ),
+                          ...[1, 2, 3, 4].map((level) {
+                            return DropdownMenuItem<int>(
+                              value: level,
+                              child: Text('Lvl $level'),
+                            );
+                          }).toList(),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedLevelFilter = value;
+                          });
+                          _filterQuestions();
+                        },
                       ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 3),
@@ -947,13 +843,6 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                                       Row(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                          children: [
-                                          if (_selectionMode)
-                                            Checkbox(
-                                              value: _selectedQuestions.contains(question['id']),
-                                              onChanged: (value) {
-                                                _toggleQuestionSelection(question['id']);
-                                              },
-                                             ),
                                           // Department badge removed - using filter instead
                                           Expanded(
                                             child: Column(
@@ -1056,14 +945,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
         ),
         ),
       ),
-      floatingActionButton: _selectionMode && _selectedQuestions.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: _showBulkAssignDialog,
-              icon: const Icon(Icons.assignment),
-              label: Text('Assign ${_selectedQuestions.length}'),
-              backgroundColor: const Color(0xFF3B82F6),
-            )
-          : null,
+
     );
   }
 }
