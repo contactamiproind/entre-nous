@@ -138,15 +138,14 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         // If not on home tab, go back to home tab instead of exiting
         if (_selectedIndex != 0) {
           setState(() => _selectedIndex = 0);
-          return false; // Don't pop the route
         }
-        // If on home tab, prevent back navigation (stay on dashboard)
-        return false;
       },
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -161,6 +160,35 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _loadStats,
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Settings',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => Scaffold(
+                      body: Container(
+                        width: double.infinity,
+                        height: double.infinity,
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0xFFFFF9E6),
+                              Color(0xFFF4EF8B),
+                              Color(0xFFE8D96F),
+                            ],
+                          ),
+                        ),
+                        child: SafeArea(child: _buildSettingsScreen()),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
             IconButton(
               icon: const Icon(Icons.logout, color: Colors.red),
@@ -186,15 +214,11 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.quiz),
-              label: 'Q-Bank',
+              label: 'Bank',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.people),
               label: 'Users',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: 'Settings',
             ),
           ],
         ),
@@ -239,8 +263,6 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
         return UserManagementScreen(
           onBack: () => setState(() => _selectedIndex = 0),
         );
-      case 4:
-        return _buildSettingsScreen();
       default:
         return _buildHomeTab();
     }
@@ -491,7 +513,7 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
             children: [
               IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.black),
-                onPressed: () => setState(() => _selectedIndex = 0),
+                onPressed: () => Navigator.canPop(context) ? Navigator.pop(context) : setState(() => _selectedIndex = 0),
               ),
               const Text(
                 'Quiz Settings',

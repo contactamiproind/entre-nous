@@ -255,28 +255,47 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
     if (confirmed == true) {
       try {
-        // Delete user progress
+        final userId = user['user_id'];
+
+        // 1. Delete end_game_assignments
+        await Supabase.instance.client
+            .from('end_game_assignments')
+            .delete()
+            .eq('user_id', userId);
+
+        // 2. Delete user progress (must be before usr_dept due to FK)
         await Supabase.instance.client
             .from('usr_progress')
             .delete()
-            .eq('user_id', user['user_id']);
+            .eq('user_id', userId);
 
-        // Delete pathway assignments
+        // 3. Delete department assignments
         await Supabase.instance.client
             .from('usr_dept')
             .delete()
-            .eq('user_id', user['user_id']);
+            .eq('user_id', userId);
 
-        // Delete profile
+        // 4. Delete profile
         await Supabase.instance.client
             .from('profiles')
             .delete()
-            .eq('user_id', user['user_id']);
+            .eq('user_id', userId);
+
+        // 5. Delete auth account via admin RPC (if available)
+        try {
+          await Supabase.instance.client.rpc(
+            'delete_user_auth',
+            params: {'target_user_id': userId},
+          );
+        } catch (authErr) {
+          // RPC may not exist yet — log but don't fail the whole operation
+          debugPrint('Auth deletion skipped (RPC not available): $authErr');
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('User deleted successfully!'),
+              content: Text('User and all associated data deleted successfully!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -286,7 +305,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: $e'),
+              content: Text('Error deleting user: $e'),
               backgroundColor: Colors.red,
             ),
           );

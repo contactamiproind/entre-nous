@@ -180,7 +180,7 @@ class ProgressService {
           .select('id')
           .eq('user_id', userId)
           .eq('status', 'answered')
-          .filter('question_id', 'in', questionIds);
+          .inFilter('question_id', questionIds);
           
       final answeredCount = answeredProgress.length;
       

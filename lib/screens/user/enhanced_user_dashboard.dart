@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../utils/stable_random.dart';
 import '../../models/pathway.dart';
 import '../../models/user_assignment.dart';
 import '../../services/pathway_service.dart';
@@ -41,6 +40,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   
   // Category progress tracking for Continue feature
   Map<String, Map<String, dynamic>> _categoryProgress = {}; // category -> {total, answered, firstUnansweredIndex}
+  
+  // Raw usr_dept records for level-grouped display
+  List<Map<String, dynamic>> _userDeptRecords = [];
 
   @override
   void initState() {
@@ -251,11 +253,14 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   Future<void> _loadCategoryProgress() async {
     if (_userId == null) return;
     try {
-      // Get all departments assigned to this user from usr_dept
+      // Get all departments assigned to this user from usr_dept (full records for level-grouped display)
       final userDeptsData = await Supabase.instance.client
           .from('usr_dept')
-          .select('dept_id, departments(id, title, category)')
-          .eq('user_id', _userId!);
+          .select('*, departments(id, title, category)')
+          .eq('user_id', _userId!)
+          .order('assigned_at', ascending: true);
+      
+      _userDeptRecords = List<Map<String, dynamic>>.from(userDeptsData);
       
       debugPrint('📊 Found ${userDeptsData.length} assigned departments for user');
       
@@ -330,116 +335,45 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
         debugPrint('❌ Error checking End Game assignment: $e');
       }
       
-      for (final category in assignedCategories) {
-        // Skip End Game in the standard loop as it doesn't have a department entry
-        if (category == 'End Game') continue;
+      // Build progress from usr_progress records ONLY (admin-assigned questions)
+      // Never query the questions table — assignments are immutable once admin creates them
+      for (final record in _userDeptRecords) {
+        final dept = record['departments'];
+        final category = dept?['category'] as String?;
+        if (category == null || category == 'End Game') continue;
 
-        final deptData = await Supabase.instance.client.from('departments').select('id').eq('category', category).maybeSingle();
-        if (deptData == null) continue;
-        
-        final deptId = deptData['id'];
-      
-      // Fetch usr_dept data including current_level
-      final usrDeptData = await Supabase.instance.client
-          .from('usr_dept')
-          .select('id, current_level')
-          .eq('user_id', _userId!)
-          .eq('dept_id', deptId)
-          .maybeSingle();
+        final usrDeptId = record['id'];
+        final totalQ = record['total_questions'] as int? ?? 0;
+        final answeredQ = record['answered_questions'] as int? ?? 0;
 
-      if (usrDeptData == null) {
-        _categoryProgress[category] = {'total': 0, 'answered': 0, 'firstUnansweredIndex': 0, 'progress': 0.0};
-        continue;
-      }
-      final usrDeptId = usrDeptData['id'];
-      
-      // Get current level (default to 1)
-      int currentLevel = usrDeptData['current_level'] ?? 1;
-      debugPrint('🔍 [Category: $category] Current Level from DB: $currentLevel');
-        
-        // Load questions filtered by level
-        final questionsDataRaw = await Supabase.instance.client
-            .from('questions')
-            .select('id, level')
-            .eq('dept_id', deptId)
-            .eq('level', currentLevel) // Filter by CURRENT level only
-            .order('created_at')
-            .order('id', ascending: true); // Deterministic order
-            
-        debugPrint('🔍 [Category: $category] Found ${questionsDataRaw.length} questions for Level <= $currentLevel');
-        if (questionsDataRaw.isNotEmpty) {
-           final levels = questionsDataRaw.map((q) => q['level']).toSet().toList();
-           debugPrint('🔍 [Category: $category] Question levels found: $levels');
-        }
-        
-        // --- DUPLICATE SHUFFLE LOGIC FROM QUIZ_SCREEN ---
-        // This is critical to ensure the index matches what the user sees in the quiz
-        // Using StableRandom to ensure consistency across Web and Mobile
-        
-        final String seedString = '${_userId}_${deptId}';
-        final int seed = StableRandom.getStableHash(seedString);
-        
-        final stableRandom = StableRandom(seed);
-        final List<dynamic> questionsData = List.from(questionsDataRaw);
-        stableRandom.shuffle(questionsData);
-        // ------------------------------------------------
-        
-        // --- DYNAMIC REORDERING (MATCHING QUIZ SCREEN) ---
-        // We must apply the exact same "Answered First" logic here
-        // The progressData fetch above needs to be used for this sort
-        
-        final progressData = await Supabase.instance.client.from('usr_progress').select('question_id, status').eq('usr_dept_id', usrDeptId).order('created_at');
-        
-        final Set<String> answeredQuestionIds = progressData
-            .where((p) => p['status'] == 'answered')
-            .map((p) => p['question_id'].toString())
-            .toSet();
-
-        final List<dynamic> answeredQuestions = [];
-        final List<dynamic> unansweredQuestions = [];
-
-        for (var q in questionsData) {
-          if (answeredQuestionIds.contains(q['id'].toString())) {
-            answeredQuestions.add(q);
-          } else {
-            unansweredQuestions.add(q);
-          }
-        }
-        
-        // Re-construct the list in-place to match Quiz Screen order
-        questionsData.clear();
-        questionsData.addAll(answeredQuestions);
-        questionsData.addAll(unansweredQuestions);
-        // ------------------------------------------------
-        
-        final totalQuestions = questionsData.length;
-        // Re-fetch or reuse progress data is fine, logic below iterates the *sorted* list
-        
-        int answeredCount = 0;
+        // Get first unanswered index from usr_progress for Continue feature
         int firstUnansweredIndex = 0;
-        bool foundUnanswered = false;
-        
-        // Iterate through REORDERED questions
-        for (int i = 0; i < questionsData.length; i++) {
-          final questionId = questionsData[i]['id'];
-          final progress = progressData.firstWhere((p) => p['question_id'] == questionId, orElse: () => {'status': 'pending'});
-          if (progress['status'] == 'answered') {
-            answeredCount++;
-          } else if (!foundUnanswered) {
-            firstUnansweredIndex = i;
-            foundUnanswered = true;
+        try {
+          final progressRecords = await Supabase.instance.client
+              .from('usr_progress')
+              .select('question_id, status')
+              .eq('usr_dept_id', usrDeptId)
+              .order('created_at', ascending: true);
+
+          for (int i = 0; i < progressRecords.length; i++) {
+            if (progressRecords[i]['status'] != 'answered') {
+              firstUnansweredIndex = i;
+              break;
+            }
           }
+        } catch (e) {
+          debugPrint('Error loading progress for $category: $e');
         }
-        if (!foundUnanswered && totalQuestions > 0) firstUnansweredIndex = 0;
-        final progressPercentage = totalQuestions > 0 ? answeredCount / totalQuestions : 0.0;
+
+        final progressPercentage = totalQ > 0 ? answeredQ / totalQ : 0.0;
         _categoryProgress[category] = {
-          'total': totalQuestions, 
-          'answered': answeredCount, 
-          'firstUnansweredIndex': firstUnansweredIndex, 
+          'total': totalQ,
+          'answered': answeredQ,
+          'firstUnansweredIndex': firstUnansweredIndex,
           'progress': progressPercentage,
-          'level': currentLevel,
+          'level': record['current_level'] ?? 1,
         };
-        debugPrint('📊 $category Progress: $answeredCount/$totalQuestions (${(progressPercentage * 100).toStringAsFixed(0)}%), First unanswered shuffled index: $firstUnansweredIndex');
+        debugPrint('📊 $category Progress: $answeredQ/$totalQ (${(progressPercentage * 100).toStringAsFixed(0)}%)');
       }
       if (mounted) setState(() {});
     } catch (e) {
@@ -723,91 +657,324 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   }
 
 
-  // Build category cards dynamically for all assigned departments
+  /// Build display name for a department (matching admin logic)
+  String _buildUserDeptDisplayName(Map<String, dynamic>? dept) {
+    if (dept == null) return 'Unknown';
+    final title = dept['title'] as String? ?? 'Unknown';
+    final category = dept['category'] as String?;
+    if (title == 'General' && category != null && category.isNotEmpty) {
+      return 'General ($category)';
+    }
+    return title;
+  }
+
+  // Build level-grouped category cards for all assigned departments
   List<Widget> _buildDynamicCategoryCards() {
     final List<Widget> cards = [];
-    
-    // Define the order: General departments first, then specific departments
-    final generalOrder = ['Orientation', 'Process', 'SOP'];
-    final List<String> orderedCategories = [];
-    
-    // Add General departments in order (if assigned)
-    for (final category in generalOrder) {
-      if (_categoryProgress.containsKey(category)) {
-        orderedCategories.add(category);
-      }
-    }
-    
-    // Add specific departments (all others)
-    for (final category in _categoryProgress.keys) {
-      if (!generalOrder.contains(category) && category != 'End Game') {
-        orderedCategories.add(category);
-      }
-    }
-    
-    debugPrint('🎨 Building cards for categories: $orderedCategories');
-    
-    // Build cards for each category
-    for (final category in orderedCategories) {
-      final progress = _categoryProgress[category];
-      if (progress == null) continue;
-      
-      final isLocked = _isCategoryLocked(category);
-      final progressValue = progress['progress'] ?? 0.0;
-      final isCurrent = !isLocked && progressValue < 1.0;
-      
+    if (_userDeptRecords.isEmpty) {
       cards.add(
-        _buildCategoryCard(
-          category: category,
-          icon: _getCategoryIcon(category),
-          color: _getCategoryColor(category),
-          description: _getCategoryDescription(category),
-          progress: progressValue,
-          isLocked: isLocked,
-          isCurrent: isCurrent,
-          onTap: () async {
-            // Prevent retake if completed
-            if (progressValue >= 1.0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('You have already completed the $category category!'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-              return;
-            }
+        const Center(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Icon(Icons.school_outlined, size: 48, color: Colors.grey),
+                SizedBox(height: 8),
+                Text('No courses assigned yet', style: TextStyle(color: Colors.grey, fontSize: 14)),
+              ],
+            ),
+          ),
+        ),
+      );
+      return cards;
+    }
 
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => QuizScreen(
-                  category: category,
+    // Determine max completed level across all records
+    int maxCompletedLevel = 0;
+    for (final record in _userDeptRecords) {
+      final cl = record['completed_levels'] as int? ?? 0;
+      if (cl > maxCompletedLevel) maxCompletedLevel = cl;
+    }
+
+    // Find which levels have assignments
+    final Set<int> levelsWithAssignments = {};
+    for (final record in _userDeptRecords) {
+      final level = record['current_level'] as int? ?? 1;
+      levelsWithAssignments.add(level);
+    }
+
+    // Only show levels that have assignments OR are <= maxCompletedLevel + 1
+    final int maxLevelToShow = levelsWithAssignments.isEmpty
+        ? 1
+        : levelsWithAssignments.reduce((a, b) => a > b ? a : b);
+    final int levelsToDisplay = maxLevelToShow > (maxCompletedLevel + 1)
+        ? maxLevelToShow
+        : (maxCompletedLevel + 1).clamp(1, 4);
+
+    for (int level = 1; level <= levelsToDisplay; level++) {
+      final isLevelCompleted = level <= maxCompletedLevel;
+      final isLevelUnlocked = level <= maxCompletedLevel + 1;
+
+      // Get assignments at this level
+      final levelAssignments = _userDeptRecords.where((r) {
+        return (r['current_level'] as int? ?? 1) == level;
+      }).toList();
+
+      cards.add(
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isLevelCompleted
+                  ? Colors.green.shade300
+                  : isLevelUnlocked
+                      ? const Color(0xFFE8D96F)
+                      : Colors.grey.shade300,
+              width: 1.5,
+            ),
+            color: !isLevelUnlocked ? Colors.grey.shade50 : Colors.white,
+            boxShadow: [
+              if (isLevelUnlocked)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Level Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isLevelCompleted
+                      ? Colors.green.shade50
+                      : isLevelUnlocked
+                          ? const Color(0xFFFFF9E6)
+                          : Colors.grey.shade100,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(15),
+                    topRight: Radius.circular(15),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isLevelCompleted
+                          ? Icons.check_circle_rounded
+                          : isLevelUnlocked
+                              ? Icons.play_circle_outline_rounded
+                              : Icons.lock_rounded,
+                      color: isLevelCompleted
+                          ? Colors.green
+                          : isLevelUnlocked
+                              ? const Color(0xFF1E293B)
+                              : Colors.grey,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Level $level',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: isLevelUnlocked ? const Color(0xFF1E293B) : Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (isLevelCompleted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade100,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'COMPLETED',
+                          style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    if (!isLevelUnlocked)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'LOCKED',
+                          style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            );
-            if (mounted) _loadData();
-          },
-          onContinue: progress['progress'] != null && progress['progress'] > 0 && progress['progress'] < 1.0
-              ? () async {
-                  final startIndex = progress['firstUnansweredIndex'] ?? 0;
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => QuizScreen(
-                        category: category,
-                        startQuestionIndex: startIndex,
+              // Assignments under this level
+              if (!isLevelUnlocked && levelAssignments.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Text(
+                    'Complete Level ${level - 1} to unlock',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 13, fontStyle: FontStyle.italic),
+                  ),
+                )
+              else if (levelAssignments.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Text(
+                    'No courses at this level',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 13, fontStyle: FontStyle.italic),
+                  ),
+                )
+              else
+                ...levelAssignments.map((assignment) {
+                  final dept = assignment['departments'];
+                  final deptName = _buildUserDeptDisplayName(dept);
+                  final category = dept?['category'] as String? ?? deptName;
+                  final totalQ = assignment['total_questions'] as int? ?? 0;
+                  final answeredQ = assignment['answered_questions'] as int? ?? 0;
+                  final progressVal = totalQ > 0 ? answeredQ / totalQ : 0.0;
+                  final isCompleted = progressVal >= 1.0;
+
+                  // Can the user tap this course?
+                  final bool canTap = isLevelUnlocked && !isLevelCompleted && !isCompleted;
+                  final bool canContinue = canTap && answeredQ > 0 && answeredQ < totalQ;
+
+                  return InkWell(
+                    onTap: canTap
+                        ? () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => QuizScreen(category: category),
+                              ),
+                            );
+                            if (mounted) _loadData();
+                          }
+                        : isLevelCompleted
+                            ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('This level has been marked as complete by admin'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            : null,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Course name + status
+                          Row(
+                            children: [
+                              Icon(
+                                _getCategoryIcon(category),
+                                size: 22,
+                                color: isLevelCompleted || !isLevelUnlocked
+                                    ? Colors.grey
+                                    : _getCategoryColor(category),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  deptName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                    color: isLevelUnlocked ? const Color(0xFF1E293B) : Colors.grey,
+                                  ),
+                                ),
+                              ),
+                              if (isCompleted || isLevelCompleted)
+                                const Icon(Icons.check_circle, size: 18, color: Colors.green)
+                              else if (canTap)
+                                Icon(Icons.chevron_right_rounded, size: 22, color: Colors.grey[400]),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // Progress bar
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: progressVal,
+                                    backgroundColor: Colors.grey.shade200,
+                                    color: isCompleted || isLevelCompleted
+                                        ? Colors.green
+                                        : const Color(0xFFFBBF24),
+                                    minHeight: 6,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                '$answeredQ / $totalQ',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Continue button if partially done
+                          if (canContinue) ...[
+                            const SizedBox(height: 6),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: InkWell(
+                                onTap: () async {
+                                  final catProgress = _categoryProgress[category];
+                                  final startIndex = catProgress?['firstUnansweredIndex'] ?? 0;
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => QuizScreen(
+                                        category: category,
+                                        startQuestionIndex: startIndex,
+                                      ),
+                                    ),
+                                  );
+                                  if (mounted) _loadData();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFBBF24).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text(
+                                    'Continue →',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF92400E),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   );
-                  if (mounted) _loadData();
-                }
-              : null,
+                }),
+            ],
+          ),
         ),
       );
-      
-      cards.add(const SizedBox(height: 12));
     }
-    
+
     return cards;
   }
 
@@ -819,15 +986,14 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
       );
     }
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         // If not on home tab, go back to home tab instead of exiting
         if (_selectedIndex != 0) {
           setState(() => _selectedIndex = 0);
-          return false; // Don't pop the route
         }
-        // If on home tab, prevent back navigation (stay on dashboard)
-        return false;
       },
       child: Scaffold(
         body: Container(
@@ -1097,7 +1263,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Learning Categories',
+                    'Departments',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
@@ -1107,7 +1273,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Complete categories in order',
+                    'Complete levels in order to progress',
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.black87,

@@ -133,33 +133,14 @@ class StorageService {
   // QUIZ PROGRESS METHODS (if needed)
   // ============================================
 
-  // Save quiz progress
-  static Future<void> saveQuizProgress({
-    required String userId,
-    required int level,
-    required int score,
-    required int totalQuestions,
-  }) async {
-    try {
-      await _supabase.from('quiz_progress').insert({
-        'user_id': userId,
-        'level': level,
-        'score': score,
-        'total_questions': totalQuestions,
-      });
-    } catch (e) {
-      // Error saving quiz progress
-    }
-  }
-
-  // Get quiz history for a user
+  // Get quiz history for a user (from usr_dept progress summaries)
   static Future<List<Map<String, dynamic>>> getQuizHistory(String userId) async {
     try {
       final response = await _supabase
-          .from('quiz_progress')
-          .select()
+          .from('usr_dept')
+          .select('id, dept_name, current_level, total_score, total_questions, answered_questions, correct_answers, progress_percentage, last_activity_at, status')
           .eq('user_id', userId)
-          .order('completed_at', ascending: false);
+          .order('last_activity_at', ascending: false);
       
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {

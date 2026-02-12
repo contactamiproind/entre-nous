@@ -201,7 +201,7 @@ class _DepartmentDetailScreenState extends State<DepartmentDetailScreen> {
                                     children: [
                                       Expanded(
                                         child: LinearProgressIndicator(
-                                          value: _getCurrentLevel() / _levels.length,
+                                          value: _levels.isEmpty ? 0.0 : _getCurrentLevel() / _levels.length,
                                           backgroundColor: Colors.white.withOpacity(0.3),
                                           valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFBBF24)),
                                           minHeight: 8,

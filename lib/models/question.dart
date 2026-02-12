@@ -12,7 +12,7 @@ class QuestionType {
   factory QuestionType.fromJson(Map<String, dynamic> json) {
     return QuestionType(
       id: json['id'] ?? '',
-      name: json['name'] ?? 'mcq',
+      name: json['type'] ?? json['name'] ?? 'mcq',
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -22,7 +22,7 @@ class QuestionType {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'name': name,
+      'type': name,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -66,7 +66,7 @@ class Question {
       title: json['title'] ?? 'Question',
       description: json['description'],
       tags: json['tags'] != null ? List<String>.from(json['tags']) : null,
-      departmentId: json['department_id'],
+      departmentId: json['dept_id'] ?? json['department_id'],
       difficulty: json['difficulty'],
       points: json['points'] ?? 10,
       createdAt: json['created_at'] != null
@@ -87,7 +87,7 @@ class Question {
       'title': title,
       'description': description,
       'tags': tags,
-      'department_id': departmentId,
+      'dept_id': departmentId,
       'difficulty': difficulty,
       'points': points,
       'created_at': createdAt.toIso8601String(),

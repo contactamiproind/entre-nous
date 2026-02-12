@@ -19,7 +19,6 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
   bool _isLoading = true;
   Map<String, dynamic>? _userProfile;
   List<Map<String, dynamic>> _pathwayAssignments = [];
-  Map<String, dynamic>? _userProgress;
   List<Map<String, dynamic>> _availablePathways = [];
 
   @override
@@ -33,7 +32,6 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
 
     Map<String, dynamic>? profileResponse;
     List<Map<String, dynamic>> assignmentsResponse = [];
-    Map<String, dynamic>? progressResponse;
     List<Map<String, dynamic>> pathwaysResponse = [];
 
     try {
@@ -56,25 +54,13 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
             .from('usr_dept')
             .select('*, departments(*)')
             .eq('user_id', widget.userId)
+            .order('assigned_at', ascending: true)
       );
       
       debugPrint('Assignments response: $assignmentsResponse');
       debugPrint('Assignments count: ${assignmentsResponse.length}');
 
-      // Load user progress - query from usr_dept for summary
-      try {
-        progressResponse = await Supabase.instance.client
-            .from('usr_dept')
-            .select()
-            .eq('user_id', widget.userId)
-            .eq('is_current', true)
-            .maybeSingle();
-      } catch (e) {
-        debugPrint('Error loading progress (non-fatal): $e');
-        // Continue even if progress fails
-      }
-
-      // Load all available pathways - CRITICAL for assignment functionality
+      // Load all available departments - CRITICAL for assignment functionality
       try {
         pathwaysResponse = List<Map<String, dynamic>>.from(
           await Supabase.instance.client
@@ -99,7 +85,6 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
       setState(() {
         _userProfile = profileResponse;
         _pathwayAssignments = assignmentsResponse;
-        _userProgress = progressResponse;
         _availablePathways = pathwaysResponse;
         _isLoading = false;
       });
@@ -113,7 +98,6 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
       setState(() {
         _userProfile = profileResponse;
         _pathwayAssignments = assignmentsResponse;
-        _userProgress = progressResponse;
         _availablePathways = pathwaysResponse;
         _isLoading = false;
       });
@@ -123,38 +107,126 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     }
   }
 
-  Future<void> _assignPathway(String pathwayId, String pathwayTitle) async {
+  Future<void> _assignDepartment({
+    required String deptId,
+    required String deptName,
+    required int level,
+    required int numQuestions,
+    required int totalInBank,
+    required List<Map<String, dynamic>> selectedQuestions,
+  }) async {
+    int successCount = 0;
     try {
       final admin = Supabase.instance.client.auth.currentUser;
       if (admin == null) return;
 
-      // Assign pathway with questions using database function
-      await Supabase.instance.client.rpc(
-        'assign_pathway_with_questions',
-        params: {
-          'p_user_id': widget.userId,
-          'p_dept_id': pathwayId,
-          'p_assigned_by': admin.id,
-        },
-      );
+      // 1. Check if usr_dept already exists for this user+dept
+      var usrDeptRecord = await Supabase.instance.client
+          .from('usr_dept')
+          .select('id')
+          .eq('user_id', widget.userId)
+          .eq('dept_id', deptId)
+          .maybeSingle();
 
+      String usrDeptId;
+
+      if (usrDeptRecord == null) {
+        // Create new usr_dept record
+        final inserted = await Supabase.instance.client
+            .from('usr_dept')
+            .insert({
+              'user_id': widget.userId,
+              'dept_id': deptId,
+              'dept_name': deptName,
+              'assigned_by': admin.id,
+              'total_levels': 4,
+              'current_level': level,
+              'started_at': DateTime.now().toIso8601String(),
+              'status': 'active',
+              'is_current': true,
+            })
+            .select('id')
+            .single();
+        usrDeptId = inserted['id'];
+      } else {
+        usrDeptId = usrDeptRecord['id'];
+      }
+
+      // 2. Insert usr_progress records for each randomly selected question
+      for (final question in selectedQuestions) {
+        try {
+          await Supabase.instance.client.from('usr_progress').insert({
+            'user_id': widget.userId,
+            'dept_id': deptId,
+            'usr_dept_id': usrDeptId,
+            'question_id': question['id'],
+            'question_text': question['title'] ?? 'Question',
+            'question_type': question['description'] ?? '',
+            'category': deptName,
+            'points': question['points'] ?? 10,
+            'level_number': level,
+            'level_name': 'Level $level',
+            'status': 'pending',
+          });
+          successCount++;
+        } catch (e) {
+          debugPrint('Failed to insert question ${question['id']}: $e');
+        }
+      }
+
+      // Show summary dialog
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Pathway assigned successfully!'),
-            backgroundColor: Colors.green,
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  successCount > 0 ? Icons.check_circle : Icons.error,
+                  color: successCount > 0 ? Colors.green : Colors.red,
+                ),
+                const SizedBox(width: 8),
+                const Text('Assignment Summary'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Department: $deptName'),
+                Text('Level: $level'),
+                const SizedBox(height: 12),
+                Text(
+                  '$successCount out of $totalInBank questions successfully assigned',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                if (successCount < numQuestions)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '${numQuestions - successCount} questions failed to assign (may already be assigned)',
+                      style: const TextStyle(color: Colors.orange, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         );
       }
 
-      // Wait a moment for database transaction to complete
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 300));
       _loadUserData();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Error assigning: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -166,9 +238,9 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Pathway Assignment'),
+        title: const Text('Delete Department Assignment'),
         content: Text(
-          'Are you sure you want to remove "${assignment['departments']?['title'] ?? 'this pathway'}" from this user?',
+          'Are you sure you want to remove "${assignment['departments']?['title'] ?? 'this department'}" from this user?',
         ),
         actions: [
           TextButton(
@@ -196,7 +268,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Pathway assignment removed successfully!'),
+              content: Text('Department assignment removed successfully!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -220,9 +292,9 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reset Pathway Progress'),
+        title: const Text('Reset Department Progress'),
         content: Text(
-          'Are you sure you want to reset progress for "${assignment['departments']?['title'] ?? 'this pathway'}"? \n\nThis will clear all answers and set the level back to 1.',
+          'Are you sure you want to reset progress for "${assignment['departments']?['title'] ?? 'this department'}"? \n\nThis will clear all answers and set the level back to 1.',
         ),
         actions: [
           TextButton(
@@ -308,7 +380,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Pathway progress reset successfully!'),
+              content: Text('Department progress reset successfully!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -336,7 +408,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
 
     if (targetPathways.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No pathways available')),
+        const SnackBar(content: Text('No departments available')),
       );
       return;
     }
@@ -344,13 +416,13 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Reassign Pathway'),
+        title: const Text('Reassign Department'),
         content: SizedBox(
           width: 300,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Select pathway to assign and reset:'),
+              Text('Select department to assign and reset:'),
               const SizedBox(height: 16),
               SizedBox(
                 height: 300,
@@ -383,7 +455,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                               context: context,
                               builder: (ctx) => AlertDialog(
                                 title: const Text('Confirm Assign'),
-                                content: Text('Are you sure you want to assign "${pathway['title']}"? \n\nExisting progress for this pathway will be reset.'),
+                                content: Text('Are you sure you want to assign "${pathway['title']}"? \n\nExisting progress for this department will be reset.'),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(ctx, false),
@@ -458,7 +530,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Pathway "${pathway['title']}" assigned and reset successfully!'),
+                                      content: Text('Department "${pathway['title']}" assigned and reset successfully!'),
                                       backgroundColor: Colors.green,
                                       duration: const Duration(seconds: 3),
                                     ),
@@ -494,64 +566,124 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     );
   }
 
-  void _showAssignPathwayDialog() {
-    // Get departments not yet assigned
-    debugPrint('Total pathways available: ${_availablePathways.length}');
-    debugPrint('Total assignments: ${_pathwayAssignments.length}');
-    
-    final assignedDeptIds = _pathwayAssignments.map((a) => a['dept_id']).toSet();
-    debugPrint('Assigned dept IDs: $assignedDeptIds');
-    
-    final unassignedPathways = _availablePathways
-        .where((p) => !assignedDeptIds.contains(p['id']) && p['title'] != 'SYSTEM_CONFIG')
-        .toList();
-    
-    debugPrint('Unassigned pathways: ${unassignedPathways.length}');
+  /// Toggle level completion for all usr_dept records.
+  /// Only updates completed_levels — never changes current_level (which is the assigned level).
+  /// Also updates the user's profile level to reflect the new highest completed level + 1.
+  Future<void> _toggleLevelComplete(int level, bool markComplete) async {
+    try {
+      final newCompletedLevels = markComplete ? level : level - 1;
 
-    if (unassignedPathways.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All pathways already assigned')),
-      );
-      return;
+      // Update ALL usr_dept records for this user to reflect the new completed_levels
+      for (final assignment in _pathwayAssignments) {
+        await Supabase.instance.client
+            .from('usr_dept')
+            .update({'completed_levels': newCompletedLevels})
+            .eq('id', assignment['id']);
+      }
+
+      // Update user profile level to next unlocked level
+      final newProfileLevel = (newCompletedLevels + 1).clamp(1, 4);
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'level': newProfileLevel})
+          .eq('user_id', widget.userId);
+
+      _loadUserData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
+  }
 
+  /// Get the max completed level across all assignments for this user
+  int _getMaxCompletedLevel() {
+    int maxCompleted = 0;
+    for (final a in _pathwayAssignments) {
+      final cl = a['completed_levels'] as int? ?? 0;
+      if (cl > maxCompleted) maxCompleted = cl;
+    }
+    return maxCompleted;
+  }
+
+  /// Build display name for a department
+  String _buildDeptDisplayName(Map<String, dynamic>? dept) {
+    if (dept == null) return 'Unknown';
+    final title = dept['title'] as String? ?? 'Unknown';
+    final category = dept['category'] as String?;
+    if (title == 'General' && category != null && category.isNotEmpty) {
+      return 'General ($category)';
+    }
+    return title;
+  }
+
+  /// Build a compact stat chip for assignment cards
+  Widget _buildStatChip({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 12, color: color),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAssignDepartmentDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Assign'),
-        content: SizedBox(
-          width: 300,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: unassignedPathways.length,
-            itemBuilder: (context, index) {
-              final pathway = unassignedPathways[index];
-              final title = pathway['title'] ?? 'Unknown';
-              final category = pathway['category'];
-              final displayTitle = (title == 'General' && category != null)
-                  ? 'General ($category)'
-                  : title;
-
-              return ListTile(
-                title: Text(displayTitle),
-                subtitle: Text(pathway['description'] ?? ''),
-                trailing: IconButton(
-                  icon: const Icon(Icons.add_circle, color: Colors.green),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _assignPathway(pathway['id'], displayTitle);
-                  },
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
+      builder: (dialogContext) => _AssignDepartmentDialog(
+        userId: widget.userId,
+        onAssign: ({
+          required String deptId,
+          required String deptName,
+          required int level,
+          required int numQuestions,
+          required int totalInBank,
+          required List<Map<String, dynamic>> selectedQuestions,
+        }) {
+          Navigator.pop(dialogContext);
+          _assignDepartment(
+            deptId: deptId,
+            deptName: deptName,
+            level: level,
+            numQuestions: numQuestions,
+            totalInBank: totalInBank,
+            selectedQuestions: selectedQuestions,
+          );
+        },
       ),
     );
   }
@@ -629,7 +761,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                               children: [
                                 const Expanded(
                                   child: Text(
-                                    'Pathway Assignments',
+                                    'Departments',
                                     style: TextStyle(
                                       fontSize: 20,
                                       fontWeight: FontWeight.bold,
@@ -640,180 +772,277 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.add_circle, color: Colors.green),
-                                  onPressed: _showAssignPathwayDialog,
-                                  tooltip: 'Assign Pathway',
+                                  onPressed: _showAssignDepartmentDialog,
+                                  tooltip: 'Assign Department',
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            if (_pathwayAssignments.isEmpty)
-                              const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(20),
-                                  child: Column(
-                                    children: [
-                                      Icon(Icons.route_outlined, size: 64, color: Colors.grey),
-                                      SizedBox(height: 8),
-                                      Text(
-                                        'No pathways assigned',
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
-                                    ],
+                            const SizedBox(height: 12),
+                            // Level-grouped assignments
+                            ...List.generate(4, (index) {
+                              final level = index + 1;
+                              final maxCompleted = _getMaxCompletedLevel();
+                              final isLevelCompleted = level <= maxCompleted;
+                              final isLevelUnlocked = level <= maxCompleted + 1;
+
+                              // Get assignments at this level
+                              final levelAssignments = _pathwayAssignments.where((a) {
+                                return (a['current_level'] as int? ?? 1) == level;
+                              }).toList();
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: isLevelCompleted
+                                        ? Colors.green.shade300
+                                        : isLevelUnlocked
+                                            ? Colors.blue.shade200
+                                            : Colors.grey.shade300,
                                   ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: !isLevelUnlocked ? Colors.grey.shade50 : Colors.white,
                                 ),
-                              )
-                            else
-                              ..._pathwayAssignments.map((assignment) {
-                                final pathway = assignment['departments'];
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey.shade300),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      // Top Row: Icon + Title + Active Status
+                                child: Column(
+                                  children: [
+                                    // Level Header
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: isLevelCompleted
+                                            ? Colors.green.shade50
+                                            : isLevelUnlocked
+                                                ? const Color(0xFFF0F4FF)
+                                                : Colors.grey.shade100,
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(11),
+                                          topRight: Radius.circular(11),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            isLevelCompleted
+                                                ? Icons.check_circle
+                                                : isLevelUnlocked
+                                                    ? Icons.play_circle_outline
+                                                    : Icons.lock,
+                                            color: isLevelCompleted
+                                                ? Colors.green
+                                                : isLevelUnlocked
+                                                    ? const Color(0xFF1A2F4B)
+                                                    : Colors.grey,
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Level $level',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                              color: isLevelUnlocked ? const Color(0xFF1A2F4B) : Colors.grey,
+                                            ),
+                                          ),
+                                          if (isLevelCompleted)
+                                            Container(
+                                              margin: const EdgeInsets.only(left: 8),
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.green.shade100,
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Text(
+                                                'COMPLETED',
+                                                style: TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          if (!isLevelUnlocked)
+                                            Container(
+                                              margin: const EdgeInsets.only(left: 8),
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade200,
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Text(
+                                                'LOCKED',
+                                                style: TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          const Spacer(),
+                                          // Toggle complete/incomplete
+                                          if (isLevelUnlocked)
+                                            Tooltip(
+                                              message: isLevelCompleted ? 'Mark as incomplete' : 'Mark as complete',
+                                              child: Switch(
+                                                value: isLevelCompleted,
+                                                activeColor: Colors.green,
+                                                onChanged: (val) => _toggleLevelComplete(level, val),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Assignments under this level
+                                    if (levelAssignments.isEmpty && isLevelUnlocked)
                                       Padding(
                                         padding: const EdgeInsets.all(12),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.school_rounded,
-                                              color: assignment['is_current'] == true
-                                                  ? Colors.green
-                                                  : Colors.grey,
-                                              size: 28,
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                        child: Text(
+                                          'No assignments at this level',
+                                          style: TextStyle(color: Colors.grey[500], fontSize: 12, fontStyle: FontStyle.italic),
+                                        ),
+                                      )
+                                    else if (!isLevelUnlocked)
+                                      Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Text(
+                                          'Complete Level ${level - 1} to unlock',
+                                          style: TextStyle(color: Colors.grey[400], fontSize: 12, fontStyle: FontStyle.italic),
+                                        ),
+                                      )
+                                    else
+                                      ...levelAssignments.map((assignment) {
+                                        final dept = assignment['departments'];
+                                        final deptName = _buildDeptDisplayName(dept);
+                                        final totalQ = assignment['total_questions'] as int? ?? 0;
+                                        final answeredQ = assignment['answered_questions'] as int? ?? 0;
+                                        final correctQ = assignment['correct_answers'] as int? ?? 0;
+                                        final totalScore = assignment['total_score'] as int? ?? 0;
+                                        final maxScore = assignment['max_possible_score'] as int? ?? 0;
+                                        final progress = totalQ > 0 ? answeredQ / totalQ : 0.0;
+                                        final allAnswered = totalQ > 0 && answeredQ >= totalQ;
+
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              // Dept name + status
+                                              Row(
                                                 children: [
-                                                  Text(
-                                                    pathway?['title'] ?? 'Unknown',
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
+                                                  Icon(Icons.school_rounded, size: 20, color: Colors.blueGrey.shade400),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Text(
+                                                      deptName,
+                                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                                                     ),
                                                   ),
-                                                  Text(
-                                                    assignment['is_current'] == true
-                                                        ? 'Current Pathway'
-                                                        : 'Assigned',
-                                                    style: TextStyle(
-                                                      color: Colors.grey[600],
-                                                      fontSize: 13,
+                                                  if (allAnswered)
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.green.withOpacity(0.1),
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: Colors.green.shade300),
+                                                      ),
+                                                      child: const Text(
+                                                        'DONE',
+                                                        style: TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold),
+                                                      ),
+                                                    )
+                                                  else if (assignment['status'] == 'active')
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.blue.withOpacity(0.1),
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: Colors.blue.shade300),
+                                                      ),
+                                                      child: const Text(
+                                                        'IN PROGRESS',
+                                                        style: TextStyle(color: Colors.blue, fontSize: 9, fontWeight: FontWeight.bold),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              // Progress bar
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(4),
+                                                child: LinearProgressIndicator(
+                                                  value: progress,
+                                                  backgroundColor: Colors.grey.shade200,
+                                                  color: progress >= 1.0 ? Colors.green : const Color(0xFF1A2F4B),
+                                                  minHeight: 6,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              // Detailed stats row
+                                              Row(
+                                                children: [
+                                                  // Attempted
+                                                  _buildStatChip(
+                                                    icon: Icons.quiz_outlined,
+                                                    label: 'Attempted',
+                                                    value: '$answeredQ / $totalQ',
+                                                    color: const Color(0xFF1A2F4B),
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  // Correct
+                                                  _buildStatChip(
+                                                    icon: Icons.check_circle_outline,
+                                                    label: 'Correct',
+                                                    value: '$correctQ / $totalQ',
+                                                    color: correctQ == totalQ && totalQ > 0 ? Colors.green : Colors.orange,
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  // Score
+                                                  _buildStatChip(
+                                                    icon: Icons.star_outline,
+                                                    label: 'Score',
+                                                    value: '$totalScore / $maxScore',
+                                                    color: totalScore >= maxScore && maxScore > 0 ? Colors.green : Colors.deepPurple,
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 6),
+                                              // Actions row
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.end,
+                                                children: [
+                                                  InkWell(
+                                                    onTap: () => _resetPathwayProgress(assignment),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Icon(Icons.restart_alt, size: 14, color: Colors.orange.shade700),
+                                                          const SizedBox(width: 3),
+                                                          Text('Reset', style: TextStyle(fontSize: 11, color: Colors.orange.shade700)),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  InkWell(
+                                                    onTap: () => _deletePathway(assignment),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Icon(Icons.delete_outline, size: 14, color: Colors.red.shade400),
+                                                          const SizedBox(width: 3),
+                                                          Text('Remove', style: TextStyle(fontSize: 11, color: Colors.red.shade400)),
+                                                        ],
+                                                      ),
                                                     ),
                                                   ),
                                                 ],
                                               ),
-                                            ),
-                                            if (assignment['is_current'] == true)
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.green.withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(20),
-                                                  border: Border.all(color: Colors.green),
-                                                ),
-                                                child: const Text(
-                                                  'ACTIVE',
-                                                  style: TextStyle(
-                                                    color: Colors.green, 
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Divider(height: 1),
-                                      // Bottom Row: Actions
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                        child: Wrap(
-                                          alignment: WrapAlignment.end,
-                                          spacing: 8,
-                                          runSpacing: 4,
-                                          children: [
-                                            // Reset Button
-                                            OutlinedButton.icon(
-                                              icon: const Icon(Icons.restart_alt, size: 16, color: Colors.orange),
-                                              label: const Text('Reset', style: TextStyle(color: Colors.orange, fontSize: 12)),
-                                              onPressed: () => _resetPathwayProgress(assignment),
-                                              style: OutlinedButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                side: const BorderSide(color: Colors.orange),
-                                              ),
-                                            ),
-                                            // Reassign Button
-                                            OutlinedButton.icon(
-                                              icon: const Icon(Icons.swap_horiz, size: 16, color: Colors.blue),
-                                              label: const Text('Reassign', style: TextStyle(color: Colors.blue, fontSize: 12)),
-                                              onPressed: () => _reassignPathway(assignment),
-                                              style: OutlinedButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                side: const BorderSide(color: Colors.blue),
-                                              ),
-                                            ),
-                                            // Delete Button
-                                            IconButton(
-                                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                              onPressed: () => _deletePathway(assignment),
-                                              tooltip: 'Remove Pathway',
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(),
-                                              style: IconButton.styleFrom(
-                                                padding: const EdgeInsets.all(8),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Progress Stats Card
-                    Card(
-                      elevation: 4,
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Progress Statistics',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A2F4B),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_userProgress == null)
-                              const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(20),
-                                  child: Text(
-                                    'No progress data available',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                  ],
                                 ),
-                              )
-                            else ...[
-                              _buildInfoRow('Current Level', _userProgress!['current_level']?.toString() ?? 'N/A'),
-                              _buildInfoRow('Completed Assignments', _userProgress!['completed_assignments']?.toString() ?? '0'),
-                              _buildInfoRow('Last Updated', _userProgress!['updated_at'] ?? 'N/A'),
-                            ],
+                              );
+                            }),
                           ],
                         ),
                       ),
@@ -947,6 +1176,411 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ============================================
+// ASSIGN DEPARTMENT DIALOG (Cascading: Level → Department → Num Questions)
+// ============================================
+class _AssignDepartmentDialog extends StatefulWidget {
+  final String userId;
+  final void Function({
+    required String deptId,
+    required String deptName,
+    required int level,
+    required int numQuestions,
+    required int totalInBank,
+    required List<Map<String, dynamic>> selectedQuestions,
+  }) onAssign;
+
+  const _AssignDepartmentDialog({
+    required this.userId,
+    required this.onAssign,
+  });
+
+  @override
+  State<_AssignDepartmentDialog> createState() => _AssignDepartmentDialogState();
+}
+
+class _AssignDepartmentDialogState extends State<_AssignDepartmentDialog> {
+  final _supabase = Supabase.instance.client;
+
+  // Cascading state
+  int? _selectedLevel;
+  Map<String, dynamic>? _selectedDepartment;
+  int _numQuestions = 10;
+
+  // Data lists
+  List<Map<String, dynamic>> _availableDepartments = [];
+  int _totalAvailableQuestions = 0;
+
+  // Level progression: highest completed level for this user (0 = none completed)
+  int _maxCompletedLevel = 0;
+
+  // Loading states
+  bool _isLoadingProgress = true;
+  bool _isLoadingDepartments = false;
+  bool _isLoadingCount = false;
+  bool _isAssigning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProgress();
+  }
+
+  /// Load user's max completed level from usr_dept to enforce progression
+  Future<void> _loadUserProgress() async {
+    setState(() => _isLoadingProgress = true);
+    try {
+      final response = await _supabase
+          .from('usr_dept')
+          .select('current_level, completed_levels, status')
+          .eq('user_id', widget.userId);
+
+      int maxCompleted = 0;
+      for (final record in (response as List)) {
+        final completedLevels = record['completed_levels'] as int? ?? 0;
+        if (completedLevels > maxCompleted) {
+          maxCompleted = completedLevels;
+        }
+      }
+
+      setState(() {
+        _maxCompletedLevel = maxCompleted;
+        _isLoadingProgress = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading user progress: $e');
+      setState(() {
+        _maxCompletedLevel = 0;
+        _isLoadingProgress = false;
+      });
+    }
+  }
+
+  /// On level selected, load departments that have questions at this level
+  Future<void> _onLevelSelected(int level) async {
+    setState(() {
+      _selectedLevel = level;
+      _selectedDepartment = null;
+      _availableDepartments = [];
+      _totalAvailableQuestions = 0;
+      _isLoadingDepartments = true;
+    });
+
+    try {
+      // Get distinct dept_ids that have questions at this level
+      final questionsAtLevel = await _supabase
+          .from('questions')
+          .select('dept_id')
+          .eq('level', level);
+
+      final deptIds = (questionsAtLevel as List)
+          .map((r) => r['dept_id'] as String?)
+          .where((id) => id != null)
+          .toSet()
+          .toList();
+
+      if (deptIds.isEmpty) {
+        setState(() {
+          _availableDepartments = [];
+          _isLoadingDepartments = false;
+        });
+        return;
+      }
+
+      // Load department details for those IDs
+      final departments = await _supabase
+          .from('departments')
+          .select('id, title, category')
+          .inFilter('id', deptIds)
+          .order('title');
+
+      setState(() {
+        _availableDepartments = List<Map<String, dynamic>>.from(departments);
+        _isLoadingDepartments = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading departments for level: $e');
+      setState(() => _isLoadingDepartments = false);
+    }
+  }
+
+  /// On department selected, count available questions at level+dept
+  Future<void> _onDepartmentSelected(Map<String, dynamic> dept) async {
+    setState(() {
+      _selectedDepartment = dept;
+      _totalAvailableQuestions = 0;
+      _isLoadingCount = true;
+    });
+
+    try {
+      final response = await _supabase
+          .from('questions')
+          .select('id')
+          .eq('dept_id', dept['id'])
+          .eq('level', _selectedLevel!);
+
+      final count = (response as List).length;
+
+      setState(() {
+        _totalAvailableQuestions = count;
+        _numQuestions = count > 10 ? 10 : count;
+        _isLoadingCount = false;
+      });
+    } catch (e) {
+      debugPrint('Error counting questions: $e');
+      setState(() => _isLoadingCount = false);
+    }
+  }
+
+  /// Build display name for department: "General" → "General (Category)"
+  String _deptDisplayName(Map<String, dynamic> dept) {
+    final title = dept['title'] as String? ?? 'Unknown';
+    final category = dept['category'] as String?;
+    if (title == 'General' && category != null && category.isNotEmpty) {
+      return 'General ($category)';
+    }
+    return title;
+  }
+
+  /// Execute assignment: randomly pick N questions and call onAssign
+  Future<void> _executeAssignment() async {
+    if (_selectedDepartment == null || _selectedLevel == null) return;
+
+    setState(() => _isAssigning = true);
+
+    try {
+      // Fetch all questions matching level + department
+      final allQuestions = await _supabase
+          .from('questions')
+          .select('id, title, description, points, options, correct_answer')
+          .eq('dept_id', _selectedDepartment!['id'])
+          .eq('level', _selectedLevel!);
+
+      final questionList = List<Map<String, dynamic>>.from(allQuestions);
+      final totalInBank = questionList.length;
+
+      // Shuffle and pick N random questions
+      questionList.shuffle();
+      final selected = questionList.take(_numQuestions).toList();
+
+      widget.onAssign(
+        deptId: _selectedDepartment!['id'],
+        deptName: _deptDisplayName(_selectedDepartment!),
+        level: _selectedLevel!,
+        numQuestions: selected.length,
+        totalInBank: totalInBank,
+        selectedQuestions: selected,
+      );
+    } catch (e) {
+      debugPrint('Error executing assignment: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+      setState(() => _isAssigning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The assignable level is maxCompletedLevel + 1 (capped at 4)
+    final int nextAssignableLevel = _maxCompletedLevel + 1;
+
+    final bool canAssign = _selectedLevel != null &&
+        _selectedDepartment != null &&
+        _totalAvailableQuestions > 0 &&
+        _numQuestions > 0 &&
+        !_isAssigning;
+
+    return AlertDialog(
+      title: const Text('Assign Department'),
+      content: SizedBox(
+        width: 360,
+        child: _isLoadingProgress
+            ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+            : SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Step 1: Level (hardcoded 1-4, progression enforced)
+                    const Text('Level', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    ...List.generate(4, (index) {
+                      final level = index + 1;
+                      final isEnabled = level <= nextAssignableLevel;
+                      final isSelected = _selectedLevel == level;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Material(
+                          color: isSelected
+                              ? const Color(0xFF1A2F4B)
+                              : isEnabled
+                                  ? Colors.white
+                                  : Colors.grey[200],
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: isEnabled ? () => _onLevelSelected(level) : null,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: isSelected
+                                      ? const Color(0xFF1A2F4B)
+                                      : isEnabled
+                                          ? Colors.grey[400]!
+                                          : Colors.grey[300]!,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                                    size: 20,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : isEnabled
+                                            ? const Color(0xFF1A2F4B)
+                                            : Colors.grey[400],
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Level $level',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : isEnabled
+                                              ? Colors.black87
+                                              : Colors.grey[400],
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  if (!isEnabled)
+                                    Icon(Icons.lock, size: 16, color: Colors.grey[400]),
+                                  if (level <= _maxCompletedLevel)
+                                    const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 16),
+
+                    // Step 2: Department
+                    const Text('Department', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    if (_selectedLevel == null)
+                      const Text('Select a level first', style: TextStyle(color: Colors.grey, fontSize: 12))
+                    else if (_isLoadingDepartments)
+                      const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+                    else if (_availableDepartments.isEmpty)
+                      const Text('No departments with questions at this level', style: TextStyle(color: Colors.orange, fontSize: 12))
+                    else
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          prefixIcon: Icon(Icons.business),
+                        ),
+                        hint: const Text('Select Department'),
+                        value: _selectedDepartment?['id'],
+                        items: _availableDepartments.map((dept) {
+                          return DropdownMenuItem(
+                            value: dept['id'] as String,
+                            child: Text(_deptDisplayName(dept), overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            final dept = _availableDepartments.firstWhere((d) => d['id'] == value);
+                            _onDepartmentSelected(dept);
+                          }
+                        },
+                      ),
+                    const SizedBox(height: 16),
+
+                    // Step 3: Number of questions
+                    const Text('Questions to Assign', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    if (_selectedDepartment == null)
+                      const Text('Select a department first', style: TextStyle(color: Colors.grey, fontSize: 12))
+                    else if (_isLoadingCount)
+                      const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+                    else if (_totalAvailableQuestions == 0)
+                      const Text('No questions available for this combination', style: TextStyle(color: Colors.orange, fontSize: 12))
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$_totalAvailableQuestions questions available in question bank',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Slider(
+                                  value: _numQuestions.toDouble(),
+                                  min: 1,
+                                  max: _totalAvailableQuestions.toDouble(),
+                                  divisions: _totalAvailableQuestions > 1 ? _totalAvailableQuestions - 1 : 1,
+                                  label: '$_numQuestions',
+                                  onChanged: (value) {
+                                    setState(() => _numQuestions = value.toInt());
+                                  },
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1A2F4B),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '$_numQuestions',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: canAssign ? _executeAssignment : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1A2F4B),
+            foregroundColor: Colors.white,
+          ),
+          child: _isAssigning
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Assign'),
+        ),
+      ],
     );
   }
 }

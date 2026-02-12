@@ -11,7 +11,6 @@ import '../../widgets/card_flip_game_widget.dart';
 import '../../widgets/sequence_builder_widget.dart';
 import '../../widgets/budget_allocation_widget.dart';
 import 'package:audioplayers/audioplayers.dart';
-import '../../utils/stable_random.dart';
 
 class QuizScreen extends StatefulWidget {
   final String category; // 'Orientation', 'Process', or 'SOP'
@@ -258,8 +257,8 @@ class _QuizScreenState extends State<QuizScreen> {
     debugPrint('⏱️ Question $_currentQuestionIndex answered with $_remainingSeconds seconds remaining');
   }
   
-  /// Get or create usr_dept record for the current category
-  Future<String?> _getOrCreateUsrDept() async {
+  /// Get usr_dept record for the current category (admin must have created it)
+  Future<String?> _getUsrDept() async {
     if (_usrDeptId != null) return _usrDeptId;
     
     try {
@@ -269,7 +268,7 @@ class _QuizScreenState extends State<QuizScreen> {
       // Get department ID for this category
       final deptData = await Supabase.instance.client
           .from('departments')
-          .select('id, title')
+          .select('id')
           .eq('category', widget.category)
           .maybeSingle();
       
@@ -279,10 +278,8 @@ class _QuizScreenState extends State<QuizScreen> {
       }
       
       final deptId = deptData['id'];
-      final deptName = deptData['title'];
-
       
-      // Check if usr_dept record already exists
+      // Only look up existing usr_dept — never create (admin assigns these)
       final existingUsrDept = await Supabase.instance.client
           .from('usr_dept')
           .select('id')
@@ -292,29 +289,14 @@ class _QuizScreenState extends State<QuizScreen> {
       
       if (existingUsrDept != null) {
         _usrDeptId = existingUsrDept['id'];
-        debugPrint('✅ Found existing usr_dept: $_usrDeptId');
+        debugPrint('✅ Found usr_dept: $_usrDeptId');
         return _usrDeptId;
       }
       
-      // Create new usr_dept record
-      final newUsrDept = await Supabase.instance.client
-          .from('usr_dept')
-          .insert({
-            'user_id': user.id,
-            'dept_id': deptId,
-            'dept_name': deptName,
-            'status': 'active',
-            'is_current': true,
-            'started_at': DateTime.now().toIso8601String(),
-          })
-          .select('id')
-          .single();
-      
-      _usrDeptId = newUsrDept['id'];
-      debugPrint('✅ Created new usr_dept: $_usrDeptId for $deptName');
-      return _usrDeptId;
+      debugPrint('❌ No usr_dept found — admin must assign this department first');
+      return null;
     } catch (e) {
-      debugPrint('❌ Error getting/creating usr_dept: $e');
+      debugPrint('❌ Error getting usr_dept: $e');
       return null;
     }
   }
@@ -330,7 +312,7 @@ class _QuizScreenState extends State<QuizScreen> {
   }) async {
     try {
       // Get or create usr_dept record
-      final usrDeptId = await _getOrCreateUsrDept();
+      final usrDeptId = await _getUsrDept();
       if (usrDeptId == null) {
         debugPrint('⚠️ Cannot save progress: usr_dept not found');
         return;
@@ -390,7 +372,7 @@ class _QuizScreenState extends State<QuizScreen> {
         if (user == null) return;
         
         final questionId = _questions[_currentQuestionIndex]['id'];
-        final usrDeptId = await _getOrCreateUsrDept();
+        final usrDeptId = await _getUsrDept();
         
         if (usrDeptId == null) return;
         
@@ -486,9 +468,6 @@ class _QuizScreenState extends State<QuizScreen> {
 
       
       debugPrint('🔍 Loading questions for category: ${widget.category}');
-      if (widget.subcategory != null) {
-        debugPrint('  Subcategory: ${widget.subcategory}');
-      }
       
       // First, get the department ID for this category
       final departmentData = await Supabase.instance.client
@@ -499,116 +478,58 @@ class _QuizScreenState extends State<QuizScreen> {
       
       if (departmentData == null) {
         debugPrint('❌ No department found for category: ${widget.category}');
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
         return;
       }
       
       final deptId = departmentData['id'];
-      _deptId = deptId; // Store for submission
+      _deptId = deptId;
       debugPrint('📁 Found department ID: $deptId');
       
-      
-      // Get current level for this user and department
-      int currentLevel = 1;
-      try {
-        final usrDeptData = await Supabase.instance.client
-            .from('usr_dept')
-            .select('current_level')
-            .eq('user_id', user.id)
-            .eq('dept_id', deptId)
-            .maybeSingle();
-            
-        if (usrDeptData != null && usrDeptData['current_level'] != null) {
-          currentLevel = usrDeptData['current_level'];
-        }
-        debugPrint('📈 User is at Level $currentLevel for this department');
-      } catch (e) {
-        debugPrint('⚠️ Error fetching current level (defaulting to 1): $e');
-      }
-
-      // Load questions for this department AND up to current level
-      final questionsData = await Supabase.instance.client
-          .from('questions')
-          .select('id, title, description, options, correct_answer, type_id, level, points, dept_id')
+      // Get usr_dept record (admin must have created it)
+      final usrDeptData = await Supabase.instance.client
+          .from('usr_dept')
+          .select('id')
+          .eq('user_id', user.id)
           .eq('dept_id', deptId)
-          .eq('level', currentLevel) // Filter by CURRENT level only
-          .order('created_at')
-          .order('id', ascending: true); // Deterministic sort before shuffle
+          .maybeSingle();
       
-      debugPrint('📊 Found ${questionsData.length} questions for this department (Level <= $currentLevel)');
-
-
-
-
-      // Create a specific random seed based on User ID and Department ID
-      // This ensures different users get different orders, but the same user always gets the SAME order
-      // (Critical for 'Resume Quiz' functionality)
-      // We use our custom StableRandom to ensure consistency across Web and Mobile
-      
-      // Use department ID string format to be safe
-      final String seedString = '${user.id}_$deptId';
-      final int seed = StableRandom.getStableHash(seedString);
-      
-      final stableRandom = StableRandom(seed);
-      
-      // Create a mutable copy and shuffle it randomly but consistently
-      final List<dynamic> questionsList = List.from(questionsData);
-      stableRandom.shuffle(questionsList);
-      
-      debugPrint('🔀 Randomized question order with seed: $seed (String: $seedString)');
-
-      // --- DYNAMIC REORDERING FOR VISUAL PROGRESS CONSISTENCY ---
-      // Fetch user progress to identify which questions are already answered
-      try {
-        // Get usr_dept_id
-        final usrDeptData = await Supabase.instance.client
-            .from('usr_dept')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('dept_id', deptId)
-            .maybeSingle();
-
-        if (usrDeptData != null) {
-          final usrDeptId = usrDeptData['id'];
-          // Get all answered question IDs for this user & department
-          final progressData = await Supabase.instance.client
-              .from('usr_progress')
-              .select('question_id, status')
-              .eq('usr_dept_id', usrDeptId)
-              .eq('status', 'answered'); // Only care about fully answered ones
-
-          final Set<String> answeredQuestionIds = progressData
-              .map((p) => p['question_id'].toString())
-              .toSet();
-
-          debugPrint('📋 Found ${answeredQuestionIds.length} answered questions. Reordering...');
-
-          // Partition the shuffled list
-          final List<dynamic> answeredQuestions = [];
-          final List<dynamic> unansweredQuestions = [];
-
-          for (var q in questionsList) {
-            if (answeredQuestionIds.contains(q['id'].toString())) {
-              answeredQuestions.add(q);
-            } else {
-              unansweredQuestions.add(q);
-            }
-          }
-
-          // Merge: Answered FIRST, then Unanswered
-          // Ideally, we keep the relative shuffled order within each group
-          questionsList.clear();
-          questionsList.addAll(answeredQuestions);
-          questionsList.addAll(unansweredQuestions);
-          
-          debugPrint('✅ Reordered: ${answeredQuestions.length} answered | ${unansweredQuestions.length} unanswered');
-        }
-      } catch (e) {
-        debugPrint('⚠️ Error fetching progress for reordering (skipping sort): $e');
+      if (usrDeptData == null) {
+        debugPrint('❌ No usr_dept found — admin must assign this department first');
+        setState(() => _isLoading = false);
+        return;
       }
-      // -----------------------------------------------------------
+      
+      final usrDeptId = usrDeptData['id'];
+      _usrDeptId = usrDeptId;
+      debugPrint('✅ Found usr_dept: $usrDeptId');
+      
+      // Load questions ONLY from usr_progress (admin-assigned questions)
+      // Join with questions table to get full question data
+      final progressRecords = await Supabase.instance.client
+          .from('usr_progress')
+          .select('question_id, status, questions(id, title, description, options, correct_answer, type_id, level, points, dept_id)')
+          .eq('usr_dept_id', usrDeptId)
+          .order('created_at', ascending: true);
+      
+      debugPrint('📊 Found ${progressRecords.length} assigned questions from usr_progress');
+      
+      // Order: answered first, then unanswered (for resume feature)
+      final List<dynamic> answeredList = [];
+      final List<dynamic> unansweredList = [];
+      
+      for (final record in progressRecords) {
+        final questionData = record['questions'];
+        if (questionData == null) continue;
+        if (record['status'] == 'answered') {
+          answeredList.add(questionData);
+        } else {
+          unansweredList.add(questionData);
+        }
+      }
+      
+      final List<dynamic> questionsList = [...answeredList, ...unansweredList];
+      debugPrint('📋 Ordered: ${answeredList.length} answered | ${unansweredList.length} unanswered');
 
       List<Map<String, dynamic>> questions = [];
       

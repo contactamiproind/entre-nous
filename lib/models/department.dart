@@ -16,7 +16,7 @@ class Department {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'name': name,
+      'title': name,
       'description': description,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
@@ -26,7 +26,7 @@ class Department {
   factory Department.fromJson(Map<String, dynamic> json) {
     return Department(
       id: json['id'] ?? '',
-      name: json['name'] ?? 'Unknown Department',
+      name: json['title'] ?? json['name'] ?? 'Unknown Department',
       description: json['description'],
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at']) 

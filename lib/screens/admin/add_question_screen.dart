@@ -613,11 +613,11 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                            // Pathway Selection
+                            // Department Selection
                             DropdownButtonFormField<Pathway>(
                               isExpanded: true,
                               decoration: InputDecoration(
-                                labelText: 'Select Pathway',
+                                labelText: 'Select Department',
                                 border: const OutlineInputBorder(),
                                 prefixIcon: const Icon(Icons.route),
                                 filled: true,

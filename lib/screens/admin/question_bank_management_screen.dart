@@ -17,6 +17,9 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
   List<Map<String, dynamic>> _departments = [];
   String? _selectedDepartmentFilter; // Filter by department
   int? _selectedLevelFilter; // Filter by level
+  final Set<int> _collapsedLevels = {};
+  final Set<String> _collapsedDepts = {}; // key: 'level_dept'
+  bool _deptDefaultsInitialized = false;
 
   @override
   void initState() {
@@ -45,10 +48,12 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
         }
       }
       
-      // Load questions
+      // Load questions ordered by level then department for grouped display
       final response = await Supabase.instance.client
           .from('questions')
           .select('*, quest_types(type)')
+          .order('level', ascending: true)
+          .order('dept_id', ascending: true)
           .order('created_at', ascending: false);
       
       // Add department title to each question
@@ -589,6 +594,274 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
     }
   }
 
+  /// Get question type display info
+  ({String name, Color color, Color bg}) _getQuestionTypeInfo(Map<String, dynamic> question) {
+    String questionType = 'match';
+    if (question['quest_types'] != null && question['quest_types'] is Map) {
+      questionType = question['quest_types']['type'] ?? 'match';
+    }
+    switch (questionType) {
+      case 'mcq':
+        return (name: 'MCQ', color: const Color(0xFF10B981), bg: const Color(0xFF10B981).withOpacity(0.1));
+      case 'match':
+        return (name: 'Match', color: const Color(0xFFEC4899), bg: const Color(0xFFEC4899).withOpacity(0.1));
+      case 'card_match':
+        return (name: 'Card Match', color: const Color(0xFF3B82F6), bg: const Color(0xFF3B82F6).withOpacity(0.1));
+      case 'scenario_decision':
+        return (name: 'Scenario', color: const Color(0xFF9B59B6), bg: const Color(0xFF9B59B6).withOpacity(0.1));
+      case 'sequence_builder':
+        return (name: 'Sequence', color: const Color(0xFF00BCD4), bg: const Color(0xFF00BCD4).withOpacity(0.1));
+      case 'simulation':
+        return (name: 'Simulation', color: const Color(0xFF6BCB9F), bg: const Color(0xFF6BCB9F).withOpacity(0.1));
+      default:
+        return (name: 'Unknown', color: Colors.grey, bg: Colors.grey.withOpacity(0.1));
+    }
+  }
+
+  /// Build grouped question list: Level → Department → Questions
+  Widget _buildGroupedQuestionList() {
+    // Group questions by level, then by department
+    final Map<int, Map<String, List<Map<String, dynamic>>>> grouped = {};
+
+    for (final q in _questions) {
+      final level = (q['level'] as int?) ?? 1;
+      final dept = (q['department_title'] as String?) ?? 'No Dept';
+      grouped.putIfAbsent(level, () => {});
+      grouped[level]!.putIfAbsent(dept, () => []);
+      grouped[level]![dept]!.add(q);
+    }
+
+    // Sort levels
+    final sortedLevels = grouped.keys.toList()..sort();
+
+    // Collapse all departments by default on first load
+    if (!_deptDefaultsInitialized) {
+      _deptDefaultsInitialized = true;
+      for (final level in sortedLevels) {
+        for (final dept in grouped[level]!.keys) {
+          _collapsedDepts.add('${level}_$dept');
+        }
+      }
+    }
+
+    final List<Widget> items = [];
+
+    for (final level in sortedLevels) {
+      final deptMap = grouped[level]!;
+      final sortedDepts = deptMap.keys.toList()..sort();
+
+      // Count total questions at this level
+      int levelTotal = 0;
+      for (final d in sortedDepts) {
+        levelTotal += deptMap[d]!.length;
+      }
+
+      final isLevelCollapsed = _collapsedLevels.contains(level);
+
+      // Level header (tappable to collapse/expand)
+      items.add(
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              if (isLevelCollapsed) {
+                _collapsedLevels.remove(level);
+              } else {
+                _collapsedLevels.add(level);
+              }
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 4, left: 16, right: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A2F4B),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isLevelCollapsed ? Icons.chevron_right_rounded : Icons.expand_more_rounded,
+                  size: 20, color: Colors.white,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Level $level',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.white,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$levelTotal Qs',
+                    style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (isLevelCollapsed) continue;
+
+      for (final dept in sortedDepts) {
+        final questions = deptMap[dept]!;
+
+        final deptKey = '${level}_$dept';
+        final isDeptCollapsed = _collapsedDepts.contains(deptKey);
+
+        // Department sub-header (tappable to collapse/expand)
+        items.add(
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                if (isDeptCollapsed) {
+                  _collapsedDepts.remove(deptKey);
+                } else {
+                  _collapsedDepts.add(deptKey);
+                }
+              });
+            },
+            child: Container(
+              margin: const EdgeInsets.only(top: 4, bottom: 2, left: 24, right: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isDeptCollapsed ? Icons.chevron_right_rounded : Icons.expand_more_rounded,
+                    size: 16, color: Colors.blue.shade700,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      dept,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${questions.length}',
+                    style: TextStyle(fontSize: 12, color: Colors.blue.shade600, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        if (isDeptCollapsed) continue;
+
+        // Question cards under this department
+        for (final question in questions) {
+          final typeInfo = _getQuestionTypeInfo(question);
+
+          items.add(
+            Card(
+              margin: const EdgeInsets.only(bottom: 4, left: 32, right: 16, top: 2),
+              elevation: 0.5,
+              child: InkWell(
+                onTap: () => _showQuestionDetails(question),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (question['description'] != null && question['description'].toString().isNotEmpty)
+                                  ? question['description']
+                                  : question['title'] ?? 'No title',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: Color(0xFF1A2F4B),
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            // Type badge + points
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: typeInfo.bg,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    typeInfo.name,
+                                    style: TextStyle(fontSize: 10, color: typeInfo.color, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${question['points'] ?? 10} pts',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, size: 16),
+                            color: Colors.blue,
+                            onPressed: () => _showEditDialog(question),
+                            tooltip: 'Edit',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(Icons.delete, size: 16),
+                            color: Colors.red,
+                            onPressed: () => _deleteQuestion(question['id']),
+                            tooltip: 'Delete',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 16),
+      children: items,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -713,12 +986,12 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                         items: [
                           const DropdownMenuItem<int>(
                             value: null,
-                            child: Text('Levels'),
+                            child: Text('All Levels'),
                           ),
                           ...[1, 2, 3, 4].map((level) {
                             return DropdownMenuItem<int>(
                               value: level,
-                              child: Text('Lvl $level'),
+                              child: Text('Level $level'),
                             );
                           }).toList(),
                         ],
@@ -776,169 +1049,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                       )
                     : RefreshIndicator(
                         onRefresh: _loadQuestions,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _questions.length,
-                          itemBuilder: (context, index) {
-                            final question = _questions[index];
-                            
-                            // Get the question type from the joined quest_types table
-                            String questionType = 'match'; // default
-                            if (question['quest_types'] != null && question['quest_types'] is Map) {
-                              questionType = question['quest_types']['type'] ?? 'match';
-                            }
-                            
-                            // Determine display name and color
-                            String typeName;
-                            Color typeColor;
-                            Color bgColor;
-                            
-                            switch (questionType) {
-                              case 'mcq':
-                                typeName = 'Multiple Choice';
-                                typeColor = const Color(0xFF10B981);
-                                bgColor = const Color(0xFF10B981).withOpacity(0.1);
-                                break;
-                              case 'match':
-                                typeName = 'Match Following';
-                                typeColor = const Color(0xFFEC4899);
-                                bgColor = const Color(0xFFEC4899).withOpacity(0.1);
-                                break;
-                              case 'card_match':
-                                typeName = 'Card Match';
-                                typeColor = const Color(0xFF3B82F6);
-                                bgColor = const Color(0xFF3B82F6).withOpacity(0.1);
-                                break;
-                              case 'scenario_decision':
-                                typeName = 'Scenario Decision';
-                                typeColor = const Color(0xFF9B59B6);
-                                bgColor = const Color(0xFF9B59B6).withOpacity(0.1);
-                                break;
-                              case 'sequence_builder':
-                                typeName = 'Sequence Builder';
-                                typeColor = const Color(0xFF00BCD4);
-                                bgColor = const Color(0xFF00BCD4).withOpacity(0.1);
-                                break;
-                              case 'simulation':
-                                typeName = 'Budget Simulation';
-                                typeColor = const Color(0xFF6BCB9F);
-                                bgColor = const Color(0xFF6BCB9F).withOpacity(0.1);
-                                break;
-                              default:
-                                typeName = 'Unknown';
-                                typeColor = Colors.grey;
-                                bgColor = Colors.grey.withOpacity(0.1);
-                            }
-                            
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: InkWell(
-                                onTap: () => _showQuestionDetails(question),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                     children: [
-                                      // Title and action buttons row
-                                      Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                         children: [
-                                          // Department badge removed - using filter instead
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  question['title'] ?? 'No title',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                    color: Color(0xFF1A2F4B),
-                                                  ),
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                                if (question['description'] != null && 
-                                                    question['description'].toString().isNotEmpty) ...[
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    question['description'],
-                                                    style: TextStyle(
-                                                      fontSize: 13,
-                                                      color: Colors.grey[600],
-                                                    ),
-                                                    maxLines: 2,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ] else if (questionType == 'card_match' && question['options'] != null) ...[
-                                                  // Show preview for Card Match questions
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Drag and drop cards into correct buckets',
-                                                    style: TextStyle(
-                                                      fontSize: 13,
-                                                      color: Colors.grey[600],
-                                                      fontStyle: FontStyle.italic,
-                                                    ),
-                                                    maxLines: 2,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              IconButton(
-                                                icon: const Icon(Icons.edit, size: 18),
-                                                color: Colors.blue,
-                                                onPressed: () => _showEditDialog(question),
-                                                tooltip: 'Edit',
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              IconButton(
-                                                icon: const Icon(Icons.delete, size: 18),
-                                                color: Colors.red,
-                                                onPressed: () => _deleteQuestion(question['id']),
-                                                tooltip: 'Delete',
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // Type badge
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: bgColor,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          typeName,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: typeColor,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                        child: _buildGroupedQuestionList(),
                       ),
             ),
           ],

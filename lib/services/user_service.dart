@@ -125,8 +125,8 @@ class UserService {
       // Delete user progress
       await _supabase.from('usr_progress').delete().eq('user_id', userId);
 
-      // Delete pathway assignments
-      await _supabase.from('user_pathway').delete().eq('user_id', userId);
+      // Delete department assignments
+      await _supabase.from('usr_dept').delete().eq('user_id', userId);
 
       // Delete profile
       await _supabase.from('profiles').delete().eq('user_id', userId);
