@@ -271,6 +271,16 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
           if (downstreamTitles.isNotEmpty) {
              // Find assignments for downstream titles
              for (var downstreamTitle in downstreamTitles) {
+               if (downstreamTitle == 'End Game') {
+                 // Explicitly reset End Game assignments
+                 await Supabase.instance.client
+                     .from('end_game_assignments')
+                     .delete()
+                     .eq('user_id', widget.userId);
+                 debugPrint('✅ Reset End Game assignment');
+                 continue;
+               }
+
                final downstreamAssignment = _pathwayAssignments.firstWhere(
                  (a) => a['departments']?['title'] == downstreamTitle,
                  orElse: () => {},

@@ -35,7 +35,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   String? _userEmail;
   String _userName = 'Explorer';
   String _userAvatar = '👤';
+  int _userLevel = 1;
   int _selectedIndex = 0;
+  int _totalPoints = 0;
   
   // Category progress tracking for Continue feature
   Map<String, Map<String, dynamic>> _categoryProgress = {}; // category -> {total, answered, firstUnansweredIndex}
@@ -84,12 +86,15 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
         if (profile != null) {
           _userName = profile['full_name'] ?? user.email?.split('@')[0] ?? 'Explorer';
           _userAvatar = profile['avatar_url'] ?? '👤';
+          _userLevel = (profile['level'] as int?) ?? 1;
         } else {
           _userName = user.email?.split('@')[0] ?? 'Explorer';
+          _userLevel = 1;
         }
       } catch (e) {
         debugPrint('Error loading profile: $e');
         _userName = user.email?.split('@')[0] ?? 'Explorer';
+        _userLevel = 1;
       }
       
       // Skip orientation check - users can access any assigned department
@@ -118,11 +123,45 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
           _assignmentService.getUserAssignments(_userId!),
           // 2: Pathways
           _pathwayService.getAllPathways(),
+          // 3: Total Points (User Progress + End Game)
+          Future.wait([
+             Supabase.instance.client
+                .from('usr_progress')
+                .select('question_id, score_earned')
+                .eq('user_id', _userId!)
+                .then((data) {
+                  // Calculate points based on unique questions (max score per question)
+                  final bestScores = <String, int>{};
+                  for (var item in data as List) {
+                    final qId = item['question_id'].toString();
+                    final score = item['score_earned'] as int? ?? 0;
+                    if (score > (bestScores[qId] ?? -1)) {
+                      bestScores[qId] = score;
+                    }
+                  }
+                  return bestScores.values.fold(0, (sum, score) => sum + score);
+                }),
+             Supabase.instance.client
+                .from('end_game_assignments')
+                .select('score')
+                .eq('user_id', _userId!)
+                .not('completed_at', 'is', null)
+                .then((data) => (data as List).fold<int>(0, (sum, item) => sum + (item['score'] as int? ?? 0))),
+          ]).then((results) => results.fold<int>(0, (sum, item) => sum + item))
+            .catchError((e) {
+              debugPrint('❌ Error calculating points: $e');
+              return 0;
+            }),
         ]);
 
         progress = results[0] as Map<String, dynamic>?;
         assignments = results[1] as List<UserAssignment>;
         pathways = results[2] as List<Pathway>;
+        final totalPoints = results[3] as int;
+        
+        if (mounted) {
+          setState(() => _totalPoints = totalPoints);
+        }
       } catch (e) {
         debugPrint('Partial error loading data: $e');
       }
@@ -297,6 +336,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
 
         final deptData = await Supabase.instance.client.from('departments').select('id').eq('category', category).maybeSingle();
         if (deptData == null) continue;
+        
         final deptId = deptData['id'];
       
       // Fetch usr_dept data including current_level
@@ -392,7 +432,13 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
         }
         if (!foundUnanswered && totalQuestions > 0) firstUnansweredIndex = 0;
         final progressPercentage = totalQuestions > 0 ? answeredCount / totalQuestions : 0.0;
-        _categoryProgress[category] = {'total': totalQuestions, 'answered': answeredCount, 'firstUnansweredIndex': firstUnansweredIndex, 'progress': progressPercentage};
+        _categoryProgress[category] = {
+          'total': totalQuestions, 
+          'answered': answeredCount, 
+          'firstUnansweredIndex': firstUnansweredIndex, 
+          'progress': progressPercentage,
+          'level': currentLevel,
+        };
         debugPrint('📊 $category Progress: $answeredCount/$totalQuestions (${(progressPercentage * 100).toStringAsFixed(0)}%), First unanswered shuffled index: $firstUnansweredIndex');
       }
       if (mounted) setState(() {});
@@ -452,23 +498,54 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
     if (category == 'Orientation') return false; // Always unlocked
     
     if (category == 'Process') {
-      return (_categoryProgress['Orientation']?['progress'] ?? 0.0) < 1.0;
+      final orientProgress = _categoryProgress['Orientation'];
+      if (orientProgress == null) return true;
+      
+      final orientLevel = orientProgress['level'] ?? 1;
+      final orientPerc = orientProgress['progress'] ?? 0.0;
+      final processLevel = _categoryProgress['Process']?['level'] ?? 1;
+
+      // Unlocked if Orientation is at a HIGHER level, 
+      // or if at the SAME level and Orientation is complete.
+      if (orientLevel > processLevel) return false;
+      if (orientLevel == processLevel) return orientPerc < 1.0;
+      return true; // Orientation behind Process (shouldn't happen)
     }
     
     if (category == 'SOP') {
-      return (_categoryProgress['Process']?['progress'] ?? 0.0) < 1.0;
+      bool processLocked = _isCategoryLocked('Process');
+      final processProgress = _categoryProgress['Process'];
+      if (processProgress == null || processLocked) return true;
+
+      final processLevel = processProgress['level'] ?? 1;
+      final processPerc = processProgress['progress'] ?? 0.0;
+      final sopLevel = _categoryProgress['SOP']?['level'] ?? 1;
+
+      if (processLevel > sopLevel) return false;
+      if (processLevel == sopLevel) return processPerc < 1.0;
+      return true;
     }
     
     // Specific departments: must complete all General departments first
-    final orientationComplete = (_categoryProgress['Orientation']?['progress'] ?? 0.0) >= 1.0;
-    final processComplete = (_categoryProgress['Process']?['progress'] ?? 0.0) >= 1.0;
-    final sopComplete = (_categoryProgress['SOP']?['progress'] ?? 0.0) >= 1.0;
+    final orientationLocked = _isCategoryLocked('Orientation');
+    final processLocked = _isCategoryLocked('Process');
+    final sopLocked = _isCategoryLocked('SOP');
+
+    final orientProgress = _categoryProgress['Orientation'];
+    final procProgress = _categoryProgress['Process'];
+    final sProgress = _categoryProgress['SOP'];
+
+    if (orientProgress == null || procProgress == null || sProgress == null) return true;
+
+    // Check if any general category is locked
+    if (orientationLocked || processLocked || sopLocked) return true;
     
-    if (!orientationComplete || !processComplete || !sopComplete) {
-      return true; // Lock all specific departments until General is complete
+    // Check if any general category is incomplete at the current global level
+    // This is a bit simplified, but ensures sequential flow
+    if (orientProgress['progress'] < 1.0 || procProgress['progress'] < 1.0 || sProgress['progress'] < 1.0) {
+      return true;
     }
     
-    // TODO: Implement display_order based locking for specific departments
     return false;
   }
 
@@ -914,6 +991,23 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.black.withOpacity(0.1)),
+                              ),
+                              child: Text(
+                                'Level $_userLevel',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -979,14 +1073,12 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                       Expanded(
                         child: InkWell(
                           onTap: () {
-                            setState(() {
-                              _selectedIndex = 1; // Switch to Pathway tab
-                            });
+                            // Optional: Navigate to a detailed achievements page if it exists
                           },
                           borderRadius: BorderRadius.circular(24),
                           child: _buildStatCard(
-                            'QUIZZES ASSIGNED',
-                            '${_assignments.length}',
+                            'POINTS EARNED',
+                            '$_totalPoints',
                             Colors.orange,
                           ),
                         ),
@@ -1035,7 +1127,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                       color: const Color(0xFF8B5CF6), // Purple
                       description: 'Final Verification Challenge',
                       progress: _categoryProgress['End Game']?['progress'] ?? 0.0,
-                      isLocked: false,
+                      isLocked: (_categoryProgress['SOP']?['progress'] ?? 0.0) < 1.0,
                       isCurrent: false, 
                       onTap: () async {
                         // Show the introductory dialog first
@@ -1228,7 +1320,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  label.contains('ASSIGNED') ? Icons.assignment_rounded : Icons.check_circle_rounded,
+                  label.contains('POINTS') ? Icons.stars_rounded : Icons.check_circle_rounded,
                   size: 16,
                   color: color,
                 ),
@@ -1243,7 +1335,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
                   ),
-                  overflow: TextOverflow.ellipsis,
+                  overflow: TextOverflow.visible,
+                  maxLines: 2,
                 ),
               ),
             ],
@@ -2293,6 +2386,11 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
           const SizedBox(height: 30),
         // Profile Options
         _buildProfileOption(
+          icon: Icons.history_rounded,
+          title: 'Points History',
+          onTap: _showPointsHistory,
+        ),
+        _buildProfileOption(
           icon: Icons.person_outline,
           title: 'Edit Profile',
           onTap: () async {
@@ -2388,8 +2486,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                 color: const Color(0xFF6B5CE7).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
-                Icons.school,
+              child: const Icon(Icons.school,
                 color: Color(0xFF6B5CE7),
                 size: 28,
               ),
@@ -2463,6 +2560,473 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
               'Start Orientation',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Show Points History Bottom Sheet
+  Future<void> _showPointsHistory() async {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _PointsHistorySheet(userId: _userId!, totalPoints: _totalPoints),
+    );
+  }
+}
+
+class _PointsHistorySheet extends StatefulWidget {
+  final String userId;
+  final int totalPoints;
+
+  const _PointsHistorySheet({required this.userId, required this.totalPoints});
+
+  @override
+  State<_PointsHistorySheet> createState() => _PointsHistorySheetState();
+}
+
+class _PointsHistorySheetState extends State<_PointsHistorySheet> {
+  bool _isLoading = true;
+  // Category -> List of items
+  Map<String, List<Map<String, dynamic>>> _groupedPoints = {};
+  // Category -> Total points for that category
+  Map<String, int> _categoryTotals = {};
+  
+  String? _selectedCategory; // Null means showing category list
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistoryData();
+  }
+
+  Future<void> _loadHistoryData() async {
+    try {
+      // 1. Fetch User Progress
+      final progressData = await Supabase.instance.client
+          .from('usr_progress')
+          .select('question_id, question_text, category, level_number, score_earned, created_at')
+          .eq('user_id', widget.userId)
+          .order('created_at', ascending: false);
+      
+      debugPrint('📊 Points History: Fetched ${progressData.length} progress items.');
+      
+      // 2. Fetch End Game Assignments (Completed)
+      final endGameData = await Supabase.instance.client
+          .from('end_game_assignments')
+          .select('end_game_id, score, completed_at, end_game_configs(name, level)')
+          .eq('user_id', widget.userId)
+          .not('completed_at', 'is', null);
+
+      // 3. Fetch Question Descriptions (to replace generic titles)
+      final Map<String, String> _questionDescriptions = {};
+      try {
+        final questionsData = await Supabase.instance.client
+            .from('questions')
+            .select('id, description');
+        
+        for (var q in questionsData) {
+          if (q['description'] != null) {
+            _questionDescriptions[q['id'].toString()] = q['description'].toString();
+          }
+        }
+      } catch (e) {
+        debugPrint('Error fetching question descriptions: $e');
+      }
+
+      // 4. Process & Group Data
+      final Map<String, List<Map<String, dynamic>>> grouped = {};
+      final Map<String, int> totals = {};
+
+      // Process Progress Data
+      final Map<String, Map<String, Map<String, dynamic>>> categoryUniqueItems = {};
+
+      for (var item in progressData) {
+        final category = item['category'] ?? 'General';
+        /* 
+           Use description if available and longer than 5 chars (to avoid empty/null), 
+           otherwise fallback to question_text (title).
+        */
+        String displayText = item['question_text'] ?? 'Question';
+        final qId = item['question_id'].toString();
+        
+        // Try to find description from fetched questions map
+        if (_questionDescriptions.containsKey(qId)) {
+          final desc = _questionDescriptions[qId];
+          if (desc != null && desc.toString().trim().length > 5) {
+             displayText = desc.toString().trim();
+          }
+        }
+
+        final int score = item['score_earned'] as int? ?? 0;
+        
+        final pointItem = {
+          'text': displayText,
+          'subtext': 'Level ${item['level_number'] ?? 1}',
+          'points': score,
+          'date': item['created_at'],
+          'type': 'question',
+        };
+
+        // Initialize category map if needed
+        categoryUniqueItems.putIfAbsent(category, () => {});
+        
+        // Check if we already have an entry for this question
+        final existingItem = categoryUniqueItems[category]![qId];
+        final int existingScore = existingItem == null ? -1 : (existingItem['points'] as int);
+        
+        // Keep the attempt with the highest score
+        if (score > existingScore) {
+          categoryUniqueItems[category]![qId] = pointItem;
+        }
+      }
+      
+      // Convert unique items to the expected list format and calculate totals
+      categoryUniqueItems.forEach((category, itemsMap) {
+        final itemsList = itemsMap.values.toList();
+        // Sort by date descending (optional, but good for history)
+        itemsList.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+        
+        grouped[category] = itemsList;
+        
+        // Calculate total
+        totals[category] = itemsList.fold(0, (sum, item) => sum + (item['points'] as int));
+      });
+      
+      debugPrint('✅ Final Grouped Data: $totals');
+      grouped.forEach((k, v) => debugPrint('   Category $k: ${v.length} items'));
+
+      // Process End Game Data
+      for (var item in endGameData) {
+        final category = 'End Game';
+        final config = item['end_game_configs'];
+        final name = config != null ? config['name'] : 'End Game';
+        final level = config != null ? config['level'] : 1;
+        
+        final pointItem = {
+          'text': name,
+          'subtext': 'Level $level - Verification Complete',
+          'points': item['score'] ?? 0,
+          'date': item['completed_at'],
+          'type': 'end_game',
+        };
+        
+        grouped.putIfAbsent(category, () => []).add(pointItem);
+        totals[category] = (totals[category] ?? 0) + (item['score'] as int);
+      }
+
+      if (mounted) {
+        setState(() {
+          _groupedPoints = grouped;
+          _categoryTotals = totals;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading history: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Row(
+                children: [
+                   if (_selectedCategory != null)
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios, size: 18),
+                      onPressed: () => setState(() => _selectedCategory = null),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  if (_selectedCategory != null) const SizedBox(width: 12),
+                  
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.history_rounded, color: Colors.orange),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _selectedCategory ?? 'Points History',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A2F4B),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (_selectedCategory != null)
+                          Text(
+                            '${_groupedPoints[_selectedCategory]?.length ?? 0} items',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_selectedCategory == null ? widget.totalPoints : (_categoryTotals[_selectedCategory] ?? 0)} pts',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            
+            // Content
+            Expanded(
+              child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _selectedCategory == null 
+                    ? _buildCategoriesList(scrollController)
+                    : _buildDetailsList(scrollController),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoriesList(ScrollController scrollController) {
+    if (_groupedPoints.isEmpty) {
+      return _buildEmptyState();
+    }
+    
+    // Sort categories: End Game last, others alphabetically or by some custom order
+    // Order: Orientation, Process, SOP, others..., End Game
+    final categories = _groupedPoints.keys.toList();
+    categories.sort((a, b) {
+       if (a == 'End Game') return 1;
+       if (b == 'End Game') return -1;
+       if (a == 'Orientation') return -1;
+       if (b == 'Orientation') return 1;
+       if (a == 'Process') return -1;
+       if (b == 'Process') return 1;
+       return a.compareTo(b);
+    });
+
+    return ListView.separated(
+      controller: scrollController,
+      padding: const EdgeInsets.all(24),
+      itemCount: categories.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final category = categories[index];
+        final total = _categoryTotals[category] ?? 0;
+        final count = _groupedPoints[category]?.length ?? 0;
+        
+        Color catColor = const Color(0xFF1A2F4B); // Default
+        IconData catIcon = Icons.folder_rounded;
+        
+        switch (category) {
+          case 'Orientation': catColor = const Color(0xFFF4EF8B); catIcon = Icons.school_rounded; break;
+          case 'Process': catColor = const Color(0xFF3B82F6); catIcon = Icons.settings_rounded; break;
+          case 'SOP': catColor = const Color(0xFF10B981); catIcon = Icons.description_rounded; break;
+          case 'End Game': catColor = const Color(0xFF8B5CF6); catIcon = Icons.games_rounded; break;
+          // Add others if needed
+        }
+
+        return InkWell(
+          onTap: () {
+             setState(() => _selectedCategory = category);
+          },
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: [
+                 BoxShadow(
+                   color: Colors.black.withOpacity(0.02),
+                   blurRadius: 4,
+                   offset: const Offset(0, 2),
+                 ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: category == 'Orientation' ? catColor : catColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    catIcon, 
+                    color: category == 'Orientation' ? Colors.black.withOpacity(0.7) : catColor, 
+                    size: 24
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        category,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      Text(
+                        '$count activities',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '+$total',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    color: Color(0xFF10B981), // Green
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey.shade400),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailsList(ScrollController scrollController) {
+    // Determine background color/theme based on selected category?
+    // Maintaining simple white list for now.
+    
+    final items = _groupedPoints[_selectedCategory] ?? [];
+    
+    return ListView.separated(
+      controller: scrollController,
+      padding: const EdgeInsets.all(24),
+      itemCount: items.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.shade200),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.02),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item['text'] ?? 'Question',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                        color: Color(0xFF1E293B),
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item['subtext'] ?? '',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '+${item['points']}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  color: Color(0xFF10B981), // Green
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState() {
+     return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.stars_outlined, size: 64, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            'No points earned yet',
+            style: TextStyle(color: Colors.grey.shade500),
           ),
         ],
       ),

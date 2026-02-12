@@ -37,6 +37,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   // Title and Description
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _pointsController = TextEditingController(text: '10');
 
   // Multiple Choice Form Data
   final TextEditingController _questionController = TextEditingController();
@@ -310,7 +311,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       'description': _descriptionController.text.trim(),
       'type_id': typeRes['id'], // Use type_id instead of question_type
       'level': levelNumber,
-      'points': 10,
+      'points': int.parse(_pointsController.text.trim()),
       'created_at': DateTime.now().toIso8601String(),
     };
     
@@ -515,7 +516,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
             'level': levelNumber,
             'category': 'Orientation',
             'subcategory': 'Vision',
-            'points': 10,
+            'points': int.parse(_pointsController.text.trim()),
             'status': 'pending',
             'score_earned': 0,
             'attempt_count': 0,
@@ -562,6 +563,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _pointsController.dispose();
     _questionController.dispose();
     for (var c in _optionControllers) {
       c.dispose();
@@ -779,6 +781,26 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                     _selectedQuestionLevel = value;
                                   });
                                 }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Points Input
+                            TextFormField(
+                              controller: _pointsController,
+                              decoration: InputDecoration(
+                                labelText: 'Points (Score)',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.score),
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.6),
+                                suffixText: 'pts',
+                              ),
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) return 'Required';
+                                if (int.tryParse(v) == null) return 'Must be a number';
+                                return null;
                               },
                             ),
                             const SizedBox(height: 16),

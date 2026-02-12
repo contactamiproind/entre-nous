@@ -144,20 +144,53 @@ class EndGameService {
     try {
       debugPrint('🎮 Marking End Game $endGameId as completed for user $userId with score $score');
       
+      // Use upsert to ensure record exists (create if missing, update if exists)
       final response = await _supabase
           .from('end_game_assignments')
-          .update({
+          .upsert({
+            'user_id': userId,
+            'end_game_id': endGameId,
             'completed_at': DateTime.now().toIso8601String(),
             'score': score,
-          })
-          .eq('user_id', userId)
-          .eq('end_game_id', endGameId)
+            'assigned_at': DateTime.now().toIso8601String(), // Only used if creating new record
+          }, onConflict: 'user_id,end_game_id')
           .select();
           
-      debugPrint('🎮 Update response: $response');
+      debugPrint('🎮 Upsert response: $response');
       
-      if (response.isEmpty) {
-        debugPrint('❌ WARNING: No execution rows updated! Check if user_id and end_game_id match exactly.');
+      // Successfully marked as complete. Now check if we should level up.
+      try {
+        // Get current level
+        final profileData = await _supabase
+            .from('profiles')
+            .select('level')
+            .eq('user_id', userId)
+            .maybeSingle();
+            
+        if (profileData != null) {
+          final currentLevel = (profileData['level'] as int?) ?? 1;
+          // Get the level of the completed endgame
+          final endGameConfig = await _supabase
+              .from('end_game_configs')
+              .select('level')
+              .eq('id', endGameId)
+              .maybeSingle();
+              
+          final endGameLevel = (endGameConfig?['level'] as int?) ?? 1;
+          
+          // If the user just completed a level equal to their current level, promote them!
+          // e.g. Completed Level 1 End Game while at Level 1 -> Promote to Level 2
+          if (endGameLevel == currentLevel) {
+             await _supabase
+                .from('profiles')
+                .update({'level': currentLevel + 1})
+                .eq('user_id', userId);
+             debugPrint('🎉 Promoted user $userId to Level ${currentLevel + 1}!');
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error updating user level: $e');
+        // Don't fail the whole operation if level update fails
       }
     } catch (e) {
       debugPrint('❌ Failed to mark End Game as completed: $e');

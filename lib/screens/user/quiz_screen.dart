@@ -225,26 +225,15 @@ class _QuizScreenState extends State<QuizScreen> {
     _startQuestionTimer();
   }
 
-  int _calculatePoints() {
-    // Calculate time used (in seconds)
-    final timeUsed = _questionStartTime - _remainingSeconds;
-    final timePercentage = timeUsed / _questionStartTime;
-    
-    // Time-based scoring:
-    // < fullPointsThreshold: Full points (100)
-    // < halfPointsThreshold: Half points (50)
-    // > halfPointsThreshold: Quarter points (25)
-    if (timePercentage < _fullPointsThreshold) {
-      return 100; // Fast answer - full points
-    } else if (timePercentage < _halfPointsThreshold) {
-      return 50; // Moderate speed - half points
-    } else {
-      return 25; // Slow answer - quarter points
+  int _calculatePoints(int questionIndex) {
+    if (questionIndex >= 0 && questionIndex < _questions.length) {
+      return (_questions[questionIndex]['points'] as int?) ?? 10;
     }
+    return 10; // Default fallback
   }
 
   void _recordAnswerWithPoints(bool isCorrect, int questionIndex) {
-    // Record points for the specified question based on answer correctness and speed
+    // Record points for the specified question
     
     // If user has exceeded max attempts, award 0 points regardless of correctness
     if (_currentAttempt > _maxAttempts) {
@@ -254,29 +243,9 @@ class _QuizScreenState extends State<QuizScreen> {
     }
     
     if (isCorrect) {
-      // Check if we have the answer time stored
-      if (_questionAnswerTimes.containsKey(questionIndex)) {
-        final remainingTime = _questionAnswerTimes[questionIndex]!;
-        final timeUsed = _questionStartTime - remainingTime;
-        final timePercentage = timeUsed / _questionStartTime;
-        
-        // Calculate points based on time used
-        int points;
-        if (timePercentage < _fullPointsThreshold) {
-          points = 100; // Fast answer - full points
-        } else if (timePercentage < _halfPointsThreshold) {
-          points = 50; // Moderate speed - half points
-        } else {
-          points = 25; // Slow answer - quarter points
-        }
-        
-        _questionPoints[questionIndex] = points;
-        debugPrint('✅ Question $questionIndex: Earned $points points (answered with ${remainingTime}s remaining, ${timePercentage.toStringAsFixed(1)}% time used)');
-      } else {
-        // Fallback: no timing data, give full points
-        _questionPoints[questionIndex] = 100;
-        debugPrint('✅ Question $questionIndex: Earned 100 points (no timing data)');
-      }
+      final points = _calculatePoints(questionIndex);
+      _questionPoints[questionIndex] = points;
+      debugPrint('✅ Question $questionIndex: Earned $points points');
     } else {
       _questionPoints[questionIndex] = 0;
       debugPrint('❌ Question $questionIndex: 0 points (incorrect answer)');
@@ -311,6 +280,7 @@ class _QuizScreenState extends State<QuizScreen> {
       
       final deptId = deptData['id'];
       final deptName = deptData['title'];
+
       
       // Check if usr_dept record already exists
       final existingUsrDept = await Supabase.instance.client
@@ -382,24 +352,23 @@ class _QuizScreenState extends State<QuizScreen> {
       final questionId = question['id'];
       
       // Prepare progress data
-      final progressData = {
-        'user_id': user.id,
-        'dept_id': deptId,
-        'usr_dept_id': usrDeptId,
-        'question_id': questionId,
-        'question_text': question['title'],
-        'question_type': question['question_type'],
-        'difficulty': question['difficulty'],
-        'category': widget.category,
-        'subcategory': widget.subcategory,
-        'points': question['points'] ?? 10,
-        'status': status,
-        'user_answer': userAnswer.toString(),
-        'is_correct': isCorrect,
-        'score_earned': pointsEarned,
-        'attempt_count': _currentAttempt,
-        'completed_at': DateTime.now().toIso8601String(),
-      };
+    final progressData = {
+      'user_id': user.id,
+      'dept_id': deptId,
+      'usr_dept_id': usrDeptId,
+      'question_id': questionId,
+      'question_text': question['title'],
+      'question_type': question['question_type'],
+      'category': widget.category,
+      'subcategory': widget.subcategory,
+      'points': question['points'] ?? 10,
+      'status': status,
+      'user_answer': userAnswer.toString(),
+      'is_correct': isCorrect,
+      'score_earned': pointsEarned,
+      'attempt_count': _currentAttempt,
+      'completed_at': DateTime.now().toIso8601String(),
+    };
       
       // Upsert to handle both new answers and retries
       await Supabase.instance.client
@@ -569,6 +538,7 @@ class _QuizScreenState extends State<QuizScreen> {
           .order('id', ascending: true); // Deterministic sort before shuffle
       
       debugPrint('📊 Found ${questionsData.length} questions for this department (Level <= $currentLevel)');
+
 
 
 
@@ -848,17 +818,17 @@ class _QuizScreenState extends State<QuizScreen> {
         _firstWrongQuestionIndex = i;
       }
       
-      if (questionType == 'card_match' || questionType == 'sequence_builder') {
+      if (questionType == 'card_match' || questionType == 'sequence_builder' || questionType == 'simulation') {
         final score = _gameScores[i] ?? 0;
-        debugPrint('🎮 ${questionType == 'card_match' ? 'Card Match' : 'Sequence Builder'} Question $i: Score = $score');
+        debugPrint('🎮 $questionType Question $i: Score = $score');
         totalScore += score;
         // Count as correct if score is 25 or higher (out of max ~60)
         if (score >= 25) {
-          debugPrint('✅ ${questionType == 'card_match' ? 'Card Match' : 'Sequence Builder'} counted as CORRECT (score >= 25)');
+          debugPrint('✅ $questionType counted as CORRECT (score >= 25)');
           correctCount++;
           _answeredCorrectly[i] = true;
         } else {
-          debugPrint('❌ ${questionType == 'card_match' ? 'Card Match' : 'Sequence Builder'} counted as WRONG (score < 25)');
+          debugPrint('❌ $questionType counted as WRONG (score < 25)');
         }
       } else {
         if (isCorrect) {
@@ -903,65 +873,15 @@ class _QuizScreenState extends State<QuizScreen> {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        for (int i = 0; i < _questions.length; i++) {
-           // Re-calculate or reuse calculation (Re-calculating specifically for creating the record payload)
-           final question = _questions[i];
-           final int questionValue = question['points'] ?? 10; // Define questionValue
-           final questionType = question['question_type'] ?? 'multiple_choice';
-           
-           Map<String, dynamic> userAnswer = {};
-           bool isCorrect = false; // Need to re-derive for saving record
-
-            if (questionType == 'multiple_choice') {
-              final selectedIndex = _selectedAnswers[i];
-              final options = List<String>.from(question['options'] ?? []);
-              final optionsData = List<Map<String, dynamic>>.from(question['options_data'] ?? []);
-               if (selectedIndex != null && selectedIndex < options.length && selectedIndex < optionsData.length) {
-                  final selectedAnswerText = options[selectedIndex];
-                  isCorrect = optionsData[selectedIndex]['is_correct'] == true;
-                  userAnswer = {
-                    'type': 'mcq',
-                    'selected_index': selectedIndex,
-                    'selected_answer': selectedAnswerText,
-                  };
-               }
-            } else if (questionType == 'match_following') {
-               // ... Match logic ...
-               final pairs = List<Map<String, dynamic>>.from(question['match_pairs'] ?? []);
-               final userMatches = _matchAnswers[i] ?? {};
-               bool allCorrect = true;
-               for (var pair in pairs) {
-                 final left = pair['left'] as String;
-                 final correctRight = pair['right'] as String;
-                 if (userMatches[left]?.split('|')[0] != correctRight) { allCorrect = false; break; }
-               }
-               isCorrect = allCorrect && userMatches.length == pairs.length;
-               userAnswer = {'type': 'match_following', 'matches': userMatches};
-            }
-
-
-           // Calculate time-based points for correct answers
-           int pointsEarned = 0;
-           if (isCorrect) {
-             // Use time-based scoring if question was answered (has tracked time)
-             if (_questionPoints.containsKey(i)) {
-               pointsEarned = _questionPoints[i]!;
-             } else {
-               // Fallback: calculate points now (for questions answered before timer implementation)
-               pointsEarned = _calculatePoints();
-               _questionPoints[i] = pointsEarned;
-             }
-           }
-
-           // Save progress to database
-           await _saveQuestionProgress(
-             questionIndex: i,
-             question: question,
-             isCorrect: isCorrect,
-             userAnswer: userAnswer,
-             pointsEarned: pointsEarned,
-           );
-        } // End of for loop
+        // ⚠️ IMPORTANT: Questions are already saved when answered via _saveQuestionProgress
+        // We do NOT re-save them here to avoid overwriting correct data
+        // The save happens in real-time when:
+        // - Single/multiple choice: when user taps "Next" after selecting answer
+        // - Game types: when game completes successfully
+        
+        // for (int i = 0; i < _questions.length; i++) {
+        //    ... REMOVED: Duplicate save logic that was overwriting correct progress ...
+        // }
 
 
 
@@ -1329,24 +1249,71 @@ class _QuizScreenState extends State<QuizScreen> {
                                             },
                                           ),
                                         )
-                                      : CardMatchQuestionWidget(
-                                          questionData: () {
-                                            debugPrint('🎮 Creating CardMatchQuestionWidget');
-                                            debugPrint('   Question ID: ${question['id']}');
-                                            debugPrint('   Options type: ${question['options'].runtimeType}');
-                                            debugPrint('   Options value: ${question['options']}');
-                                            return question;
-                                          }(),
-                                          onAnswerSubmitted: (score, isCorrect) {
-                                            setState(() {
-                                              _gameScores[_currentQuestionIndex] = score;
-                                              if (_currentQuestionIndex < _questions.length - 1) {
-                                                _currentQuestionIndex++;
-                                              } else {
-                                                _submitQuiz();
+                                        : SizedBox(
+                                          height: 700,
+                                          child: CardMatchQuestionWidget(
+                                            questionData: () {
+                                              debugPrint('🎮 Creating CardMatchQuestionWidget');
+                                              debugPrint('   Question ID: ${question['id']}');
+                                              debugPrint('   Options type: ${question['options'].runtimeType}');
+                                              debugPrint('   Options value: ${question['options']}');
+                                              return question;
+                                            }(),
+                                            onAnswerSubmitted: (score, isCorrect) async {
+                                              // Stop timer
+                                              _questionTimer?.cancel();
+                                              
+                                              // Save state
+                                              setState(() {
+                                                _isCardGameComplete = true;
+                                                _gameScores[_currentQuestionIndex] = score;
+                                                _answeredCorrectly[_currentQuestionIndex] = isCorrect;
+                                              });
+
+                                              // Show celebration
+                                              await Future.delayed(const Duration(milliseconds: 300));
+                                              if (mounted) {
+                                                showDialog(
+                                                  context: context,
+                                                  barrierDismissible: false,
+                                                  barrierColor: Colors.black.withOpacity(0.7),
+                                                  builder: (context) => CelebrationWidget(
+                                                    show: true,
+                                                    points: score,
+                                                    onComplete: () async {
+                                                      Navigator.of(context).pop();
+                                                      
+                                                      // Save progress explicitly
+                                                      await _saveQuestionProgress(
+                                                        questionIndex: _currentQuestionIndex,
+                                                        question: question,
+                                                        isCorrect: true, // Assuming completion = correct enough
+                                                        userAnswer: {
+                                                          'type': 'card_match',
+                                                          'score': score,
+                                                          'time_taken': _questionTimeLimit - _remainingSeconds,
+                                                        },
+                                                        pointsEarned: score,
+                                                      );
+                                                      
+                                                      if (_currentQuestionIndex < _questions.length - 1) {
+                                                        setState(() {
+                                                          _currentQuestionIndex++;
+                                                          _currentAttempt = 1;
+                                                          _isCardGameComplete = false;
+                                                          // Reset timer
+                                                          _remainingSeconds = 30;
+                                                        });
+                                                        _loadCurrentQuestionAttempt().then((_) => _startQuestionTimer());
+                                                      } else {
+                                                        _submitQuiz();
+                                                      }
+                                                    },
+                                                  ),
+                                                );
                                               }
-                                            });
-                                          },
+                                            },
+                                          ),
                                         )
                                   : questionType == 'simulation'
                                   ? SizedBox(
@@ -1590,7 +1557,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                       
                                       if (isCorrect) {
                                         // Calculate and record points
-                                        final points = _calculatePoints();
+                                        final points = _calculatePoints(_currentQuestionIndex);
                                         _recordAnswerWithPoints(true, _currentQuestionIndex);
                                         _questionPoints[_currentQuestionIndex] = points;
                                         
