@@ -43,26 +43,21 @@ class _QuizScreenState extends State<QuizScreen> {
   List<Map<String, dynamic>> _questions = [];
   bool _isLoading = true;
   int _currentQuestionIndex = 0;
-  int _score = 0;
   bool _showResults = false;
   bool _showCelebration = false;
 
   // Per-question state
-  Map<int, int> _selectedAnswers = {};
-  Map<int, bool> _answeredCorrectly = {};
+  final Map<int, int> _selectedAnswers = {};
+  final Map<int, bool> _answeredCorrectly = {};
   Map<int, Map<String, String?>> _matchAnswers = {};
-  Map<int, int> _gameScores = {};
-  Map<int, int> _questionPoints = {};
+  /// Single source of truth for points earned per question index.
+  /// Correct → question['points'], Wrong → 0. No complex logic.
+  final Map<int, int> _questionPoints = {};
 
   // Timer
   Timer? _questionTimer;
   int _remainingSeconds = 30;
   int _questionTimeLimit = 30;
-  int _questionStartTime = 30;
-
-  // Scoring thresholds
-  double _fullPointsThreshold = 0.5;
-  double _halfPointsThreshold = 0.75;
 
   // Attempts
   int _currentAttempt = 1;
@@ -91,7 +86,6 @@ class _QuizScreenState extends State<QuizScreen> {
     _questionTimer?.cancel();
     setState(() {
       _remainingSeconds = _questionTimeLimit;
-      _questionStartTime = _questionTimeLimit;
     });
     _questionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingSeconds > 0) {
@@ -205,20 +199,20 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   // ─── SCORING ─────────────────────────────────────────────
+  // Simple rule: correct → full points from question, wrong → 0.
 
-  int _calculatePoints(int qi) {
+  /// Returns the points value defined on the question.
+  int _getQuestionPoints(int qi) {
     if (qi >= 0 && qi < _questions.length) {
       return (_questions[qi]['points'] as int?) ?? 10;
     }
     return 10;
   }
 
-  void _recordAnswerWithPoints(bool isCorrect, int qi) {
-    if (_currentAttempt > _maxAttempts) {
-      _questionPoints[qi] = 0;
-      return;
-    }
-    _questionPoints[qi] = isCorrect ? _calculatePoints(qi) : 0;
+  /// Record score: correct = question's points, wrong = 0.
+  void _recordScore(int qi, bool isCorrect) {
+    _questionPoints[qi] = isCorrect ? _getQuestionPoints(qi) : 0;
+    _answeredCorrectly[qi] = isCorrect;
   }
 
   // ─── DATA LOADING (via QuizService) ──────────────────────
@@ -231,9 +225,6 @@ class _QuizScreenState extends State<QuizScreen> {
         setState(() {
           _questionTimeLimit = settings.timerSeconds;
           _remainingSeconds = _questionTimeLimit;
-          _questionStartTime = _questionTimeLimit;
-          _fullPointsThreshold = settings.fullPointsThreshold;
-          _halfPointsThreshold = settings.halfPointsThreshold;
         });
       }
 
@@ -250,7 +241,6 @@ class _QuizScreenState extends State<QuizScreen> {
         _questions = result.questions;
         _isLoading = false;
         _matchAnswers = {};
-        _gameScores = {};
         if (widget.startQuestionIndex != null &&
             widget.startQuestionIndex! < result.questions.length) {
           _currentQuestionIndex = widget.startQuestionIndex!;
@@ -314,14 +304,12 @@ class _QuizScreenState extends State<QuizScreen> {
 
   Future<void> _submitQuiz() async {
     debugPrint('=== SUBMITTING QUIZ ===');
-    final int totalScore = _questionPoints.values.fold(0, (s, p) => s + p);
     final int correctCount =
         _answeredCorrectly.values.where((v) => v == true).length;
     final percentage =
         _questions.isEmpty ? 0.0 : (correctCount / _questions.length) * 100;
 
     setState(() {
-      _score = totalScore;
       _showResults = true;
       if (percentage >= 70) {
         _showCelebration = true;
@@ -366,10 +354,8 @@ class _QuizScreenState extends State<QuizScreen> {
         selectedIndex < options.length ? options[selectedIndex] : '';
 
     if (isCorrect) {
-      final points = _calculatePoints(_currentQuestionIndex);
-      _recordAnswerWithPoints(true, _currentQuestionIndex);
-      _questionPoints[_currentQuestionIndex] = points;
-      setState(() => _answeredCorrectly[_currentQuestionIndex] = true);
+      final points = _getQuestionPoints(_currentQuestionIndex);
+      _recordScore(_currentQuestionIndex, true);
 
       await _saveProgress(
         question: question,
@@ -390,9 +376,7 @@ class _QuizScreenState extends State<QuizScreen> {
         );
         _showRetryDialog();
       } else {
-        _recordAnswerWithPoints(false, _currentQuestionIndex);
-        _questionPoints[_currentQuestionIndex] = 0;
-        setState(() => _answeredCorrectly[_currentQuestionIndex] = false);
+        _recordScore(_currentQuestionIndex, false);
 
         await _saveProgress(
           question: question,
@@ -419,12 +403,10 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     final allCorrect = correctCount == pairs.length;
-    final points = allCorrect ? _calculatePoints(_currentQuestionIndex) : 0;
+    final points = allCorrect ? _getQuestionPoints(_currentQuestionIndex) : 0;
 
     _questionTimer?.cancel();
-    _recordAnswerWithPoints(allCorrect, _currentQuestionIndex);
-    _questionPoints[_currentQuestionIndex] = points;
-    setState(() => _answeredCorrectly[_currentQuestionIndex] = allCorrect);
+    _recordScore(_currentQuestionIndex, allCorrect);
 
     await _saveProgress(
       question: question,
@@ -445,11 +427,10 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Future<void> _handleGameAnswer(Map<String, dynamic> question, String type) async {
-    final score = _gameScores[_currentQuestionIndex] ?? 0;
     final isCorrect = _answeredCorrectly[_currentQuestionIndex] ?? false;
-
     _questionTimer?.cancel();
-    _questionPoints[_currentQuestionIndex] = score;
+    _recordScore(_currentQuestionIndex, isCorrect);
+    final score = _questionPoints[_currentQuestionIndex] ?? 0;
 
     await _saveProgress(
       question: question,
@@ -748,7 +729,6 @@ class _QuizScreenState extends State<QuizScreen> {
         onAnswerSubmitted: (score, isCorrect) {
           setState(() {
             _isCardGameComplete = true;
-            _gameScores[_currentQuestionIndex] = score;
             _answeredCorrectly[_currentQuestionIndex] = isCorrect;
           });
         },
@@ -757,25 +737,30 @@ class _QuizScreenState extends State<QuizScreen> {
 
     if (type == GameType.cardMatch) {
       if (_isFlipCardGame(question)) {
+        final cardPairs = _buildCardPairs(question);
+        final totalPts = (question['points'] as int?) ?? 10;
+        final perMatch = cardPairs.isNotEmpty ? (totalPts / cardPairs.length).round() : totalPts;
         return SizedBox(
           height: 700,
           child: CardFlipGameWidget(
             key: ValueKey('flip_${question['id']}'),
-            pairs: _buildCardPairs(question),
-            pointsPerMatch: 10,
+            pairs: cardPairs,
+            pointsPerMatch: perMatch,
             onGameComplete: (score, accuracy) {
               setState(() {
                 _isCardGameComplete = true;
-                _gameScores[_currentQuestionIndex] = score;
                 _answeredCorrectly[_currentQuestionIndex] = accuracy >= 0.7;
               });
             },
-            onComplete: (score, accuracy, timeTaken) async {
+            onComplete: (rawScore, accuracy, timeTaken) async {
+              final isWin = accuracy >= 0.7;
+              _recordScore(_currentQuestionIndex, isWin);
+              final cappedScore = _questionPoints[_currentQuestionIndex] ?? 0;
               await _saveProgress(
                 question: question,
-                isCorrect: accuracy >= 0.7,
-                userAnswer: {'type': GameType.cardMatch, 'score': score, 'accuracy': accuracy},
-                pointsEarned: score,
+                isCorrect: isWin,
+                userAnswer: {'type': GameType.cardMatch, 'score': cappedScore, 'accuracy': accuracy},
+                pointsEarned: cappedScore,
               );
               if (_currentQuestionIndex < _questions.length - 1) {
                 setState(() {
@@ -811,7 +796,6 @@ class _QuizScreenState extends State<QuizScreen> {
           onAnswerSubmitted: (score, isCorrect) {
             setState(() {
               _isCardGameComplete = true;
-              _gameScores[_currentQuestionIndex] = score;
               _answeredCorrectly[_currentQuestionIndex] = isCorrect;
             });
           },
@@ -881,13 +865,50 @@ class _QuizScreenState extends State<QuizScreen> {
     final totalQuestions = _questions.length;
     int totalScore = 0;
     int correctAnswers = 0;
+    int maxPossible = 0;
+
     for (int i = 0; i < totalQuestions; i++) {
-      final pts = _questionPoints[i] ?? _gameScores[i] ?? 0;
+      final pts = _questionPoints[i] ?? 0;
+      final qPts = (_questions[i]['points'] as int?) ?? 10;
       totalScore += pts;
+      maxPossible += qPts;
       if (pts > 0) correctAnswers++;
     }
 
-    final pct = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0.0;
+    final pct = totalQuestions > 0
+        ? (correctAnswers / totalQuestions) * 100
+        : 0.0;
+    final scorePct = maxPossible > 0
+        ? (totalScore / maxPossible)
+        : 0.0;
+
+    // Tier
+    final String title;
+    final String subtitle;
+    final IconData icon;
+    final Color accentColor;
+
+    if (pct == 100) {
+      title = 'PERFECT!';
+      subtitle = 'You nailed every single question!';
+      icon = Icons.emoji_events_rounded;
+      accentColor = const Color(0xFFFFD700);
+    } else if (pct >= 70) {
+      title = 'GREAT JOB!';
+      subtitle = 'You\'re doing amazing!';
+      icon = Icons.star_rounded;
+      accentColor = const Color(0xFF4ECDC4);
+    } else if (pct >= 50) {
+      title = 'GOOD EFFORT!';
+      subtitle = 'Keep practicing to improve!';
+      icon = Icons.thumb_up_rounded;
+      accentColor = const Color(0xFF9B59B6);
+    } else {
+      title = 'KEEP GOING!';
+      subtitle = 'Every attempt makes you better!';
+      icon = Icons.refresh_rounded;
+      accentColor = const Color(0xFFFF9A76);
+    }
 
     return Stack(children: [
       Scaffold(
@@ -900,103 +921,267 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
           ),
           child: SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(_scoreIcon(pct), size: 100, color: _scoreColor(pct)),
-                    const SizedBox(height: 16),
-                    Text(_scoreTitle(pct),
-                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5),
-                        textAlign: TextAlign.center),
-                    const SizedBox(height: 24),
-                    _buildScoreCard(totalScore, correctAnswers, totalQuestions),
-                    const SizedBox(height: 32),
-                    Text(_encouragement(pct),
-                        style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w600),
-                        textAlign: TextAlign.center),
-                    const SizedBox(height: 48),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF8B5CF6),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          elevation: 0,
-                        ),
-                        child: const Text('Return to Dashboard', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+
+                  // Trophy / Icon
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                ),
+                    child: Icon(icon, size: 56, color: accentColor),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Title
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1E293B),
+                          letterSpacing: 1)),
+                  const SizedBox(height: 6),
+                  Text(subtitle,
+                      style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center),
+
+                  const SizedBox(height: 28),
+
+                  // ── Score Card ──
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6)),
+                      ],
+                    ),
+                    child: Column(children: [
+                      // Score circle
+                      SizedBox(
+                        width: 140,
+                        height: 140,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: 140,
+                              height: 140,
+                              child: CircularProgressIndicator(
+                                value: scorePct,
+                                strokeWidth: 10,
+                                backgroundColor: Colors.grey.shade200,
+                                valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                                strokeCap: StrokeCap.round,
+                              ),
+                            ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('$totalScore',
+                                    style: TextStyle(
+                                        fontSize: 40,
+                                        fontWeight: FontWeight.w900,
+                                        color: accentColor,
+                                        height: 1)),
+                                Text('/ $maxPossible',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[500],
+                                        fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Stats row
+                      Row(
+                        children: [
+                          _buildResultStat(
+                            Icons.check_circle_outline,
+                            'Correct',
+                            '$correctAnswers / $totalQuestions',
+                            const Color(0xFF10B981),
+                          ),
+                          const SizedBox(width: 12),
+                          _buildResultStat(
+                            Icons.close_rounded,
+                            'Wrong',
+                            '${totalQuestions - correctAnswers} / $totalQuestions',
+                            const Color(0xFFEF4444),
+                          ),
+                          const SizedBox(width: 12),
+                          _buildResultStat(
+                            Icons.star_outline_rounded,
+                            'Points',
+                            '$totalScore',
+                            const Color(0xFFF59E0B),
+                          ),
+                        ],
+                      ),
+                    ]),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ── Per-question breakdown ──
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4)),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Question Breakdown',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1E293B))),
+                        const SizedBox(height: 12),
+                        ...List.generate(totalQuestions, (i) {
+                          final q = _questions[i];
+                          final earned = _questionPoints[i] ?? 0;
+                          final max = (q['points'] as int?) ?? 10;
+                          final correct = earned > 0;
+                          final qTitle = (q['title'] as String?) ?? 'Question ${i + 1}';
+                          final displayTitle = qTitle.length > 40
+                              ? '${qTitle.substring(0, 40)}...'
+                              : qTitle;
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                // Status icon
+                                Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: correct
+                                        ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                                        : const Color(0xFFEF4444).withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    correct ? Icons.check : Icons.close,
+                                    size: 16,
+                                    color: correct
+                                        ? const Color(0xFF10B981)
+                                        : const Color(0xFFEF4444),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                // Question title
+                                Expanded(
+                                  child: Text(displayTitle,
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[800],
+                                          fontWeight: FontWeight.w500),
+                                      overflow: TextOverflow.ellipsis),
+                                ),
+                                // Points
+                                Text('$earned / $max',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: correct
+                                            ? const Color(0xFF10B981)
+                                            : Colors.grey[400])),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // ── Return button ──
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E293B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        elevation: 0,
+                      ),
+                      child: const Text('Return to Dashboard',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
               ),
             ),
           ),
         ),
       ),
-      CelebrationWidget(show: _showCelebration, onComplete: () => setState(() => _showCelebration = false)),
+      CelebrationWidget(
+          show: _showCelebration,
+          onComplete: () => setState(() => _showCelebration = false)),
     ]);
   }
 
-  Widget _buildScoreCard(int score, int correct, int total) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [BoxShadow(color: const Color(0xFF1A2F4B).withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 10))],
-        border: Border.all(color: const Color(0xFFF8C67D).withOpacity(0.5), width: 3),
-      ),
-      child: Column(children: [
-        const Text('YOUR SCORE', style: TextStyle(fontSize: 16, color: Color(0xFF1A2F4B), fontWeight: FontWeight.bold, letterSpacing: 2)),
-        const SizedBox(height: 12),
-        Text('$score', style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w900, color: Color(0xFFF08A7E), height: 1)),
-        Text('POINTS', style: TextStyle(fontSize: 14, color: const Color(0xFF1A2F4B).withOpacity(0.6), fontWeight: FontWeight.bold)),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(color: const Color(0xFF6BCB9F).withOpacity(0.2), borderRadius: BorderRadius.circular(30)),
-          child: Text('$correct / $total Correct', style: const TextStyle(fontSize: 18, color: Color(0xFF1A2F4B), fontWeight: FontWeight.bold)),
+  Widget _buildResultStat(
+      IconData icon, String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
         ),
-      ]),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 6),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: color)),
+            const SizedBox(height: 2),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
     );
-  }
-
-  // ─── SCORE HELPERS ───────────────────────────────────────
-
-  IconData _scoreIcon(double pct) {
-    if (pct == 100) return Icons.emoji_events_rounded;
-    if (pct >= 90) return Icons.star_rounded;
-    if (pct >= 70) return Icons.sentiment_very_satisfied_rounded;
-    if (pct >= 50) return Icons.thumb_up_rounded;
-    return Icons.sentiment_neutral_rounded;
-  }
-
-  String _scoreTitle(double pct) {
-    if (pct == 100) return 'PERFECT! 🎉';
-    if (pct >= 90) return 'AMAZING! ✨';
-    if (pct >= 70) return 'GREAT JOB! 🎊';
-    if (pct >= 50) return 'GOOD EFFORT! 💫';
-    return 'KEEP PRACTICING! 📚';
-  }
-
-  String _encouragement(double pct) {
-    if (pct == 100) return 'You\'re a quiz master! 🎓';
-    if (pct >= 90) return 'Almost perfect! Keep it up! 🚀';
-    if (pct >= 70) return 'You\'re doing great! 🌈';
-    if (pct >= 50) return 'Nice try! Practice makes perfect! 💡';
-    return 'Don\'t give up! You\'ll get better! 🌟';
-  }
-
-  Color _scoreColor(double pct) {
-    if (pct >= 90) return const Color(0xFFFF6B9D);
-    if (pct >= 70) return const Color(0xFF4ECDC4);
-    if (pct >= 50) return const Color(0xFF9B59B6);
-    return const Color(0xFFFF9A76);
   }
 }

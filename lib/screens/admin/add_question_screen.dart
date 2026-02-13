@@ -19,11 +19,9 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
   
   // State
   List<Pathway> _pathways = [];
-  List<PathwayLevel> _levels = [];
   Pathway? _selectedPathway;
   PathwayLevel? _selectedLevel;
   bool _isLoadingPathways = true;
-  bool _isLoadingLevels = false;
   bool _isSaving = false;
 
   // Question Type
@@ -196,29 +194,21 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     setState(() {
       _selectedPathway = pathway;
       _selectedLevel = null;
-      _isLoadingLevels = true;
     });
 
     try {
-      final levels = await _pathwayService.getPathwayLevels(pathway.id);
-      setState(() {
-        _levels = levels;
-        _isLoadingLevels = false;
-      });
+      await _pathwayService.getPathwayLevels(pathway.id);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading levels: $e')),
         );
-        setState(() => _isLoadingLevels = false);
       }
     }
   }
 
   Future<void> _generateDefaultLevels() async {
     if (_selectedPathway == null) return;
-    
-    setState(() => _isLoadingLevels = true);
     
     try {
       // Default levels
@@ -252,7 +242,6 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error generating levels: $e')),
         );
-        setState(() => _isLoadingLevels = false);
       }
     }
   }

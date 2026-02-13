@@ -268,7 +268,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                   color: successCount > 0 ? Colors.green : Colors.red,
                 ),
                 const SizedBox(width: 8),
-                const Text('Assignment Summary'),
+                const Flexible(child: Text('Assignment Summary')),
               ],
             ),
             content: Column(
