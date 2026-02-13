@@ -160,172 +160,182 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  InputDecoration _inputDecoration(String label, IconData icon, {String? helper, bool enabled = true}) {
+    return InputDecoration(
+      labelText: label,
+      helperText: helper,
+      prefixIcon: Icon(icon, size: 20, color: enabled ? const Color(0xFF8B5CF6) : Colors.grey),
+      filled: true,
+      fillColor: enabled ? Colors.white : Colors.grey.shade50,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 1.5)),
+      disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
+      labelStyle: TextStyle(fontSize: 13, color: Colors.grey[600]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text('Edit Profile', style: TextStyle(color: Colors.black)),
-        backgroundColor: const Color(0xFFF4EF8B),
-        foregroundColor: Colors.black,
-      ),
       body: Container(
-        height: MediaQuery.of(context).size.height,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFF9E6), // Very light yellow
-              Color(0xFFF4EF8B), // Main yellow #f4ef8b
-              Color(0xFFE8D96F), // Darker yellow
-            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFF9E6), Color(0xFFF4EF8B), Color(0xFFE8D96F)],
           ),
         ),
-        child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: _formKey,
+        child: SafeArea(
           child: Column(
             children: [
-              // Avatar
-              GestureDetector(
-                onTap: _showAvatarPicker,
-                child: Stack(
+              // Custom header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 16, 0),
+                child: Row(
                   children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8F0FE),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFE8D96F),
-                          width: 3,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          _avatarEmoji,
-                          style: const TextStyle(fontSize: 50),
-                        ),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF1E293B)),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Colors.black,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 20,
-                        ),
+                    const Expanded(
+                      child: Text(
+                        'Edit Profile',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Tap to change avatar',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Full Name
-              TextFormField(
-                controller: _fullNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person_outline),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your full name';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Email (read-only)
-              TextFormField(
-                controller: _emailController,
-                readOnly: true,
-                enabled: false,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email_outlined),
-                  helperText: 'Email cannot be changed',
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Phone Number
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number (Optional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.phone_outlined),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Bio
-              TextFormField(
-                controller: _bioController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Bio (Optional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.info_outline),
-                  hintText: 'Tell us about yourself...',
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Save Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _saveProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8D96F),
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.black)
-                      : const Text(
-                          'Save Changes',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        // Avatar card
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4)),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              GestureDetector(
+                                onTap: _showAvatarPicker,
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(3),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFFFBBF24)]),
+                                        boxShadow: [
+                                          BoxShadow(color: const Color(0xFF8B5CF6).withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 4)),
+                                        ],
+                                      ),
+                                      child: CircleAvatar(
+                                        radius: 38,
+                                        backgroundColor: Colors.white,
+                                        child: Text(_avatarEmoji, style: const TextStyle(fontSize: 36)),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF8B5CF6),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                        ),
+                                        child: const Icon(Icons.edit_rounded, color: Colors.white, size: 14),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text('Tap to change avatar', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        // Form fields card
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2)),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              TextFormField(
+                                controller: _fullNameController,
+                                decoration: _inputDecoration('Full Name', Icons.person_outline_rounded),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) return 'Please enter your full name';
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _emailController,
+                                readOnly: true,
+                                enabled: false,
+                                decoration: _inputDecoration('Email', Icons.email_outlined, helper: 'Email cannot be changed', enabled: false),
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _phoneController,
+                                keyboardType: TextInputType.phone,
+                                decoration: _inputDecoration('Phone Number (Optional)', Icons.phone_outlined),
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _bioController,
+                                maxLines: 3,
+                                decoration: _inputDecoration('Bio (Optional)', Icons.info_outline_rounded),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // Save button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _saveProfile,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF8B5CF6),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-        ),
         ),
       ),
     );

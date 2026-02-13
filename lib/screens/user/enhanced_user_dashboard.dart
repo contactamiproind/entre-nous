@@ -37,6 +37,18 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   int _userLevel = 1;
   int _selectedIndex = 0;
   int _totalPoints = 0;
+  String _lastLoginAgo = '';
+  
+  // Motivational quotes rotated by day
+  static const List<String> _quotes = [
+    'Every expert was once a beginner.',
+    'Small steps lead to big results.',
+    'Learning is a journey, not a destination.',
+    'Progress, not perfection.',
+    'You\'re doing great — keep going!',
+    'Knowledge is the best investment.',
+    'One question at a time, one win at a time.',
+  ];
   
   // Category progress tracking for Continue feature
   Map<String, Map<String, dynamic>> _categoryProgress = {}; // category -> {total, answered, firstUnansweredIndex}
@@ -89,6 +101,23 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
           _userName = profile['full_name'] ?? user.email?.split('@')[0] ?? 'Explorer';
           _userAvatar = profile['avatar_url'] ?? '👤';
           _userLevel = (profile['level'] as int?) ?? 1;
+          // Compute last login ago from updated_at
+          final updatedAt = profile['updated_at']?.toString();
+          if (updatedAt != null) {
+            final dt = DateTime.tryParse(updatedAt);
+            if (dt != null) {
+              final diff = DateTime.now().toUtc().difference(dt);
+              if (diff.inMinutes < 1) {
+                _lastLoginAgo = 'Just now';
+              } else if (diff.inMinutes < 60) {
+                _lastLoginAgo = '${diff.inMinutes}m ago';
+              } else if (diff.inHours < 24) {
+                _lastLoginAgo = '${diff.inHours}h ago';
+              } else {
+                _lastLoginAgo = '${diff.inDays}d ago';
+              }
+            }
+          }
         } else {
           _userName = user.email?.split('@')[0] ?? 'Explorer';
           _userLevel = 1;
@@ -460,11 +489,45 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
     }
   }
 
+  // Helper widget for home header stat chips (Completed, Points, Level)
+  Widget _buildHomeStatChip(IconData icon, String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color),
+              ),
+            ),
+            const SizedBox(height: 1),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 10, color: color.withOpacity(0.8), fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Helper widget for mini stat chips (Attempted, Correct, Score)
   Widget _buildMiniStat(IconData icon, String label, String value, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
         decoration: BoxDecoration(
           color: color.withOpacity(0.06),
           borderRadius: BorderRadius.circular(8),
@@ -472,25 +535,28 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
         ),
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 11, color: color),
-                const SizedBox(width: 3),
-                Flexible(
-                  child: Text(
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 11, color: color),
+                  const SizedBox(width: 3),
+                  Text(
                     label,
                     style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 2),
-            Text(
-              value,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color),
+              ),
             ),
           ],
         ),
@@ -785,8 +851,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
     return title;
   }
 
-  // Build level-grouped category cards for all assigned departments
-  List<Widget> _buildDynamicCategoryCards() {
+  // Build level-grouped category cards for assigned departments
+  // If currentLevelOnly is true, only show the current active level (for Home tab)
+  List<Widget> _buildDynamicCategoryCards({bool currentLevelOnly = false}) {
     final List<Widget> cards = [];
     if (_userDeptRecords.isEmpty) {
       cards.add(
@@ -828,9 +895,15 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
         ? maxLevelToShow
         : (maxCompletedLevel + 1).clamp(1, 4);
 
+    // Determine the current active level (first unlocked, not completed)
+    final int activeLevel = maxCompletedLevel + 1;
+
     for (int level = 1; level <= levelsToDisplay; level++) {
       final isLevelCompleted = level <= maxCompletedLevel;
       final isLevelUnlocked = level <= maxCompletedLevel + 1;
+
+      // If Home tab (currentLevelOnly), only show the active level
+      if (currentLevelOnly && level != activeLevel) continue;
 
       // Get assignments at this level
       final levelAssignments = _userDeptRecords.where((r) {
@@ -1047,14 +1120,14 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                                 '$answeredQ / $totalQ',
                                 const Color(0xFF1E293B),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 6),
                               _buildMiniStat(
                                 Icons.check_circle_outline,
                                 'Correct',
                                 '$correctQ / $totalQ',
                                 correctQ == totalQ && totalQ > 0 ? Colors.green : Colors.orange,
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 6),
                               _buildMiniStat(
                                 Icons.star_outline,
                                 'Score',
@@ -1183,8 +1256,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                 label: 'Home',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.map_rounded),
-                label: 'Categories',
+                icon: Icon(Icons.layers_rounded),
+                label: 'Levels',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.info_rounded),
@@ -1214,215 +1287,169 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
           child: Column(
             children: [
               // Header
-              Stack(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFFF4EF8B), // Yellow
-                        Color(0xFFE8D96F), // Darker yellow
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(28),
+                    bottomRight: Radius.circular(28),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Top row: avatar + name + level badge
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(2.5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFBBF24), Color(0xFFE8D96F)],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFBBF24).withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.white,
+                            child: Text(_userAvatar, style: const TextStyle(fontSize: 22)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _userName,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E293B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _lastLoginAgo.isNotEmpty
+                                    ? 'Welcome back!  ·  $_lastLoginAgo'
+                                    : 'Welcome back!',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(
+                            'L$_userLevel',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(40),
-                      bottomRight: Radius.circular(40),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFF4EF8B).withOpacity(0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
+                    const SizedBox(height: 14),
+                    // Motivational quote
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF9E6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFF4EF8B).withOpacity(0.5)),
                       ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Profile Picture
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFBBF24), // Yellow ring
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 10,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
+                      child: Row(
+                        children: [
+                          const Text('💡', style: TextStyle(fontSize: 16)),
+                          const SizedBox(width: 8),
+                          Expanded(
                             child: Text(
-                              _userAvatar,
-                              style: const TextStyle(fontSize: 30),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // User Info
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _userName,
+                              _quotes[DateTime.now().day % _quotes.length],
                               style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.black,
-                                letterSpacing: 0.5,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Welcome back!',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.black87,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                                color: Color(0xFF6B5A00),
+                                fontWeight: FontWeight.w500,
+                                height: 1.3,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.black.withOpacity(0.1)),
-                              ),
-                              child: Text(
-                                'Level $_userLevel',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Decorative circles
-                Positioned(
-                  top: -20,
-                  right: -20,
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 40,
-                  left: -30,
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-            // Stats Grid
-                  Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Builder(
-                          builder: (context) {
-                            // Calculate completed categories dynamically
-                            int completedCount = 0;
-                            _categoryProgress.forEach((_, value) {
-                              if ((value['progress'] ?? 0.0) >= 1.0) {
-                                completedCount++;
-                              }
-                            });
-                            
-                            return _buildStatCard(
-                              'QUIZ COMPLETED',
-                              '$completedCount',
-                              Colors.blue,
-                            );
-                          }
-                        ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            // Optional: Navigate to a detailed achievements page if it exists
-                          },
-                          borderRadius: BorderRadius.circular(24),
-                          child: _buildStatCard(
-                            'POINTS EARNED',
-                            '$_totalPoints',
-                            Colors.orange,
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(height: 14),
+                    // Stats row
+                    Builder(
+                      builder: (context) {
+                        int completedCount = 0;
+                        _categoryProgress.forEach((_, value) {
+                          if ((value['progress'] ?? 0.0) >= 1.0) completedCount++;
+                        });
+                        return Row(
+                          children: [
+                            _buildHomeStatChip(Icons.check_circle_rounded, 'Completed', '$completedCount', const Color(0xFF10B981)),
+                            const SizedBox(width: 10),
+                            _buildHomeStatChip(Icons.stars_rounded, 'Points', '$_totalPoints', const Color(0xFFF59E0B)),
+                            const SizedBox(width: 10),
+                            _buildHomeStatChip(Icons.emoji_events_rounded, 'Level', '$_userLevel', const Color(0xFF8B5CF6)),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
+
+              const SizedBox(height: 16),
             
-            // Learning Categories Section
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Departments',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF1E293B),
-                      letterSpacing: 0.5,
+              // Assignments Section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Assignments',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Complete levels in order to progress',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.black87,
+                    const SizedBox(height: 3),
+                    Text(
+                      'Complete levels in order to progress',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                   
-                  // Dynamically build category cards for all assigned departments
-                  ..._buildDynamicCategoryCards(),
+                  // Show only current active level on Home tab
+                  ..._buildDynamicCategoryCards(currentLevelOnly: true),
                   
                   // End Game Category (only shown if assigned)
                   if (_categoryProgress.containsKey('End Game')) ...[
@@ -1988,7 +2015,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   }
 
   // ============================================
-  // PATHWAY TAB
+  // LEVELS TAB — shows ALL levels (Home shows current only)
   // ============================================
   Widget _buildPathwayTab() {
     return Scaffold(
@@ -1996,10 +2023,10 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            setState(() => _selectedIndex = 0); // Navigate to Home tab
+            setState(() => _selectedIndex = 0);
           },
         ),
-        title: const Text('My Categories'),
+        title: const Text('All Levels'),
         backgroundColor: const Color(0xFFF4EF8B),
         foregroundColor: Colors.black,
       ),
@@ -2009,9 +2036,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFFFF9E6), // Very light yellow
-              Color(0xFFF4EF8B), // Main yellow #f4ef8b
-              Color(0xFFE8D96F), // Darker yellow
+              Color(0xFFFFF9E6),
+              Color(0xFFF4EF8B),
+              Color(0xFFE8D96F),
             ],
           ),
         ),
@@ -2019,30 +2046,42 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
           onRefresh: _loadData,
           child: ListView(
             padding: const EdgeInsets.all(20),
-          children: [
-            // Header
-            const Text(
-              'Learning Categories',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A2F4B),
+            children: [
+              const Text(
+                'All Levels',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A2F4B),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Complete categories in order to unlock the next one',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
+              const SizedBox(height: 4),
+              Text(
+                'View progress across all your levels',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
               ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Dynamically build category list items
-            ..._buildDynamicCategoryListItems(),
-          ],
-        ),
+              const SizedBox(height: 16),
+              // Reuse the same level-grouped cards as Home
+              ..._buildDynamicCategoryCards(),
+              // End Game
+              if (_categoryProgress.containsKey('End Game')) ...[
+                const SizedBox(height: 12),
+                _buildCategoryCard(
+                  category: 'End Game',
+                  icon: Icons.games_rounded,
+                  color: const Color(0xFF8B5CF6),
+                  description: 'Final Verification Challenge',
+                  progress: _categoryProgress['End Game']?['progress'] ?? 0.0,
+                  isLocked: false,
+                  isCurrent: false,
+                  onTap: () {
+                    // Navigate to End Game from Levels tab
+                    setState(() => _selectedIndex = 0);
+                  },
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -2234,33 +2273,41 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   Widget _buildInfoTab() {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            setState(() => _selectedIndex = 0); // Navigate to Home tab
+            setState(() => _selectedIndex = 0);
           },
         ),
-        title: const Text('Information', style: TextStyle(color: Colors.black)),
+        title: const Text('Game Guide'),
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: Colors.black,
       ),
-      extendBodyBehindAppBar: true,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFFFF9E6), // Very light yellow
-              Color(0xFFF4EF8B), // Main yellow #f4ef8b
-              Color(0xFFE8D96F), // Darker yellow
+              Color(0xFFFFF9E6),
+              Color(0xFFF4EF8B),
+              Color(0xFFE8D96F),
             ],
           ),
         ),
-        child: SafeArea(
-          child: ListView(
-        padding: const EdgeInsets.all(20),
+        child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
+          const Text(
+            'Game Guide',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A2F4B)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Everything you need to know',
+            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 16),
           // What Is This Game?
           _buildExpandableSection(
             icon: Icons.help_outline,
@@ -2384,7 +2431,6 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
           ),
           ],
         ),
-        ),
       ),
     );
   }
@@ -2445,38 +2491,38 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
     required String title,
     required Widget content,
   }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2)),
+        ],
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
           leading: Container(
-            width: 40,
-            height: 40,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: iconColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: iconColor, size: 24),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
           title: Text(
             title,
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1A2F4B),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E293B),
             ),
           ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: content,
-            ),
-          ],
+          children: [content],
         ),
       ),
     );
@@ -2624,156 +2670,278 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   // PROFILE TAB
   // ============================================
   Widget _buildProfileTab() {
+    // Compute quick stats for profile card
+    int completedCount = 0;
+    _categoryProgress.forEach((_, value) {
+      if ((value['progress'] ?? 0.0) >= 1.0) completedCount++;
+    });
+
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            setState(() => _selectedIndex = 0); // Navigate to Home tab
-          },
-        ),
-        title: const Text('Profile', style: TextStyle(color: Colors.black)),
-      ),
-      extendBodyBehindAppBar: true,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFFFF9E6), // Very light yellow
-              Color(0xFFF4EF8B), // Main yellow #f4ef8b
-              Color(0xFFE8D96F), // Darker yellow
+              Color(0xFFFFF9E6),
+              Color(0xFFF4EF8B),
+              Color(0xFFE8D96F),
             ],
           ),
         ),
         child: SafeArea(
           child: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.zero,
             children: [
-          // Profile Header
-          Center(
-            child: Column(
-              children: [
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6B5CE7).withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      _userAvatar,
-                      style: const TextStyle(fontSize: 50),
+              // Profile header card
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Avatar with gradient ring
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF8B5CF6), Color(0xFFFBBF24)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF8B5CF6).withOpacity(0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: CircleAvatar(
+                        radius: 38,
+                        backgroundColor: Colors.white,
+                        child: Text(_userAvatar, style: const TextStyle(fontSize: 36)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      _userName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _userEmail ?? '',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                    ),
+                    const SizedBox(height: 16),
+                    // Mini stats row
+                    Row(
+                      children: [
+                        _buildProfileStat('Level', '$_userLevel', const Color(0xFF8B5CF6)),
+                        Container(width: 1, height: 32, color: Colors.grey.shade200),
+                        _buildProfileStat('Points', '$_totalPoints', const Color(0xFFF59E0B)),
+                        Container(width: 1, height: 32, color: Colors.grey.shade200),
+                        _buildProfileStat('Completed', '$completedCount', const Color(0xFF10B981)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Menu items
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      _buildProfileOption(
+                        icon: Icons.history_rounded,
+                        title: 'Points History',
+                        subtitle: 'View your score breakdown',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: _showPointsHistory,
+                      ),
+                      _profileDivider(),
+                      _buildProfileOption(
+                        icon: Icons.person_outline_rounded,
+                        title: 'Edit Profile',
+                        subtitle: 'Update your name and avatar',
+                        color: const Color(0xFF3B82F6),
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+                          );
+                          if (result == true && mounted) _loadData();
+                        },
+                      ),
+                      _profileDivider(),
+                      _buildProfileOption(
+                        icon: Icons.settings_outlined,
+                        title: 'Settings',
+                        subtitle: 'App preferences',
+                        color: const Color(0xFF6B7280),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                          );
+                        },
+                      ),
+                      _profileDivider(),
+                      _buildProfileOption(
+                        icon: Icons.help_outline_rounded,
+                        title: 'Help & Support',
+                        subtitle: 'FAQs and contact us',
+                        color: const Color(0xFF10B981),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 15),
-                Text(
-                  _userName,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+              ),
+              const SizedBox(height: 12),
+              // Logout button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: _buildProfileOption(
+                    icon: Icons.logout_rounded,
+                    title: 'Logout',
+                    subtitle: 'Sign out of your account',
+                    color: Colors.red,
+                    onTap: _logout,
+                    isDestructive: true,
                   ),
                 ),
-                Text(
-                  _userEmail ?? '',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 24),
+            ],
           ),
-          const SizedBox(height: 30),
-        // Profile Options
-        _buildProfileOption(
-          icon: Icons.history_rounded,
-          title: 'Points History',
-          onTap: _showPointsHistory,
-        ),
-        _buildProfileOption(
-          icon: Icons.person_outline,
-          title: 'Edit Profile',
-          onTap: () async {
-            final result = await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const EditProfileScreen()),
-            );
-            // Reload data if profile was updated
-            if (result == true && mounted) {
-              _loadData();
-            }
-          },
-        ),
-
-        _buildProfileOption(
-          icon: Icons.settings_outlined,
-          title: 'Settings',
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SettingsScreen()),
-            );
-          },
-        ),
-        _buildProfileOption(
-          icon: Icons.help_outline,
-          title: 'Help & Support',
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
-            );
-          },
-        ),
-        _buildProfileOption(
-          icon: Icons.logout,
-          title: 'Logout',
-          onTap: _logout,
-          isDestructive: true,
-        ),
-        ],
-        ),
         ),
       ),
     );
+  }
+
+  Widget _buildProfileStat(String label, String value, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color),
+            ),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, color: Colors.grey[500], fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileDivider() {
+    return Divider(height: 1, thickness: 0.5, color: Colors.grey.shade200, indent: 56, endIndent: 16);
   }
 
   Widget _buildProfileOption({
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    String? subtitle,
+    Color color = const Color(0xFF6B5CE7),
     bool isDestructive = false,
   }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: ListTile(
-        leading: Icon(
-          icon,
-          color: isDestructive ? Colors.red : const Color(0xFF6B5CE7),
+    final effectiveColor = isDestructive ? Colors.red : color;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: effectiveColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 18, color: effectiveColor),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDestructive ? Colors.red : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey[300]),
+          ],
         ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: FontWeight.w500,
-            color: isDestructive ? Colors.red : Colors.black,
-          ),
-        ),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Colors.grey[400],
-        ),
-        onTap: onTap,
       ),
     );
   }
@@ -2872,35 +3040,34 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
     );
   }
 
-  // Show Points History Bottom Sheet
+  // Show Points History as full page
   Future<void> _showPointsHistory() async {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => _PointsHistorySheet(userId: _userId!, totalPoints: _totalPoints),
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _PointsHistoryPage(userId: _userId!, totalPoints: _totalPoints),
+      ),
     );
   }
 }
 
-class _PointsHistorySheet extends StatefulWidget {
+class _PointsHistoryPage extends StatefulWidget {
   final String userId;
   final int totalPoints;
 
-  const _PointsHistorySheet({required this.userId, required this.totalPoints});
+  const _PointsHistoryPage({required this.userId, required this.totalPoints});
 
   @override
-  State<_PointsHistorySheet> createState() => _PointsHistorySheetState();
+  State<_PointsHistoryPage> createState() => _PointsHistoryPageState();
 }
 
-class _PointsHistorySheetState extends State<_PointsHistorySheet> {
+class _PointsHistoryPageState extends State<_PointsHistoryPage> {
   bool _isLoading = true;
-  // Category -> List of items
   Map<String, List<Map<String, dynamic>>> _groupedPoints = {};
-  // Category -> Total points for that category
   Map<String, int> _categoryTotals = {};
-  
-  String? _selectedCategory; // Null means showing category list
+  String? _selectedCategory;
+
+  static const _generalCategories = ['Orientation', 'Process', 'SOP'];
 
   @override
   void initState() {
@@ -3036,105 +3203,90 @@ class _PointsHistorySheetState extends State<_PointsHistorySheet> {
     }
   }
 
+  /// Display name: "General (Orientation)" for general cats, base name for others
+  String _displayName(String base) {
+    if (_generalCategories.contains(base)) return 'General ($base)';
+    return base;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
-      builder: (context, scrollController) => Container(
+    final title = _selectedCategory != null
+        ? _displayName(_extractBase(_selectedCategory!))
+        : 'Points History';
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (_selectedCategory != null) {
+              setState(() => _selectedCategory = null);
+            } else {
+              Navigator.pop(context);
+            }
+          },
+        ),
+        title: Text(title),
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: Colors.black,
+      ),
+      body: Container(
         decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFF9E6), Color(0xFFF4EF8B), Color(0xFFE8D96F)],
+          ),
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Handle
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            
-            // Header
+            // Sub-header with points badge
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
               child: Row(
                 children: [
-                   if (_selectedCategory != null)
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios, size: 18),
-                      onPressed: () => setState(() => _selectedCategory = null),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  if (_selectedCategory != null) const SizedBox(width: 12),
-                  
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.history_rounded, color: Colors.orange),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _selectedCategory ?? 'Points History',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A2F4B),
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                          title,
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A2F4B)),
                         ),
-                        if (_selectedCategory != null)
-                          Text(
-                            '${_groupedPoints[_selectedCategory]?.length ?? 0} items',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _selectedCategory != null
+                              ? '${_groupedPoints[_selectedCategory]?.length ?? 0} questions'
+                              : 'Score breakdown by level',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        ),
                       ],
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.orange,
-                      borderRadius: BorderRadius.circular(20),
+                      color: const Color(0xFF10B981),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
                       '${_selectedCategory == null ? widget.totalPoints : (_categoryTotals[_selectedCategory] ?? 0)} pts',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
                     ),
                   ),
                 ],
               ),
             ),
-            const Divider(),
-            
+            const SizedBox(height: 8),
             // Content
             Expanded(
-              child: _isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : _selectedCategory == null 
-                    ? _buildCategoriesList(scrollController)
-                    : _buildDetailsList(scrollController),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _selectedCategory == null
+                      ? _buildCategoriesList(ScrollController())
+                      : _buildDetailsList(ScrollController()),
             ),
           ],
         ),
@@ -3142,113 +3294,164 @@ class _PointsHistorySheetState extends State<_PointsHistorySheet> {
     );
   }
 
+  /// Extract the level number from a key like "Orientation L1" → 1
+  int _extractLevel(String key) {
+    final match = RegExp(r'L(\d+)$').firstMatch(key);
+    return match != null ? int.parse(match.group(1)!) : 0;
+  }
+
+  /// Extract the base category from a key like "Orientation L1" → "Orientation"
+  String _extractBase(String key) {
+    return key.replaceAll(RegExp(r'\s*L\d+$'), '');
+  }
+
+  Color _catColor(String base) {
+    if (base == 'Orientation') return const Color(0xFFF4EF8B);
+    if (base == 'Process') return const Color(0xFF3B82F6);
+    if (base == 'SOP') return const Color(0xFF10B981);
+    if (base == 'Production') return const Color(0xFFEF4444);
+    if (base == 'End Game') return const Color(0xFF8B5CF6);
+    return const Color(0xFF6B7280);
+  }
+
+  IconData _catIcon(String base) {
+    if (base == 'Orientation') return Icons.school_rounded;
+    if (base == 'Process') return Icons.settings_rounded;
+    if (base == 'SOP') return Icons.description_rounded;
+    if (base == 'Production') return Icons.precision_manufacturing_rounded;
+    if (base == 'End Game') return Icons.games_rounded;
+    return Icons.folder_rounded;
+  }
+
   Widget _buildCategoriesList(ScrollController scrollController) {
     if (_groupedPoints.isEmpty) {
       return _buildEmptyState();
     }
-    
-    // Sort categories: End Game last, others alphabetically or by some custom order
-    // Order: Orientation, Process, SOP, others..., End Game
-    final categories = _groupedPoints.keys.toList();
-    categories.sort((a, b) {
-       if (a == 'End Game') return 1;
-       if (b == 'End Game') return -1;
-       if (a.startsWith('Orientation') && !b.startsWith('Orientation')) return -1;
-       if (b.startsWith('Orientation') && !a.startsWith('Orientation')) return 1;
-       if (a.startsWith('Process') && !b.startsWith('Process')) return -1;
-       if (b.startsWith('Process') && !a.startsWith('Process')) return 1;
-       return a.compareTo(b);
-    });
 
-    return ListView.separated(
+    // Group categories by level number
+    final Map<int, List<String>> levelGroups = {};
+    for (final key in _groupedPoints.keys) {
+      if (key == 'End Game') continue;
+      final lvl = _extractLevel(key);
+      levelGroups.putIfAbsent(lvl, () => []).add(key);
+    }
+
+    // Sort levels ascending
+    final sortedLevels = levelGroups.keys.toList()..sort();
+
+    // Sort categories within each level
+    const order = ['Orientation', 'Process', 'SOP'];
+    for (final lvl in sortedLevels) {
+      levelGroups[lvl]!.sort((a, b) {
+        final ai = order.indexOf(_extractBase(a));
+        final bi = order.indexOf(_extractBase(b));
+        if (ai >= 0 && bi >= 0) return ai.compareTo(bi);
+        if (ai >= 0) return -1;
+        if (bi >= 0) return 1;
+        return a.compareTo(b);
+      });
+    }
+
+    return ListView(
       controller: scrollController,
-      padding: const EdgeInsets.all(24),
-      itemCount: categories.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final category = categories[index];
-        final total = _categoryTotals[category] ?? 0;
-        final count = _groupedPoints[category]?.length ?? 0;
-        
-        Color catColor = const Color(0xFF1A2F4B); // Default
-        IconData catIcon = Icons.folder_rounded;
-        
-        // Match base category (keys are now "Orientation L1", "Process L2", etc.)
-        if (category.startsWith('Orientation')) { catColor = const Color(0xFFF4EF8B); catIcon = Icons.school_rounded; }
-        else if (category.startsWith('Process')) { catColor = const Color(0xFF3B82F6); catIcon = Icons.settings_rounded; }
-        else if (category.startsWith('SOP')) { catColor = const Color(0xFF10B981); catIcon = Icons.description_rounded; }
-        else if (category == 'End Game') { catColor = const Color(0xFF8B5CF6); catIcon = Icons.games_rounded; }
-        
-        return InkWell(
-          onTap: () {
-             setState(() => _selectedCategory = category);
-          },
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade200),
-              boxShadow: [
-                 BoxShadow(
-                   color: Colors.black.withOpacity(0.02),
-                   blurRadius: 4,
-                   offset: const Offset(0, 2),
-                 ),
-              ],
-            ),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        for (final lvl in sortedLevels) ...[
+          // Level header
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 10),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: category.startsWith('Orientation') ? catColor : catColor.withOpacity(0.1),
+                    gradient: const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)]),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(
-                    catIcon, 
-                    color: category.startsWith('Orientation') ? Colors.black.withOpacity(0.7) : catColor, 
-                    size: 24
-                  ),
+                  child: Text('Level $lvl', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        category,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      Text(
-                        '$count activities',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '+$total',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                    color: Color(0xFF10B981), // Green
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey.shade400),
+                const SizedBox(width: 10),
+                Expanded(child: Divider(color: Colors.grey.shade300, thickness: 0.5)),
+                const SizedBox(width: 10),
+                Builder(builder: (_) {
+                  final lvlTotal = levelGroups[lvl]!.fold<int>(0, (s, k) => s + (_categoryTotals[k] ?? 0));
+                  return Text('+$lvlTotal pts', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey[500]));
+                }),
               ],
             ),
           ),
-        );
-      },
+          // Categories in this level
+          for (final category in levelGroups[lvl]!) ...[
+            _buildCategoryRow(category),
+            const SizedBox(height: 8),
+          ],
+        ],
+        // End Game at the bottom
+        if (_groupedPoints.containsKey('End Game')) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 10),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text('End Game', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF8B5CF6))),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Divider(color: Colors.grey.shade300, thickness: 0.5)),
+              ],
+            ),
+          ),
+          _buildCategoryRow('End Game'),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCategoryRow(String category) {
+    final total = _categoryTotals[category] ?? 0;
+    final count = _groupedPoints[category]?.length ?? 0;
+    final base = category == 'End Game' ? 'End Game' : _extractBase(category);
+    final color = _catColor(base);
+    final icon = _catIcon(base);
+    final isOrientation = base == 'Orientation';
+
+    return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6, offset: const Offset(0, 2))],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: isOrientation ? color : color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: isOrientation ? Colors.black54 : color, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_displayName(base), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF1E293B))),
+                  Text('$count questions', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                ],
+              ),
+            ),
+            Text(
+              '+$total',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: total > 0 ? const Color(0xFF10B981) : Colors.grey),
+            ),
+          ],
+        ),
     );
   }
 
