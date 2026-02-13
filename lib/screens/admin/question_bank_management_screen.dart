@@ -882,43 +882,49 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
           child: Column(
         children: [
           // Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: const Color(0xFFF4EF8B),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.arrow_back),
-                          onPressed: widget.onBack,
-                        ),
-                        const Text(
-                          'Question Bank',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ],
+                    InkWell(
+                      onTap: widget.onBack,
+                      borderRadius: BorderRadius.circular(20),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.arrow_back, size: 20, color: Color(0xFF1A2F4B)),
+                      ),
                     ),
-                    FloatingActionButton(
-                      onPressed: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const AddQuestionScreen(),
-                          ),
-                        );
-                        _loadQuestions();
-                      },
-                      backgroundColor: const Color(0xFF3B82F6),
-                      child: const Icon(Icons.add, color: Colors.white),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Question Bank',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A2F4B),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      height: 32,
+                      width: 32,
+                      child: FloatingActionButton(
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AddQuestionScreen(),
+                            ),
+                          );
+                          _loadQuestions();
+                        },
+                        backgroundColor: const Color(0xFF3B82F6),
+                        elevation: 2,
+                        child: const Icon(Icons.add, color: Colors.white, size: 16),
+                      ),
                     ),
                   ],
                 ),

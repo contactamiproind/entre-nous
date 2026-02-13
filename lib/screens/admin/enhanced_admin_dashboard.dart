@@ -22,6 +22,12 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _pathwaysData = [];
   int _quizTimerSeconds = 30; // Default timer duration
+
+  // Insights data
+  List<Map<String, dynamic>> _recentActivity = [];
+  List<Map<String, dynamic>> _inactiveUsers = [];
+  List<Map<String, dynamic>> _levelCompletions = [];
+  int _totalQuestionsAnswered = 0;
   
   // Scoring thresholds (as percentages)
   double _fullPointsThreshold = 0.5;  // < 50% time = full points
@@ -33,6 +39,153 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
     _loadStats();
     _loadPathways();
     _loadSettings();
+    _loadInsights();
+  }
+
+  Future<void> _loadInsights() async {
+    try {
+      // Get all user profiles, sorted by most recently updated (proxy for last login)
+      final profiles = await Supabase.instance.client
+          .from('profiles')
+          .select('user_id, email, level, updated_at, created_at')
+          .eq('role', 'user')
+          .order('updated_at', ascending: false);
+
+      final profileList = List<Map<String, dynamic>>.from(profiles as List);
+
+      // Recent Activity: last 5 users by updated_at (most recent first)
+      final List<Map<String, dynamic>> recent = [];
+      for (final p in profileList.take(5)) {
+        final email = p['email']?.toString() ?? 'Unknown';
+        final level = p['level'] is int ? p['level'] as int : 1;
+        final updatedAt = p['updated_at']?.toString() ?? p['created_at']?.toString();
+        String timeAgo = '';
+        if (updatedAt != null) {
+          final dt = DateTime.tryParse(updatedAt);
+          if (dt != null) {
+            final diff = DateTime.now().difference(dt);
+            if (diff.inMinutes < 60) {
+              timeAgo = '${diff.inMinutes}m ago';
+            } else if (diff.inHours < 24) {
+              timeAgo = '${diff.inHours}h ago';
+            } else {
+              timeAgo = '${diff.inDays}d ago';
+            }
+          }
+        }
+        recent.add({'email': email, 'level': level, 'timeAgo': timeAgo});
+      }
+
+      // Total questions answered
+      int totalAnswered = 0;
+      try {
+        final allAnswered = await Supabase.instance.client
+            .from('usr_progress')
+            .select('id')
+            .eq('status', 'answered');
+        totalAnswered = (allAnswered as List).length;
+      } catch (e) {
+        debugPrint('Error loading total answered: $e');
+      }
+
+      // Needs Attention: users with assignments but no activity for 3+ days
+      final profileMap = <String, Map<String, dynamic>>{};
+      for (final p in profileList) {
+        final uid = p['user_id'];
+        if (uid != null) profileMap[uid.toString()] = p;
+      }
+
+      List allUsrDept = [];
+      try {
+        allUsrDept = await Supabase.instance.client
+            .from('usr_dept')
+            .select('user_id, last_activity_at, assigned_at');
+      } catch (e) {
+        debugPrint('Error loading usr_dept: $e');
+      }
+
+      // Get latest activity per user from usr_dept
+      final Map<String, String?> latestActivity = {};
+      for (final ud in allUsrDept) {
+        final uid = ud['user_id']?.toString();
+        if (uid == null) continue;
+        // Use last_activity_at, fall back to assigned_at
+        final la = ud['last_activity_at']?.toString() ?? ud['assigned_at']?.toString();
+        if (la != null) {
+          if (!latestActivity.containsKey(uid) || (latestActivity[uid] != null && la.compareTo(latestActivity[uid]!) > 0)) {
+            latestActivity[uid] = la;
+          }
+        } else if (!latestActivity.containsKey(uid)) {
+          latestActivity[uid] = null;
+        }
+      }
+
+      final List<Map<String, dynamic>> inactive = [];
+      for (final entry in latestActivity.entries) {
+        final profile = profileMap[entry.key];
+        if (profile == null || profile['email'] == null) continue;
+        final email = profile['email'].toString();
+        final level = profile['level'] is int ? profile['level'] as int : 1;
+        if (entry.value == null) {
+          inactive.add({'email': email, 'days': -1, 'level': level});
+        } else {
+          final lastActive = DateTime.tryParse(entry.value!);
+          if (lastActive != null) {
+            final daysSince = DateTime.now().difference(lastActive).inDays;
+            if (daysSince >= 3) {
+              inactive.add({'email': email, 'days': daysSince, 'level': level});
+            }
+          }
+        }
+      }
+      inactive.sort((a, b) => ((b['days'] as int?) ?? 0).compareTo((a['days'] as int?) ?? 0));
+
+      // Level Completions: one row per user, max completed_levels across all depts
+      List completedDepts = [];
+      try {
+        completedDepts = await Supabase.instance.client
+            .from('usr_dept')
+            .select('user_id, completed_levels')
+            .gt('completed_levels', 0)
+            .order('completed_levels', ascending: false);
+      } catch (e) {
+        debugPrint('Error loading level completions: $e');
+      }
+
+      // Aggregate: keep max completed_levels per user
+      final Map<String, int> userMaxLevel = {};
+      for (final d in completedDepts) {
+        final uid = d['user_id']?.toString();
+        if (uid == null) continue;
+        final cl = d['completed_levels'] is int ? d['completed_levels'] as int : 0;
+        if (!userMaxLevel.containsKey(uid) || cl > userMaxLevel[uid]!) {
+          userMaxLevel[uid] = cl;
+        }
+      }
+
+      final List<Map<String, dynamic>> completions = [];
+      for (final entry in userMaxLevel.entries) {
+        final profile = profileMap[entry.key];
+        if (profile == null) continue;
+        final email = profile['email']?.toString() ?? 'Unknown';
+        completions.add({
+          'email': email,
+          'completedLevels': entry.value,
+        });
+      }
+      completions.sort((a, b) => ((b['completedLevels'] as int?) ?? 0).compareTo((a['completedLevels'] as int?) ?? 0));
+
+      if (mounted) {
+        setState(() {
+          _recentActivity = recent;
+          _inactiveUsers = inactive;
+          _levelCompletions = completions;
+          _totalQuestionsAnswered = totalAnswered;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading insights: $e');
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -151,15 +304,21 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
         backgroundColor: Colors.transparent,
         extendBodyBehindAppBar: true,
         appBar: _selectedIndex == 0 ? AppBar(
-          title: const Text('Admin Dashboard'),
+          title: const Text(
+            'Admin Dashboard',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
           backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A2F4B),
           elevation: 0,
           automaticallyImplyLeading: false,
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadStats,
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed: () {
+                _loadStats();
+                _loadInsights();
+              },
             ),
             IconButton(
               icon: const Icon(Icons.settings),
@@ -274,223 +433,267 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Dashboard Overview',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
-            ),
-          ),
-          const SizedBox(height: 20),
-          
-          // New Stats Design (Single container with Row)
+          // Stats Row
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                // Users
-                _buildStatItem(
-                  'Users',
-                  _totalUsers.toString(),
-                  Icons.people,
-                  const Color(0xFF8B5CF6),
-                ),
-                
-                // Divider
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: Colors.grey.withOpacity(0.3),
-                ),
-                
-                // Departments
-                _buildStatItem(
-                  'Depts',
-                  _totalDepartments.toString(),
-                  Icons.alt_route,
-                  const Color(0xFFFBBF24),
-                ),
-                
-                 // Divider
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: Colors.grey.withOpacity(0.3),
-                ),
-                
-                // Enrolled
-                _buildStatItem(
-                  'Enrolled',
-                  _totalEnrolled.toString(),
-                  Icons.school,
-                  const Color(0xFFF9A8D4),
-                ),
+                _buildStatItem('Users', _totalUsers.toString(), Icons.people, const Color(0xFF8B5CF6)),
+                Container(width: 1, height: 36, color: Colors.grey.withOpacity(0.2)),
+                _buildStatItem('Depts', _totalDepartments.toString(), Icons.alt_route, const Color(0xFFFBBF24)),
+                Container(width: 1, height: 36, color: Colors.grey.withOpacity(0.2)),
+                _buildStatItem('Enrolled', _totalEnrolled.toString(), Icons.school, const Color(0xFFF9A8D4)),
+                Container(width: 1, height: 36, color: Colors.grey.withOpacity(0.2)),
+                _buildStatItem('Answered', _totalQuestionsAnswered.toString(), Icons.check_circle, const Color(0xFF10B981)),
               ],
             ),
           ),
-          
-          const SizedBox(height: 24),
-          const Text(
-            'Quick Actions',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+
+          const SizedBox(height: 16),
+
+          // Recent Logins
+          _buildSectionHeader('Recent Logins', Icons.login_rounded),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          // Quick Action Buttons - Vertical Stack
-          Column(
-            children: [
-              _buildActionButton(
-                'User Profile',
-                Icons.person_search_rounded,
-                const Color(0xFF42A5F5),
-                () => setState(() => _selectedIndex = 3), // Navigate to Users tab
-              ),
-              const SizedBox(height: 12),
-              _buildActionButton(
-                'Departments',
-                Icons.alt_route_rounded,
-                const Color(0xFFFFA726),
-                () => setState(() => _selectedIndex = 1), // Navigate to Department tab
-              ),
-              const SizedBox(height: 12),
-              _buildActionButton(
-                'Manage Question Bank',
-                Icons.quiz_rounded,
-                const Color(0xFFF4EF8B),
-                () => setState(() => _selectedIndex = 2), // Navigate to Q-Bank tab
-              ),
-              const SizedBox(height: 12),
-              _buildActionButton(
-                'End Game Configuration',
-                Icons.videogame_asset_rounded,
-                const Color(0xFFFF7043), // Deep Orange
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EndGameConfigScreen(
-                      onBack: () => Navigator.pop(context),
+            child: _recentActivity.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(
+                      child: Text('No users yet', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
                     ),
+                  )
+                : Column(
+                    children: _recentActivity.map((user) {
+                      final email = user['email']?.toString() ?? '';
+                      final shortEmail = email.contains('@') ? email.split('@')[0] : email;
+                      final level = user['level'] is int ? user['level'] as int : 1;
+                      final timeAgo = user['timeAgo']?.toString() ?? '';
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: const Color(0xFF8B5CF6).withOpacity(0.12),
+                              child: const Icon(Icons.person, size: 14, color: Color(0xFF8B5CF6)),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(shortEmail, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1A2F4B))),
+                            ),
+                            if (timeAgo.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Text(timeAgo, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+                              ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A2F4B).withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text('L$level', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Color(0xFF1A2F4B))),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   ),
-                ),
-              ),
-            ],
           ),
+
+          // Level Completions
+          if (_levelCompletions.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildSectionHeader('Level Completions', Icons.emoji_events_rounded),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
+                ],
+              ),
+              child: Column(
+                children: _levelCompletions.take(5).map((item) {
+                  final email = item['email']?.toString() ?? '';
+                  final shortEmail = email.contains('@') ? email.split('@')[0] : email;
+                  final completed = item['completedLevels'] is int ? item['completedLevels'] as int : 0;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: const Color(0xFFFBBF24).withOpacity(0.15),
+                          child: const Icon(Icons.emoji_events, size: 14, color: Color(0xFFFBBF24)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(shortEmail, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1A2F4B))),
+                        ),
+                        _buildLevelDots(completed),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+
+          // Needs Attention: only show if there are inactive users
+          if (_inactiveUsers.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildSectionHeader('Needs Attention', Icons.warning_amber_rounded),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
+                ],
+              ),
+              child: Column(
+                children: _inactiveUsers.take(5).map((user) {
+                  final email = user['email']?.toString() ?? '';
+                  final shortEmail = email.contains('@') ? email.split('@')[0] : email;
+                  final days = user['days'] is int ? user['days'] as int : 0;
+                  final level = user['level'] is int ? user['level'] as int : 1;
+                  final daysText = days < 0 ? 'Never started' : 'Inactive $days days';
+                  final urgency = days < 0 || days >= 7 ? Colors.red : Colors.orange;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: urgency.withOpacity(0.12),
+                          child: Icon(Icons.schedule, size: 14, color: urgency),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(shortEmail, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1A2F4B))),
+                              Text(daysText, style: TextStyle(fontSize: 10, color: urgency, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A2F4B).withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text('L$level', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Color(0xFF1A2F4B))),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+  Widget _buildLevelDots(int completed) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 1; i <= 4; i++)
+          Padding(
+            padding: const EdgeInsets.only(left: 3),
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: i <= completed ? const Color(0xFF10B981) : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Center(
+                child: Text(
+                  '$i',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: i <= completed ? Colors.white : Colors.grey,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon) {
     return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A2F4B),
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+        Icon(icon, size: 16, color: const Color(0xFF1A2F4B)),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B)),
         ),
       ],
     );
   }
 
-  Widget _buildActionButton(
-    String label,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return SizedBox(
-      width: double.infinity,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
+  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Colors.grey.withOpacity(0.2),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: color.withOpacity(0.1),
+            shape: BoxShape.circle,
           ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                color: Colors.grey.shade400,
-                size: 18,
-              ),
-            ],
-          ),
+          child: Icon(icon, color: color, size: 16),
         ),
-      ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B)),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 10, color: Colors.grey[600], fontWeight: FontWeight.w500),
+        ),
+      ],
     );
   }
 
@@ -505,40 +708,38 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
 
   Widget _buildSettingsScreen() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.black),
-                onPressed: () => Navigator.canPop(context) ? Navigator.pop(context) : setState(() => _selectedIndex = 0),
-              ),
-              const Text(
-                'Quiz Settings',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
+              InkWell(
+                onTap: () => Navigator.canPop(context) ? Navigator.pop(context) : setState(() => _selectedIndex = 0),
+                borderRadius: BorderRadius.circular(20),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.arrow_back, size: 20, color: Color(0xFF1A2F4B)),
                 ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Settings',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B)),
               ),
             ],
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
           
-          // Timer Configuration Card
+          // Question Timer Card
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(10),
               boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2)),
               ],
             ),
             child: Column(
@@ -547,75 +748,37 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFBBF24).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(
-                        Icons.timer,
-                        color: Color(0xFFFBBF24),
-                        size: 28,
-                      ),
+                      child: const Icon(Icons.timer, color: Color(0xFFFBBF24), size: 20),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 10),
                     const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Quiz Timer',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A2F4B),
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Set time limit for each question',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ),
+                          Text('Question Timer', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B))),
+                          Text('Time limit per question', style: TextStyle(fontSize: 11, color: Colors.grey)),
                         ],
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                
-                // Timer Duration Slider
-                Row(
-                  children: [
-                    const Text(
-                      'Duration:',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A2F4B),
-                      ),
-                    ),
-                    const Spacer(),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFBBF24).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
+                        color: const Color(0xFFFBBF24).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        _quizTimerSeconds == 0 ? 'Disabled' : '$_quizTimerSeconds seconds',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A2F4B),
-                        ),
+                        _quizTimerSeconds == 0 ? 'Off' : '${_quizTimerSeconds}s',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B)),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 Slider(
                   value: _quizTimerSeconds.toDouble(),
@@ -624,40 +787,31 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                   divisions: 24,
                   activeColor: const Color(0xFFFBBF24),
                   inactiveColor: Colors.grey[300],
-                  label: _quizTimerSeconds == 0 ? 'Disabled' : '$_quizTimerSeconds s',
-                  onChanged: (value) {
-                    setState(() {
-                      _quizTimerSeconds = value.toInt();
-                    });
-                  },
+                  label: _quizTimerSeconds == 0 ? 'Off' : '$_quizTimerSeconds s',
+                  onChanged: (value) => setState(() => _quizTimerSeconds = value.toInt()),
                 ),
                 
-                const SizedBox(height: 16),
-                
-                // Quick preset buttons
+                // Preset buttons
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
                     _buildPresetButton('15s', 15),
                     _buildPresetButton('30s', 30),
                     _buildPresetButton('45s', 45),
                     _buildPresetButton('60s', 60),
                     _buildPresetButton('90s', 90),
-                    _buildPresetButton('Disable', 0),
+                    _buildPresetButton('Off', 0),
                   ],
                 ),
                 
-                const SizedBox(height: 40),
-                
-                const SizedBox(height: 40),
+                const SizedBox(height: 16),
                 
                 // Save Button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () async {
-                      // Save settings to SYSTEM_CONFIG department
                       try {
                         setState(() => _isLoading = true);
                         
@@ -668,7 +822,6 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                           'updated_at': DateTime.now().toIso8601String(),
                         };
 
-                        // Check if SYSTEM_CONFIG exists
                         final existing = await Supabase.instance.client
                             .from('departments')
                             .select('id')
@@ -677,16 +830,11 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                             .maybeSingle();
 
                         if (existing != null) {
-                          // Update
                           await Supabase.instance.client
                               .from('departments')
-                              .update({
-                                'levels': [settings], // Store in levels column
-                                'description': 'System Configuration - Do not delete',
-                              })
+                              .update({'levels': [settings], 'description': 'System Configuration - Do not delete'})
                               .eq('id', existing['id']);
                         } else {
-                          // Create
                           await Supabase.instance.client
                               .from('departments')
                               .insert({
@@ -700,18 +848,10 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
 
                         if (mounted) {
                           setState(() => _isLoading = false);
-                          final fullPct = (_fullPointsThreshold * 100).toInt();
-                          final halfPct = (_halfPointsThreshold * 100).toInt();
-                          
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                _quizTimerSeconds == 0
-                                    ? 'Quiz timer disabled (Saved)'
-                                    : 'Settings saved!\nTimer: $_quizTimerSeconds sec',
-                              ),
+                              content: Text(_quizTimerSeconds == 0 ? 'Question timer disabled' : 'Timer set to $_quizTimerSeconds seconds'),
                               backgroundColor: const Color(0xFF3B82F6),
-                              duration: const Duration(seconds: 3),
                             ),
                           );
                         }
@@ -720,29 +860,69 @@ class _EnhancedAdminDashboardState extends State<EnhancedAdminDashboard> {
                         if (mounted) {
                           setState(() => _isLoading = false);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Error saving settings: $e')),
+                            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
                           );
                         }
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E293B),
+                      backgroundColor: const Color(0xFF1A2F4B),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    child: const Text(
-                      'Save Settings',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: const Text('Save Timer Settings', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
+            ),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // End Game Configuration Link
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2)),
+              ],
+            ),
+            child: InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EndGameConfigScreen(onBack: () => Navigator.pop(context)),
+                ),
+              ),
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF7043).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.videogame_asset_rounded, color: Color(0xFFFF7043), size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('End Game Configuration', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B))),
+                          Text('Manage end game levels and items', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

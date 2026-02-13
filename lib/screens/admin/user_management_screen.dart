@@ -334,32 +334,38 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           child: Column(
         children: [
           // Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: const Color(0xFFF4EF8B),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: widget.onBack,
-                    ),
-                    const Text(
-                      'User Management',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ],
+                InkWell(
+                  onTap: widget.onBack,
+                  borderRadius: BorderRadius.circular(20),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.arrow_back, size: 20, color: Color(0xFF1A2F4B)),
+                  ),
                 ),
-                FloatingActionButton(
-                  onPressed: _showAddUserDialog,
-                  backgroundColor: const Color(0xFF3B82F6),
-                  child: const Icon(Icons.person_add, color: Colors.white),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'User Management',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A2F4B),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 32,
+                  width: 32,
+                  child: FloatingActionButton(
+                    onPressed: _showAddUserDialog,
+                    backgroundColor: const Color(0xFF3B82F6),
+                    elevation: 2,
+                    child: const Icon(Icons.person_add, color: Colors.white, size: 16),
+                  ),
                 ),
               ],
             ),
@@ -369,94 +375,150 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _users.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           'No users found',
-                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                          style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                         ),
                       )
                     : RefreshIndicator(
                         onRefresh: _loadUsers,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           itemCount: _users.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 6),
                           itemBuilder: (context, index) {
                             final user = _users[index];
                             final isAdmin = user['role'] == 'admin';
+                            final email = user['email'] ?? 'No email';
+                            final level = user['level'] as int? ?? 1;
                             
                             return Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.all(16),
-                                onTap: () {
-                                  Navigator.push(
+                              margin: EdgeInsets.zero,
+                              elevation: 0.5,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () async {
+                                  await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => UserProfileDetailScreen(
                                         userId: user['user_id'],
-                                        userEmail: user['email'] ?? 'Unknown',
+                                        userEmail: email,
                                       ),
                                     ),
                                   );
+                                  _loadUsers();
                                 },
-                                leading: CircleAvatar(
-                                  backgroundColor: isAdmin
-                                      ? const Color(0xFFF08A7E)
-                                      : const Color(0xFF6BCB9F),
-                                  child: Icon(
-                                    isAdmin ? Icons.admin_panel_settings : Icons.person,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                title: Text(
-                                  user['email'] ?? 'No email',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isAdmin
-                                            ? const Color(0xFFF08A7E).withOpacity(0.2)
-                                            : const Color(0xFF6BCB9F).withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        isAdmin ? 'Admin' : 'User',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      // Avatar
+                                      CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: isAdmin
+                                            ? const Color(0xFFF08A7E).withOpacity(0.15)
+                                            : const Color(0xFF6BCB9F).withOpacity(0.15),
+                                        child: Icon(
+                                          isAdmin ? Icons.admin_panel_settings : Icons.person,
+                                          size: 16,
                                           color: isAdmin
                                               ? const Color(0xFFF08A7E)
                                               : const Color(0xFF6BCB9F),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, color: Colors.blue),
-                                      onPressed: () => _showEditUserDialog(user),
-                                      tooltip: 'Edit',
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => _deleteUser(user),
-                                      tooltip: 'Delete',
-                                    ),
-                                  ],
+                                      const SizedBox(width: 10),
+                                      // Email + badges
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              email,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                                color: Color(0xFF1A2F4B),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                // Role badge
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: isAdmin
+                                                        ? const Color(0xFFF08A7E).withOpacity(0.12)
+                                                        : const Color(0xFF6BCB9F).withOpacity(0.12),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    isAdmin ? 'Admin' : 'User',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: isAdmin
+                                                          ? const Color(0xFFF08A7E)
+                                                          : const Color(0xFF6BCB9F),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                // Level badge
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF1A2F4B).withOpacity(0.08),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    'Level $level',
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Color(0xFF1A2F4B),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Action buttons
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          InkWell(
+                                            onTap: () => _showEditUserDialog(user),
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: const Padding(
+                                              padding: EdgeInsets.all(6),
+                                              child: Icon(Icons.edit_outlined, size: 16, color: Colors.blue),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 2),
+                                          InkWell(
+                                            onTap: () => _deleteUser(user),
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(6),
+                                              child: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      // Chevron
+                                      Icon(Icons.chevron_right, size: 16, color: Colors.grey[400]),
+                                    ],
+                                  ),
                                 ),
                               ),
                             );

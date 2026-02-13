@@ -582,816 +582,476 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     super.dispose();
   }
 
+  /// Compact input decoration matching our standard
+  InputDecoration _inputDeco(String label, {IconData? icon, String? suffix, String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
+      hintText: hint,
+      hintStyle: TextStyle(fontSize: 11, color: Colors.grey[400]),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF3B82F6))),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      isDense: true,
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.7),
+      prefixIcon: icon != null ? Icon(icon, size: 16, color: const Color(0xFF1A2F4B)) : null,
+      prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      suffixText: suffix,
+      suffixStyle: const TextStyle(fontSize: 11, color: Color(0xFF1A2F4B)),
+    );
+  }
+
+  /// Compact section header
+  Widget _sectionHeader(String title, {Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 6),
+      child: Row(
+        children: [
+          Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1A2F4B))),
+          const Spacer(),
+          if (trailing != null) trailing,
+        ],
+      ),
+    );
+  }
+
+  /// Small add button
+  Widget _addButton(String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3B82F6),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.add, size: 12, color: Colors.white),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4EF8B), // Set yellow background for continuity
-      appBar: AppBar(
-        title: const Text('Add New Question'),
-        backgroundColor: const Color(0xFFF4EF8B),
-        foregroundColor: Colors.black,
-        elevation: 0,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFFFF9E6), // Very light yellow
-              Color(0xFFF4EF8B), // Main yellow #f4ef8b
-              Color(0xFFE8D96F), // Darker yellow
-            ],
-          ),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFF9E6), Color(0xFFF4EF8B), Color(0xFFE8D96F)],
         ),
-        child: _isLoadingPathways
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                            // Department Selection
-                            DropdownButtonFormField<Pathway>(
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                labelText: 'Select Department',
-                                border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(Icons.route),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.6),
-                              ),
-                              value: _selectedPathway,
-                              items: _pathways.map((pathway) {
-                                return DropdownMenuItem(
-                                  value: pathway,
-                                  child: Text(
-                                    pathway.displayName,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (value != null) _loadLevels(value);
-                              },
-                              validator: (v) => v == null ? 'Required' : null,
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Level Selection
-                            if (_selectedPathway != null)
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _isLoadingLevels
-                                      ? const Center(child: Padding(
-                                          padding: EdgeInsets.all(8.0),
-                                          child: CircularProgressIndicator(),
-                                        ))
-                                      : _levels.isNotEmpty 
-                                          ? DropdownButtonFormField<PathwayLevel>(
-                                              isExpanded: true,
-                                              decoration: InputDecoration(
-                                                labelText: 'Select Level',
-                                                border: const OutlineInputBorder(),
-                                                prefixIcon: const Icon(Icons.layers),
-                                                filled: true,
-                                                fillColor: Colors.white.withOpacity(0.6),
-                                              ),
-                                              value: _selectedLevel,
-                                              hint: const Text('Tap to select level'),
-                                              items: _levels.map((level) {
-                                                return DropdownMenuItem<PathwayLevel>(
-                                                  value: level,
-                                                  child: Text(
-                                                    '${level.levelNumber} - ${level.levelName}',
-                                                    overflow: TextOverflow.ellipsis,
-                                                    maxLines: 1,
-                                                  ),
-                                                );
-                                              }).toList(),
-                                              onChanged: (value) {
-                                                debugPrint("Level selected: ${value?.levelName}");
-                                                setState(() => _selectedLevel = value);
-                                              },
-                                              validator: (v) => v == null ? 'Required' : null,
-                                            )
-                                          : const SizedBox.shrink(),
-                                ],
-                              ),
-                            const SizedBox(height: 16),
-
-
-                            // Question Type Dropdown
-                            DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(Icons.quiz),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.6), // Consistent translucency
-                              ),
-                              value: _questionType,
-                              hint: const Text('Question Type'),
-                              items: [
-                                DropdownMenuItem(
-                                  value: 'card_match',
-                                  child: Text('Card Match Game'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'multiple_choice',
-                                  child: Text('Multiple Choice'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'match_following',
-                                  child: Text('Match the Following'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'scenario_decision',
-                                  child: Text('Scenario Decision'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'sequence_builder',
-                                  child: Text('Sequence Builder'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'simulation',
-                                  child: Text('Budget Simulation'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _questionType = value;
-                                    // Initialize sequence builder with 3 default sentences
-                                    if (value == 'sequence_builder' && _sequenceSentences.isEmpty) {
-                                      for (int i = 0; i < 3; i++) {
-                                        _sequenceSentences.add({
-                                          'id': i + 1,
-                                          'controller': TextEditingController(),
-                                          'position': i + 1,
-                                        });
-                                      }
-                                    }
-                                    // Initialize budget simulation with 3 default departments
-                                    if (value == 'simulation' && _budgetDepartments.isEmpty) {
-                                      for (int i = 0; i < 3; i++) {
-                                        _budgetDepartments.add({
-                                          'id': i + 1,
-                                          'name': TextEditingController(),
-                                          'amount': TextEditingController(),
-                                        });
-                                      }
-                                    }
-                                  });
-                                }
-                              },
-                              validator: (value) {
-                                if (value == null) {
-                                  return 'Please select a question type';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Level Dropdown
-                            DropdownButtonFormField<int>(
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                labelText: 'Level',
-                                border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(Icons.stairs),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.6),
-                              ),
-                              value: _selectedQuestionLevel,
-                              items: const [
-                                DropdownMenuItem(value: 1, child: Text('Level 1 (Easy)')),
-                                DropdownMenuItem(value: 2, child: Text('Level 2 (Medium)')),
-                                DropdownMenuItem(value: 3, child: Text('Level 3 (Hard)')),
-                                DropdownMenuItem(value: 4, child: Text('Level 4 (Expert)')),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _selectedQuestionLevel = value;
-                                  });
-                                }
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Points Input
-                            TextFormField(
-                              controller: _pointsController,
-                              decoration: InputDecoration(
-                                labelText: 'Points (Score)',
-                                border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(Icons.score),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.6),
-                                suffixText: 'pts',
-                              ),
-                              keyboardType: TextInputType.number,
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Required';
-                                if (int.tryParse(v) == null) return 'Must be a number';
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Title (for all question types)
-                            TextFormField(
-                              controller: _titleController,
-                              decoration: InputDecoration(
-                                labelText: 'Title',
-                                border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(Icons.title),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.6),
-                              ),
-                              maxLines: _questionType == 'sequence_builder' ? 1 : null,
-                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                            ),
-                            const SizedBox(height: 8),
-
-                            // Description (for all question types)
-                            TextFormField(
-                              controller: _descriptionController,
-                              decoration: InputDecoration(
-                                labelText: 'Description',
-                                border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(Icons.description),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.6),
-                              ),
-                              maxLines: _questionType == 'sequence_builder' ? 1 : 3,
-                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                            ),
-                            const SizedBox(height: 8),
-
-                    // Conditional UI based on question type
-                    if (_questionType == 'multiple_choice') ...[
-                      // Options
-                      const Text(
-                        'Options',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Compact header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    InkWell(
+                      onTap: () => Navigator.pop(context),
+                      borderRadius: BorderRadius.circular(20),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.arrow_back, size: 20, color: Color(0xFF1A2F4B)),
                       ),
-                      const SizedBox(height: 12),
-                      ...List.generate(4, (index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              Radio<int>(
-                                value: index,
-                                groupValue: _correctDisplayIndex,
-                                onChanged: (val) {
-                                  setState(() => _correctDisplayIndex = val!);
-                                },
-                                activeColor: Colors.green,
-                              ),
-                              Expanded(
-                                child: TextFormField(
-                                  controller: _optionControllers[index],
-                                  decoration: InputDecoration(
-                                    labelText: 'Option ${index + 1}',
-                                    border: const OutlineInputBorder(),
-                                  ),
-                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Select the correct answer by clicking the radio button',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ] else if (_questionType == 'scenario_decision') ...[
-                      // Scenario Decision UI
-                      TextFormField(
-                        controller: _titleController,
-                        decoration: const InputDecoration(
-                          labelText: 'Scenario Title',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.psychology),
-                        ),
-                        maxLines: 3,
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Description
-                      TextFormField(
-                        controller: _descriptionController,
-                        decoration: const InputDecoration(
-                          labelText: 'Description',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.description),
-                        ),
-                        maxLines: 3,
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      const Text(
-                        'Decision Options',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ...List.generate(4, (index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              Radio<int>(
-                                value: index,
-                                groupValue: _correctDisplayIndex,
-                                onChanged: (val) {
-                                  setState(() => _correctDisplayIndex = val!);
-                                },
-                                activeColor: Colors.green,
-                              ),
-                              Expanded(
-                                child: TextFormField(
-                                  controller: _optionControllers[index],
-                                  decoration: InputDecoration(
-                                    labelText: 'Option ${index + 1}',
-                                    border: const OutlineInputBorder(),
-                                  ),
-                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Select the best decision (correct answer)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ] else if (_questionType == 'card_match') ...[
-                      // Card Match (Flip Card Memory Game) UI
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Card Pairs',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (_cardPairs.length < 8)
-                            ElevatedButton.icon(
-                              onPressed: _addCardPair,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add Pair'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF3B82F6),
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ...List.generate(_cardPairs.length, (index) {
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          elevation: 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Pair ${index + 1}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                    if (_cardPairs.length > 3)
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () => _removeCardPair(index),
-                                        tooltip: 'Remove pair',
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _cardPairs[index]['card1'],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Card 1 (e.g., 🥑 Avocado Toast)',
-                                    border: OutlineInputBorder(),
-                                    hintText: 'Enter text or emoji',
-                                  ),
-                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _cardPairs[index]['card2'],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Card 2 (e.g., Healthy Breakfast)',
-                                    border: OutlineInputBorder(),
-                                    hintText: 'Enter matching text',
-                                  ),
-                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Add 3-8 pairs. Players flip cards to find matching pairs by memory.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ] else if (_questionType == 'sequence_builder') ...[
-                      // Sequence Builder UI
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Sentences (in correct order)',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (_sequenceSentences.length < 9)
-                            ElevatedButton.icon(
-                              onPressed: _addSequenceSentence,
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Add'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF3B82F6),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      ...List.generate(_sequenceSentences.length, (index) {
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          elevation: 1,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF00BCD4),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _sequenceSentences[index]['controller'],
-                                    decoration: InputDecoration(
-                                      labelText: 'Sentence ${index + 1}',
-                                      border: const OutlineInputBorder(),
-                                      hintText: 'Enter sentence',
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                      isDense: true,
-                                    ),
-                                    maxLines: 1,
-                                    validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                                  ),
-                                ),
-                                if (_sequenceSentences.length > 3)
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                    onPressed: () => _removeSequenceSentence(index),
-                                    tooltip: 'Remove',
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Add 3-9 sentences in order. Users drag numbers to match.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ] else if (_questionType == 'simulation') ...[
-                      // Budget Simulation UI
-                      const Text(
-                        'Budget Configuration',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      // Total Budget Field
-                      TextFormField(
-                        controller: _totalBudgetController,
-                        decoration: const InputDecoration(
-                          labelText: 'Total Budget',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.attach_money),
-                          hintText: '10000',
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Required';
-                          if (int.tryParse(v.trim()) == null) return 'Must be a number';
-                          return null;
-                        },
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Departments Header
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Departments',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (_budgetDepartments.length < 10)
-                            ElevatedButton.icon(
-                              onPressed: _addBudgetDepartment,
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Add Department'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF3B82F6),
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Department Cards
-                      ...List.generate(_budgetDepartments.length, (index) {
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          elevation: 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Department ${index + 1}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                    if (_budgetDepartments.length > 2)
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () => _removeBudgetDepartment(index),
-                                        tooltip: 'Remove department',
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _budgetDepartments[index]['name'],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Department Name',
-                                    border: OutlineInputBorder(),
-                                    hintText: 'e.g., Marketing, HR, IT',
-                                    prefixIcon: Icon(Icons.business),
-                                  ),
-                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _budgetDepartments[index]['amount'],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Correct Amount',
-                                    border: OutlineInputBorder(),
-                                    hintText: 'e.g., 2000',
-                                    prefixIcon: Icon(Icons.money),
-                                  ),
-                                  keyboardType: TextInputType.number,
-                                  validator: (v) {
-                                    if (v == null || v.trim().isEmpty) return 'Required';
-                                    if (int.tryParse(v.trim()) == null) return 'Must be a number';
-                                    return null;
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                      
-                      const SizedBox(height: 8),
-                      
-                      // Tips Box
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.info_outline, size: 20, color: Colors.blue.shade700),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Budget Simulation Tips',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '• Department amounts must equal total budget\n'
-                              '• Add 2-10 departments\n'
-                              '• Players drag budget amounts to departments',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      // Match the Following UI
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Match Pairs',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (_matchPairs.length < 6)
-                            ElevatedButton.icon(
-                              onPressed: _addMatchPair,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add Pair'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF3B82F6),
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ...List.generate(_matchPairs.length, (index) {
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Pair ${index + 1}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    if (_matchPairs.length > 3)
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () => _removeMatchPair(index),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _matchPairs[index]['left'],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Left Item',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.arrow_forward),
-                                  ),
-                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _matchPairs[index]['right'],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Right Item (Match)',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.check_circle_outline),
-                                  ),
-                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Add 3-6 pairs. Users will match left items to right items.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 40),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _isSaving ? null : _saveQuestion,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE8D96F),
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: _isSaving
-                            ? const CircularProgressIndicator(color: Colors.black)
-                            : const Text(
-                                'Save Question',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                              ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Add Question',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B)),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
+              // Form
+              Expanded(
+                child: _isLoadingPathways
+                    ? const Center(child: CircularProgressIndicator())
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Row 1: Department + Type
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonFormField<Pathway>(
+                                      isExpanded: true,
+                                      decoration: _inputDeco('Department', icon: Icons.business),
+                                      style: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
+                                      value: _selectedPathway,
+                                      items: _pathways.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName, overflow: TextOverflow.ellipsis, maxLines: 1, style: const TextStyle(fontSize: 12)))).toList(),
+                                      onChanged: (v) { if (v != null) _loadLevels(v); },
+                                      validator: (v) => v == null ? 'Required' : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      isExpanded: true,
+                                      decoration: _inputDeco('Type', icon: Icons.quiz),
+                                      style: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
+                                      value: _questionType,
+                                      hint: const Text('Select', style: TextStyle(fontSize: 12)),
+                                      items: const [
+                                        DropdownMenuItem(value: 'multiple_choice', child: Text('Multiple Choice', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 'match_following', child: Text('Match Following', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 'card_match', child: Text('Card Match', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 'scenario_decision', child: Text('Scenario Decision', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 'sequence_builder', child: Text('Sequence Builder', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 'simulation', child: Text('Budget Simulation', style: TextStyle(fontSize: 12))),
+                                      ],
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setState(() {
+                                            _questionType = value;
+                                            if (value == 'sequence_builder' && _sequenceSentences.isEmpty) {
+                                              for (int i = 0; i < 3; i++) {
+                                                _sequenceSentences.add({'id': i + 1, 'controller': TextEditingController(), 'position': i + 1});
+                                              }
+                                            }
+                                            if (value == 'simulation' && _budgetDepartments.isEmpty) {
+                                              for (int i = 0; i < 3; i++) {
+                                                _budgetDepartments.add({'id': i + 1, 'name': TextEditingController(), 'amount': TextEditingController()});
+                                              }
+                                            }
+                                          });
+                                        }
+                                      },
+                                      validator: (v) => v == null ? 'Required' : null,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+
+                              // Row 2: Level + Points
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonFormField<int>(
+                                      isExpanded: true,
+                                      decoration: _inputDeco('Level', icon: Icons.stairs),
+                                      style: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
+                                      value: _selectedQuestionLevel,
+                                      items: const [
+                                        DropdownMenuItem(value: 1, child: Text('L1 Easy', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 2, child: Text('L2 Medium', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 3, child: Text('L3 Hard', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 4, child: Text('L4 Expert', style: TextStyle(fontSize: 12))),
+                                      ],
+                                      onChanged: (v) { if (v != null) setState(() => _selectedQuestionLevel = v); },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  SizedBox(
+                                    width: 100,
+                                    child: TextFormField(
+                                      controller: _pointsController,
+                                      decoration: _inputDeco('Points', icon: Icons.star, suffix: 'pts'),
+                                      style: const TextStyle(fontSize: 12),
+                                      keyboardType: TextInputType.number,
+                                      validator: (v) {
+                                        if (v == null || v.trim().isEmpty) return 'Required';
+                                        if (int.tryParse(v) == null) return 'Number';
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+
+                              // Title
+                              TextFormField(
+                                controller: _titleController,
+                                decoration: _inputDeco('Title', icon: Icons.title),
+                                style: const TextStyle(fontSize: 12),
+                                maxLines: _questionType == 'sequence_builder' ? 1 : null,
+                                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                              ),
+                              const SizedBox(height: 8),
+
+                              // Description
+                              TextFormField(
+                                controller: _descriptionController,
+                                decoration: _inputDeco('Description', icon: Icons.description),
+                                style: const TextStyle(fontSize: 12),
+                                maxLines: _questionType == 'sequence_builder' ? 1 : 2,
+                                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                              ),
+                              const SizedBox(height: 4),
+
+                              // === Type-specific sections ===
+                              if (_questionType == 'multiple_choice' || _questionType == 'scenario_decision') ...[
+                                _sectionHeader(_questionType == 'scenario_decision' ? 'Decision Options' : 'Options'),
+                                ...List.generate(4, (i) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 28,
+                                          child: Radio<int>(
+                                            value: i,
+                                            groupValue: _correctDisplayIndex,
+                                            onChanged: (val) => setState(() => _correctDisplayIndex = val!),
+                                            activeColor: const Color(0xFF10B981),
+                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            visualDensity: VisualDensity.compact,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: TextFormField(
+                                            controller: _optionControllers[i],
+                                            decoration: _inputDeco('Option ${i + 1}'),
+                                            style: const TextStyle(fontSize: 12),
+                                            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                                Text('Tap radio to mark correct answer', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
+                              ] else if (_questionType == 'match_following') ...[
+                                _sectionHeader('Match Pairs', trailing: _matchPairs.length < 6 ? _addButton('Pair', _addMatchPair) : null),
+                                ...List.generate(_matchPairs.length, (i) {
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    elevation: 0.5,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 22, height: 22,
+                                            decoration: BoxDecoration(color: const Color(0xFF3B82F6).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
+                                            child: Center(child: Text('${i + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF3B82F6)))),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _matchPairs[i]['left'],
+                                              decoration: _inputDeco('Left item'),
+                                              style: const TextStyle(fontSize: 11),
+                                              validator: (v) => v == null || v.trim().isEmpty ? '' : null,
+                                            ),
+                                          ),
+                                          const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.arrow_forward, size: 12, color: Colors.grey)),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _matchPairs[i]['right'],
+                                              decoration: _inputDeco('Right match'),
+                                              style: const TextStyle(fontSize: 11),
+                                              validator: (v) => v == null || v.trim().isEmpty ? '' : null,
+                                            ),
+                                          ),
+                                          if (_matchPairs.length > 3)
+                                            InkWell(
+                                              onTap: () => _removeMatchPair(i),
+                                              child: Padding(padding: const EdgeInsets.all(4), child: Icon(Icons.close, size: 14, color: Colors.red.shade400)),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                Text('3-6 pairs. Users match left to right.', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
+                              ] else if (_questionType == 'card_match') ...[
+                                _sectionHeader('Card Pairs', trailing: _cardPairs.length < 8 ? _addButton('Pair', _addCardPair) : null),
+                                ...List.generate(_cardPairs.length, (i) {
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    elevation: 0.5,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 22, height: 22,
+                                            decoration: BoxDecoration(color: const Color(0xFFFBBF24).withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
+                                            child: Center(child: Text('${i + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFFFBBF24)))),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _cardPairs[i]['card1'],
+                                              decoration: _inputDeco('Card 1'),
+                                              style: const TextStyle(fontSize: 11),
+                                              validator: (v) => v == null || v.trim().isEmpty ? '' : null,
+                                            ),
+                                          ),
+                                          const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.swap_horiz, size: 12, color: Colors.grey)),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _cardPairs[i]['card2'],
+                                              decoration: _inputDeco('Card 2'),
+                                              style: const TextStyle(fontSize: 11),
+                                              validator: (v) => v == null || v.trim().isEmpty ? '' : null,
+                                            ),
+                                          ),
+                                          if (_cardPairs.length > 3)
+                                            InkWell(
+                                              onTap: () => _removeCardPair(i),
+                                              child: Padding(padding: const EdgeInsets.all(4), child: Icon(Icons.close, size: 14, color: Colors.red.shade400)),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                Text('3-8 pairs. Players flip cards to find matches.', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
+                              ] else if (_questionType == 'sequence_builder') ...[
+                                _sectionHeader('Sentences (correct order)', trailing: _sequenceSentences.length < 9 ? _addButton('Add', _addSequenceSentence) : null),
+                                ...List.generate(_sequenceSentences.length, (i) {
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    elevation: 0.5,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 22, height: 22,
+                                            decoration: BoxDecoration(color: const Color(0xFF00BCD4).withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
+                                            child: Center(child: Text('${i + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF00BCD4)))),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _sequenceSentences[i]['controller'],
+                                              decoration: _inputDeco('Sentence ${i + 1}'),
+                                              style: const TextStyle(fontSize: 11),
+                                              maxLines: 1,
+                                              validator: (v) => v == null || v.trim().isEmpty ? '' : null,
+                                            ),
+                                          ),
+                                          if (_sequenceSentences.length > 3)
+                                            InkWell(
+                                              onTap: () => _removeSequenceSentence(i),
+                                              child: Padding(padding: const EdgeInsets.all(4), child: Icon(Icons.close, size: 14, color: Colors.red.shade400)),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                Text('3-9 sentences. Users drag to reorder.', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
+                              ] else if (_questionType == 'simulation') ...[
+                                _sectionHeader('Budget Configuration'),
+                                TextFormField(
+                                  controller: _totalBudgetController,
+                                  decoration: _inputDeco('Total Budget', icon: Icons.attach_money, hint: '10000'),
+                                  style: const TextStyle(fontSize: 12),
+                                  keyboardType: TextInputType.number,
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) return 'Required';
+                                    if (int.tryParse(v.trim()) == null) return 'Number';
+                                    return null;
+                                  },
+                                ),
+                                _sectionHeader('Departments', trailing: _budgetDepartments.length < 10 ? _addButton('Dept', _addBudgetDepartment) : null),
+                                ...List.generate(_budgetDepartments.length, (i) {
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    elevation: 0.5,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 22, height: 22,
+                                            decoration: BoxDecoration(color: const Color(0xFF10B981).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
+                                            child: Center(child: Text('${i + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF10B981)))),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _budgetDepartments[i]['name'],
+                                              decoration: _inputDeco('Name', hint: 'Marketing'),
+                                              style: const TextStyle(fontSize: 11),
+                                              validator: (v) => v == null || v.trim().isEmpty ? '' : null,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          SizedBox(
+                                            width: 80,
+                                            child: TextFormField(
+                                              controller: _budgetDepartments[i]['amount'],
+                                              decoration: _inputDeco('Amount'),
+                                              style: const TextStyle(fontSize: 11),
+                                              keyboardType: TextInputType.number,
+                                              validator: (v) {
+                                                if (v == null || v.trim().isEmpty) return '';
+                                                if (int.tryParse(v.trim()) == null) return '';
+                                                return null;
+                                              },
+                                            ),
+                                          ),
+                                          if (_budgetDepartments.length > 2)
+                                            InkWell(
+                                              onTap: () => _removeBudgetDepartment(i),
+                                              child: Padding(padding: const EdgeInsets.all(4), child: Icon(Icons.close, size: 14, color: Colors.red.shade400)),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                Text('Amounts must equal total budget.', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
+                              ],
+
+                              const SizedBox(height: 20),
+                              // Save button
+                              SizedBox(
+                                width: double.infinity,
+                                height: 40,
+                                child: ElevatedButton(
+                                  onPressed: _isSaving ? null : _saveQuestion,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF3B82F6),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    elevation: 1,
+                                  ),
+                                  child: _isSaving
+                                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                      : const Text('Save Question', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
         ),
+      ),
     );
   }
 }

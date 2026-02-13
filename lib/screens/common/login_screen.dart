@@ -134,6 +134,16 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (response.user != null) {
+        // Update last login timestamp on profiles
+        try {
+          await Supabase.instance.client
+              .from('profiles')
+              .update({'updated_at': DateTime.now().toUtc().toIso8601String()})
+              .eq('user_id', response.user!.id);
+        } catch (e) {
+          debugPrint('Error updating login timestamp: $e');
+        }
+
         // Get user profile to check role
         var profile = await Supabase.instance.client
             .from('profiles')

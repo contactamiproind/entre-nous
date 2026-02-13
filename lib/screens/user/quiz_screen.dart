@@ -16,12 +16,14 @@ class QuizScreen extends StatefulWidget {
   final String category; // 'Orientation', 'Process', or 'SOP'
   final String? subcategory; // Only for Orientation: 'Values', 'Goals', 'Vision', 'Greetings'
   final int? startQuestionIndex; // Optional: Start from specific question (for Continue feature)
+  final int? levelNumber; // Optional: Filter questions to a specific level_number
 
   const QuizScreen({
     super.key,
     required this.category,
     this.subcategory,
     this.startQuestionIndex,
+    this.levelNumber,
   });
 
   @override
@@ -110,35 +112,39 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _handleTimeExpired() {
-    // Show retry dialog when time expires
     _questionTimer?.cancel();
     
     if (_currentAttempt < _maxAttempts) {
-      _showRetryDialog();
+      _showRetryDialog(isTimeUp: true);
     } else {
-      // After max attempts, show message and allow answering with 0 points
       _showNoPointsDialog();
     }
   }
   
-  void _showRetryDialog() {
+  void _showRetryDialog({bool isTimeUp = false}) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Row(
-          children: const [
-            Icon(Icons.timer_off, color: Color(0xFFF08A7E), size: 28),
-            SizedBox(width: 12),
-            Text('Time\'s Up!'),
+          children: [
+            Icon(
+              isTimeUp ? Icons.timer_off : Icons.close_rounded,
+              color: const Color(0xFFF08A7E),
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Text(isTimeUp ? 'Time\'s Up!' : 'Wrong Answer'),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'You\'ve used all 30 seconds for this question.',
-              style: TextStyle(fontSize: 16),
+              isTimeUp
+                  ? 'You ran out of time for this question.'
+                  : 'That wasn\'t the right answer. Give it another try!',
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 12),
             Text(
@@ -177,31 +183,27 @@ class _QuizScreenState extends State<QuizScreen> {
           children: const [
             Icon(Icons.info_outline, color: Color(0xFFF08A7E), size: 28),
             SizedBox(width: 12),
-            Text('No Points Available'),
+            Flexible(child: Text('No Points Earned')),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Text(
-              'You\'ve used both attempts for this question.',
-              style: TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: 12),
-            Text(
-              'You can still answer, but you won\'t earn any points.',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFF08A7E),
-              ),
-            ),
-          ],
+        content: const Text(
+          'You\'ve used both attempts. Moving to the next question.',
+          style: TextStyle(fontSize: 15),
         ),
         actions: [
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
+              // Auto-advance to next question or submit quiz
+              if (_currentQuestionIndex < _questions.length - 1) {
+                setState(() {
+                  _currentQuestionIndex++;
+                  _currentAttempt = 1;
+                });
+                _loadCurrentQuestionAttempt().then((_) => _startQuestionTimer());
+              } else {
+                _submitQuiz();
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF8B5CF6),
@@ -384,21 +386,26 @@ class _QuizScreenState extends State<QuizScreen> {
             .maybeSingle();
             
         if (data != null) {
-          int savedAttempts = data['attempt_count'] ?? 1;
-          debugPrint('🔄 Loaded attempt count for Q$questionId: $savedAttempts (Status: ${data['status']})');
+          final status = data['status']?.toString() ?? 'pending';
+          final savedAttempts = data['attempt_count'] as int? ?? 0;
+          debugPrint('Loaded attempt for Q$questionId: attempts=$savedAttempts status=$status');
           
           if (mounted) {
             setState(() {
-              // If we loaded a valid attempt count, use it.
-              // If the status is 'pending', it means we are in the middle of that attempt? 
-              // Or does 'attempt_count' store the COMPLETED attempts?
-              // Let's assume attempt_count stores "attempts MADE/USED".
-              // So if DB says 1, we are starting attempt 2.
-              _currentAttempt = savedAttempts + 1;
+              if (status == 'pending') {
+                // Fresh or reset question — start at attempt 1
+                _currentAttempt = 1;
+              } else if (status == 'answered') {
+                // Already answered — mark as done
+                _currentAttempt = _maxAttempts + 1;
+              } else {
+                // In progress — continue from saved attempt
+                _currentAttempt = savedAttempts > 0 ? savedAttempts : 1;
+              }
             });
           }
         } else {
-           debugPrint('🆕 No previous progress for Q$questionId. Starting Attempt 1.');
+           debugPrint('No previous progress for Q$questionId. Starting Attempt 1.');
            if (mounted) setState(() => _currentAttempt = 1);
         }
     } catch (e) {
@@ -506,11 +513,18 @@ class _QuizScreenState extends State<QuizScreen> {
       
       // Load questions ONLY from usr_progress (admin-assigned questions)
       // Join with questions table to get full question data
-      final progressRecords = await Supabase.instance.client
+      var query = Supabase.instance.client
           .from('usr_progress')
-          .select('question_id, status, questions(id, title, description, options, correct_answer, type_id, level, points, dept_id)')
-          .eq('usr_dept_id', usrDeptId)
-          .order('created_at', ascending: true);
+          .select('question_id, status, level_number, questions(id, title, description, options, correct_answer, type_id, level, points, dept_id)')
+          .eq('usr_dept_id', usrDeptId);
+      
+      // Filter by level_number if specified (when dept has questions at multiple levels)
+      if (widget.levelNumber != null) {
+        query = query.eq('level_number', widget.levelNumber!);
+        debugPrint('🔍 Filtering questions to level_number: ${widget.levelNumber}');
+      }
+      
+      final progressRecords = await query.order('created_at', ascending: true);
       
       debugPrint('📊 Found ${progressRecords.length} assigned questions from usr_progress');
       
@@ -660,111 +674,18 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _submitQuiz() async {
-    debugPrint('📊 === SUBMITTING QUIZ ===');
+    debugPrint('=== SUBMITTING QUIZ ===');
     debugPrint('Total questions: ${_questions.length}');
     debugPrint('Game scores map: $_gameScores');
+    debugPrint('Question points (already recorded): $_questionPoints');
+    debugPrint('Answered correctly map: $_answeredCorrectly');
 
-    // Record answer time for current question before processing
-    _recordAnswerTime();
+    // Use already-recorded points from real-time gameplay — do NOT re-calculate
+    // Points were saved to _questionPoints and DB when user answered each question
+    final int totalScore = _questionPoints.values.fold(0, (sum, pts) => sum + pts);
+    final int correctCount = _answeredCorrectly.values.where((v) => v == true).length;
 
-    int correctCount = 0;
-    int totalScore = 0;
-    final int questionValue = 100; // Customizable per question logic if needed
-
-    // 1. Calculate Score first
-    for (int i = 0; i < _questions.length; i++) {
-      final question = _questions[i];
-      final questionType = question['question_type'] ?? 'multiple_choice';
-      debugPrint('Question $i: Type = $questionType');
-      
-      bool isCorrect = false;
-      
-      if (questionType == 'multiple_choice' || questionType == 'single_tap_choice' || questionType == 'scenario_decision') {
-        final selectedIndex = _selectedAnswers[i];
-        final options = List<String>.from(question['options'] ?? []);
-        
-        // Get options_data which contains is_correct flags
-        final optionsDataRaw = question['options_data'];
-        List<Map<String, dynamic>> optionsData = [];
-        if (optionsDataRaw is List) {
-          optionsData = optionsDataRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        }
-        
-        debugPrint('📝 Question $i: ${options.length} options');
-        debugPrint('   Selected index: $selectedIndex');
-        debugPrint('   Options data: $optionsData');
-        
-        if (selectedIndex != null && selectedIndex < options.length && selectedIndex < optionsData.length) {
-          final selectedAnswerText = options[selectedIndex];
-          final isCorrectOption = optionsData[selectedIndex]['is_correct'] == true;
-          
-          debugPrint('Checking Answer: "$selectedAnswerText" (Index: $selectedIndex)');
-          debugPrint('   is_correct flag: $isCorrectOption');
-          
-          if (isCorrectOption) {
-            debugPrint('✅ Answer Correct!');
-            isCorrect = true;
-          } else {
-            debugPrint('❌ Answer Wrong');
-          }
-        }
-      } else if (questionType == 'match_following') {
-        // ... (Match logic is unchanged, assuming it works or isn't used here)
-        final pairs = List<Map<String, dynamic>>.from(question['match_pairs'] ?? []);
-        final userMatches = _matchAnswers[i] ?? {};
-        
-        bool allCorrect = true;
-        for (var pair in pairs) {
-          final left = pair['left'] as String;
-          final correctRight = pair['right'] as String;
-          final selectedRight = userMatches[left];
-          final selectedValue = selectedRight?.split('|')[0]; // Value before pipe
-          
-          if (selectedValue != correctRight) {
-            allCorrect = false;
-            break;
-          }
-        }
-        
-        if (allCorrect && userMatches.length == pairs.length) {
-          isCorrect = true;
-        }
-      }
-
-      // Track if this question was answered correctly
-      _answeredCorrectly[i] = isCorrect;
-      
-      // Track first wrong answer for Try Again functionality
-      if (!isCorrect && _firstWrongQuestionIndex == null) {
-        _firstWrongQuestionIndex = i;
-      }
-      
-      if (questionType == 'card_match' || questionType == 'sequence_builder' || questionType == 'simulation') {
-        final score = _gameScores[i] ?? 0;
-        debugPrint('🎮 $questionType Question $i: Score = $score');
-        totalScore += score;
-        // Count as correct if score is 25 or higher (out of max ~60)
-        if (score >= 25) {
-          debugPrint('✅ $questionType counted as CORRECT (score >= 25)');
-          correctCount++;
-          _answeredCorrectly[i] = true;
-        } else {
-          debugPrint('❌ $questionType counted as WRONG (score < 25)');
-        }
-      } else {
-        if (isCorrect) {
-          correctCount++;
-          totalScore += questionValue;
-          debugPrint('🔵 About to record points for question $i (correct)');
-          // Record time-based points for correct answer
-          _recordAnswerWithPoints(true, i);
-        } else {
-          debugPrint('🔵 About to record points for question $i (incorrect)');
-          // Record 0 points for incorrect answer
-          _recordAnswerWithPoints(false, i);
-        }
-      }
-    }
+    debugPrint('Final: totalScore=$totalScore, correctCount=$correctCount');
 
     // 2. Show Results & Celebration IMMEDIATELY
     final percentage = _questions.isEmpty ? 0.0 : (correctCount / _questions.length) * 100;
@@ -1648,125 +1569,119 @@ class _QuizScreenState extends State<QuizScreen> {
       const Color(0xFFF8C67D), // Yellow
       const Color(0xFF74C0D9), // Light Blue
     ];
-    
+
     if (options.isEmpty) {
-      return const Center(
-        child: Text('No options available'),
-      );
+      return const Center(child: Text('No options available'));
     }
-    
-    // Check if this question was answered and submitted
-    final wasAnswered = _answeredCorrectly.containsKey(_currentQuestionIndex);
-    final wasAnsweredWrong = wasAnswered && _answeredCorrectly[_currentQuestionIndex] == false;
-    
+
+    // Question is locked only after correct answer or final wrong attempt saved
+    final bool isLocked = _answeredCorrectly.containsKey(_currentQuestionIndex);
+
     return Column(
       children: options.asMap().entries.map((entry) {
         final index = entry.key;
         final option = entry.value;
         final optionColor = optionColors[index % optionColors.length];
         final isSelected = _selectedAnswers[_currentQuestionIndex] == index;
-        
-        // Show feedback only if question was answered
-        final showAsCorrect = wasAnswered && index < optionsData.length && optionsData[index]['is_correct'] == true;
-        final showAsWrong = wasAnsweredWrong && isSelected;
-        
+
+        // Feedback colors only when locked
+        final bool isCorrectOption = isLocked &&
+            index < optionsData.length &&
+            optionsData[index]['is_correct'] == true;
+        final bool isWrongSelection = isLocked &&
+            isSelected &&
+            _answeredCorrectly[_currentQuestionIndex] == false;
+
+        // Determine card state
+        Color bgColor;
+        Color borderColor;
+        Color textColor;
+        Widget? trailing;
+
+        if (isCorrectOption) {
+          bgColor = const Color(0xFFE8F8F0);
+          borderColor = const Color(0xFF6BCB9F);
+          textColor = const Color(0xFF1A2F4B);
+          trailing = const Icon(Icons.check_circle_rounded, color: Color(0xFF6BCB9F), size: 24);
+        } else if (isWrongSelection) {
+          bgColor = const Color(0xFFFDE8E4);
+          borderColor = const Color(0xFFF08A7E);
+          textColor = const Color(0xFF1A2F4B);
+          trailing = const Icon(Icons.cancel_rounded, color: Color(0xFFF08A7E), size: 24);
+        } else if (isSelected && !isLocked) {
+          bgColor = optionColor;
+          borderColor = optionColor;
+          textColor = Colors.white;
+          trailing = const Icon(Icons.check_circle_rounded, color: Colors.white, size: 24);
+        } else {
+          bgColor = Colors.white;
+          borderColor = Colors.grey.shade300;
+          textColor = const Color(0xFF1A2F4B);
+          trailing = null;
+        }
+
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12.0),
-          child: InkWell(
-            onTap: () {
-              // Don't allow changing answer if already answered
-              if (_answeredCorrectly.containsKey(_currentQuestionIndex)) {
-                return;
-              }
-              
-              // Just record the selection, don't show feedback yet
-              setState(() {
-                _selectedAnswers[_currentQuestionIndex] = index;
-              });
-            },
-            borderRadius: BorderRadius.circular(20),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-              decoration: BoxDecoration(
-                color: showAsCorrect 
-                    ? const Color(0xFF6BCB9F).withOpacity(0.3) 
-                    : showAsWrong 
-                        ? const Color(0xFFF08A7E).withOpacity(0.3)
-                        : isSelected ? optionColor : Colors.white,
-                border: Border.all(
-                  color: showAsCorrect 
-                      ? const Color(0xFF6BCB9F) 
-                      : showAsWrong 
-                          ? const Color(0xFFF08A7E)
-                          : isSelected ? optionColor : const Color(0xFFE0E0E0),
-                  width: isSelected || showAsCorrect || showAsWrong ? 3 : 2,
+          padding: const EdgeInsets.only(bottom: 10.0),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: isLocked
+                  ? null
+                  : () => setState(() {
+                        _selectedAnswers[_currentQuestionIndex] = index;
+                      }),
+              borderRadius: BorderRadius.circular(14),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  border: Border.all(
+                    color: borderColor,
+                    width: (isSelected || isCorrectOption || isWrongSelection) ? 2.5 : 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: isSelected || showAsCorrect || showAsWrong
-                    ? [
-                        BoxShadow(
-                          color: (showAsCorrect 
-                              ? const Color(0xFF6BCB9F) 
-                              : showAsWrong 
-                                  ? const Color(0xFFF08A7E)
-                                  : optionColor).withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected && !isLocked
+                            ? Colors.white.withOpacity(0.25)
+                            : optionColor.withOpacity(0.12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          String.fromCharCode(65 + index),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: isSelected && !isLocked ? Colors.white : optionColor,
+                          ),
                         ),
-                      ]
-                    : [],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected ? Colors.white.withOpacity(0.2) : optionColor.withOpacity(0.1),
+                      ),
                     ),
-                    child: Center(
+                    const SizedBox(width: 12),
+                    Expanded(
                       child: Text(
-                        String.fromCharCode(65 + index), // A, B, C, D
+                        option.toString(),
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? Colors.white : optionColor,
+                          fontSize: 15,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          color: textColor,
+                          height: 1.3,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      option.toString(),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                        color: isSelected ? Colors.white : const Color(0xFF1A2F4B),
-                      ),
-                    ),
-                  ),
-                  if (showAsCorrect)
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      color: Color(0xFF6BCB9F),
-                      size: 28,
-                    )
-                  else if (showAsWrong)
-                    const Icon(
-                      Icons.cancel_rounded,
-                      color: Color(0xFFF08A7E),
-                      size: 28,
-                    )
-                  else if (isSelected)
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                ],
+                    if (trailing != null) ...[
+                      const SizedBox(width: 8),
+                      trailing,
+                    ],
+                  ],
+                ),
               ),
             ),
           ),

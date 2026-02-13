@@ -82,9 +82,13 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
         }
       }
 
+      // Expand assignments by actual level_number from usr_progress
+      // A single usr_dept may have questions at multiple levels
+      final expandedAssignments = await _expandAssignmentsByLevel(assignmentsResponse);
+
       setState(() {
         _userProfile = profileResponse;
-        _pathwayAssignments = assignmentsResponse;
+        _pathwayAssignments = expandedAssignments;
         _availablePathways = pathwaysResponse;
         _isLoading = false;
       });
@@ -105,6 +109,84 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
       // Don't show error to user if assignments loaded successfully
       // The profile error is non-critical
     }
+  }
+
+  /// Expand usr_dept records by actual level_number from usr_progress.
+  /// If a single usr_dept has questions at level 1 AND level 2, this creates
+  /// two virtual records so the UI groups them correctly.
+  Future<List<Map<String, dynamic>>> _expandAssignmentsByLevel(
+      List<Map<String, dynamic>> assignments) async {
+    final List<Map<String, dynamic>> expanded = [];
+
+    for (final record in assignments) {
+      final usrDeptId = record['id'];
+
+      List progressRecords = [];
+      try {
+        progressRecords = await Supabase.instance.client
+            .from('usr_progress')
+            .select('question_id, status, level_number, score_earned')
+            .eq('usr_dept_id', usrDeptId)
+            .order('created_at', ascending: true);
+      } catch (e) {
+        debugPrint('Error loading progress for expansion: $e');
+      }
+
+      if (progressRecords.isEmpty) {
+        expanded.add(record);
+        continue;
+      }
+
+      // Group by level_number
+      final Map<int, List<dynamic>> byLevel = {};
+      for (final pr in progressRecords) {
+        final lvl = pr['level_number'] is int
+            ? pr['level_number'] as int
+            : (record['current_level'] as int? ?? 1);
+        byLevel.putIfAbsent(lvl, () => []);
+        byLevel[lvl]!.add(pr);
+      }
+
+      if (byLevel.length <= 1) {
+        // Single level — update current_level to match actual data
+        final actualLevel = byLevel.keys.first;
+        final questions = byLevel[actualLevel]!;
+        final totalQ = questions.length;
+        final answeredQ = questions.where((p) => p['status'] == 'answered').length;
+        final correctQ = questions.where((p) => p['status'] == 'answered' && (p['score_earned'] as int? ?? 0) > 0).length;
+        final totalScore = questions.fold<int>(0, (sum, p) => sum + (p['score_earned'] as int? ?? 0));
+        final updatedRecord = Map<String, dynamic>.from(record);
+        updatedRecord['current_level'] = actualLevel;
+        updatedRecord['total_questions'] = totalQ;
+        updatedRecord['answered_questions'] = answeredQ;
+        updatedRecord['correct_answers'] = correctQ;
+        updatedRecord['total_score'] = totalScore;
+        expanded.add(updatedRecord);
+      } else {
+        // Multiple levels — create a virtual record per level
+        final sortedLevels = byLevel.keys.toList()..sort();
+        for (final lvl in sortedLevels) {
+          final questions = byLevel[lvl]!;
+          final totalQ = questions.length;
+          final answeredQ = questions.where((p) => p['status'] == 'answered').length;
+          final correctQ = questions.where((p) => p['status'] == 'answered' && (p['score_earned'] as int? ?? 0) > 0).length;
+          final totalScore = questions.fold<int>(0, (sum, p) => sum + (p['score_earned'] as int? ?? 0));
+          final maxScore = totalQ * 10; // Approximate max score
+
+          final virtualRecord = Map<String, dynamic>.from(record);
+          virtualRecord['current_level'] = lvl;
+          virtualRecord['total_questions'] = totalQ;
+          virtualRecord['answered_questions'] = answeredQ;
+          virtualRecord['correct_answers'] = correctQ;
+          virtualRecord['total_score'] = totalScore;
+          virtualRecord['max_possible_score'] = maxScore;
+          expanded.add(virtualRecord);
+          debugPrint('📊 Admin expand: L$lvl $answeredQ/$totalQ correct=$correctQ score=$totalScore');
+        }
+      }
+    }
+
+    return expanded;
   }
 
   Future<void> _assignDepartment({
@@ -289,12 +371,16 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
   }
 
   Future<void> _resetPathwayProgress(Map<String, dynamic> assignment) async {
+    final deptName = _buildDeptDisplayName(assignment['departments']);
+    final assignmentLevel = assignment['current_level'] as int? ?? 1;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reset Department Progress'),
+        title: const Text('Reset Course Progress'),
         content: Text(
-          'Are you sure you want to reset progress for "${assignment['departments']?['title'] ?? 'this department'}"? \n\nThis will clear all answers and set the level back to 1.',
+          'Reset answers and points for "$deptName" (Level $assignmentLevel)?\n\n'
+          'The user will be able to retake this course. Questions will remain assigned.',
         ),
         actions: [
           TextButton(
@@ -312,75 +398,34 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
 
     if (confirmed == true) {
       try {
-        // Delete from usr_progress
+        final usrDeptId = assignment['id'];
+
+        // Reset usr_progress: clear answers & points but KEEP the question assignments
         await Supabase.instance.client
             .from('usr_progress')
-            .delete()
-            .eq('usr_dept_id', assignment['id']); // Assuming 'id' is usr_dept primary key
+            .update({
+              'status': 'pending',
+              'score_earned': 0,
+              'user_answer': null,
+              'attempt_count': 0,
+            })
+            .eq('usr_dept_id', usrDeptId)
+            .eq('level_number', assignmentLevel);
 
-        // Update usr_dept
+        // Update usr_dept counters (don't change current_level or completed_levels)
         await Supabase.instance.client
             .from('usr_dept')
             .update({
-              'current_level': 1,
-              'completed_levels': 0,
-              // 'updated_at': DateTime.now().toIso8601String(), // Trigger should handle this
+              'answered_questions': 0,
+              'correct_answers': 0,
+              'total_score': 0,
             })
-            .eq('id', assignment['id']);
-
-        // Cascade Reset Logic
-        final title = assignment['departments']?['title'];
-        if (title != null) {
-          final downstreamTitles = <String>[];
-          if (title == 'Orientation') {
-            downstreamTitles.addAll(['Process', 'SOP', 'End Game']);
-          } else if (title == 'Process') {
-            downstreamTitles.addAll(['SOP', 'End Game']);
-          } else if (title == 'SOP') {
-             downstreamTitles.add('End Game');
-          }
-
-          if (downstreamTitles.isNotEmpty) {
-             // Find assignments for downstream titles
-             for (var downstreamTitle in downstreamTitles) {
-               if (downstreamTitle == 'End Game') {
-                 // Explicitly reset End Game assignments
-                 await Supabase.instance.client
-                     .from('end_game_assignments')
-                     .delete()
-                     .eq('user_id', widget.userId);
-                 debugPrint('✅ Reset End Game assignment');
-                 continue;
-               }
-
-               final downstreamAssignment = _pathwayAssignments.firstWhere(
-                 (a) => a['departments']?['title'] == downstreamTitle,
-                 orElse: () => {},
-               );
-               
-               if (downstreamAssignment.isNotEmpty) {
-                  // Reset downstream progress
-                  await Supabase.instance.client
-                      .from('usr_progress')
-                      .delete()
-                      .eq('usr_dept_id', downstreamAssignment['id']);
-                  
-                  await Supabase.instance.client
-                      .from('usr_dept')
-                      .update({
-                        'current_level': 1,
-                        'completed_levels': 0,
-                      })
-                      .eq('id', downstreamAssignment['id']);
-               }
-             }
-          }
-        }
+            .eq('id', usrDeptId);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Department progress reset successfully!'),
+            SnackBar(
+              content: Text('Progress reset for "$deptName" (Level $assignmentLevel)'),
               backgroundColor: Colors.green,
             ),
           );
@@ -390,10 +435,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -705,79 +747,193 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
         ),
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            title: Text('User Profile: ${widget.userEmail}'),
-            backgroundColor: const Color(0xFFF4EF8B),
-            foregroundColor: Colors.black,
-            toolbarHeight: 60,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.pop(context),
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(44),
+            child: AppBar(
+              backgroundColor: const Color(0xFFF4EF8B),
+              foregroundColor: const Color(0xFF1A2F4B),
+              elevation: 0,
+              toolbarHeight: 44,
+              titleSpacing: 0,
+              leading: InkWell(
+                onTap: () => Navigator.pop(context),
+                child: const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: Icon(Icons.arrow_back, size: 20),
+                ),
+              ),
+              title: Text(
+                widget.userEmail,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // User Info Card
-                    Card(
-                      elevation: 4,
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'User Information',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A2F4B),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            _buildInfoRow('Email', widget.userEmail),
-                            _buildInfoRow('Role', _userProfile?['role'] ?? 'N/A'),
-                            _buildInfoRow('User ID', widget.userId),
-                          ],
-                        ),
+                    // Compact User Info Strip
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Pathway Assignments Card
-                    Card(
-                      elevation: 4,
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: (_userProfile?['role'] == 'admin')
+                                ? const Color(0xFFF08A7E).withOpacity(0.15)
+                                : const Color(0xFF6BCB9F).withOpacity(0.15),
+                            child: Icon(
+                              (_userProfile?['role'] == 'admin')
+                                  ? Icons.admin_panel_settings
+                                  : Icons.person,
+                              size: 18,
+                              color: (_userProfile?['role'] == 'admin')
+                                  ? const Color(0xFFF08A7E)
+                                  : const Color(0xFF6BCB9F),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Expanded(
-                                  child: Text(
-                                    'Departments',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1A2F4B),
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
+                                Text(
+                                  widget.userEmail,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                    color: Color(0xFF1A2F4B),
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.add_circle, color: Colors.green),
-                                  onPressed: _showAssignDepartmentDialog,
-                                  tooltip: 'Assign Department',
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    // Role badge
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: (_userProfile?['role'] == 'admin')
+                                            ? const Color(0xFFF08A7E).withOpacity(0.12)
+                                            : const Color(0xFF6BCB9F).withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        (_userProfile?['role'] ?? 'user').toString().toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: (_userProfile?['role'] == 'admin')
+                                              ? const Color(0xFFF08A7E)
+                                              : const Color(0xFF6BCB9F),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    // Level badge
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1A2F4B).withOpacity(0.08),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Level ${_userProfile?['level'] ?? 1}',
+                                        style: const TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1A2F4B),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                          ),
+                          // Copy User ID
+                          InkWell(
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('User ID copied')),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.copy, size: 12, color: Colors.grey[400]),
+                                  const SizedBox(width: 2),
+                                  Text('ID', style: TextStyle(fontSize: 9, color: Colors.grey[400])),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Departments Section
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Departments',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1A2F4B),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                height: 28,
+                                width: 28,
+                                child: FloatingActionButton(
+                                  onPressed: _showAssignDepartmentDialog,
+                                  backgroundColor: Colors.green,
+                                  elevation: 1,
+                                  child: const Icon(Icons.add, color: Colors.white, size: 16),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
                             // Level-grouped assignments
                             ...List.generate(4, (index) {
                               final level = index + 1;
@@ -1000,41 +1156,44 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                                                 ],
                                               ),
                                               const SizedBox(height: 6),
-                                              // Actions row
-                                              Row(
-                                                mainAxisAlignment: MainAxisAlignment.end,
-                                                children: [
-                                                  InkWell(
-                                                    onTap: () => _resetPathwayProgress(assignment),
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                                      child: Row(
-                                                        mainAxisSize: MainAxisSize.min,
-                                                        children: [
-                                                          Icon(Icons.restart_alt, size: 14, color: Colors.orange.shade700),
-                                                          const SizedBox(width: 3),
-                                                          Text('Reset', style: TextStyle(fontSize: 11, color: Colors.orange.shade700)),
-                                                        ],
+                                              // Actions row — frozen for completed levels
+                                              if (!isLevelCompleted)
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.end,
+                                                  children: [
+                                                    if (isLevelUnlocked)
+                                                      InkWell(
+                                                        onTap: () => _resetPathwayProgress(assignment),
+                                                        child: Padding(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                          child: Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              Icon(Icons.restart_alt, size: 14, color: Colors.orange.shade700),
+                                                              const SizedBox(width: 3),
+                                                              Text('Reset', style: TextStyle(fontSize: 11, color: Colors.orange.shade700)),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    if (isLevelUnlocked)
+                                                      const SizedBox(width: 8),
+                                                    InkWell(
+                                                      onTap: () => _deletePathway(assignment),
+                                                      child: Padding(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Icon(Icons.delete_outline, size: 14, color: Colors.red.shade400),
+                                                            const SizedBox(width: 3),
+                                                            Text('Remove', style: TextStyle(fontSize: 11, color: Colors.red.shade400)),
+                                                          ],
+                                                        ),
                                                       ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  InkWell(
-                                                    onTap: () => _deletePathway(assignment),
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                                      child: Row(
-                                                        mainAxisSize: MainAxisSize.min,
-                                                        children: [
-                                                          Icon(Icons.delete_outline, size: 14, color: Colors.red.shade400),
-                                                          const SizedBox(width: 3),
-                                                          Text('Remove', style: TextStyle(fontSize: 11, color: Colors.red.shade400)),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                                  ],
+                                                ),
                                             ],
                                           ),
                                         );
@@ -1046,138 +1205,15 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 80), // Extra padding for bottom nav
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1A2F4B).withOpacity(0.05),
-                blurRadius: 20,
-                offset: const Offset(0, -5),
-              ),
-            ],
-          ),
-          child: BottomNavigationBar(
-            currentIndex: 0, // No specific tab selected
-            onTap: (index) {
-              Navigator.pop(context);
-            },
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: Colors.white,
-            selectedItemColor: const Color(0xFF1A2F4B),
-            unselectedItemColor: const Color(0xFF1A2F4B).withOpacity(0.4),
-            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-            elevation: 0,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home_rounded),
-                label: 'Home',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.map_rounded),
-                label: 'Department',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.info_rounded),
-                label: 'Info',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.person_rounded),
-                label: 'Profile',
-              ),
-            ],
-          ),
         ),
-      ),
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    if (label == 'User ID') {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 100,
-              child: Text(
-                '$label:',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A2F4B),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        value,
-                        style: const TextStyle(
-                          color: Colors.black87, 
-                          fontFamily: 'monospace',
-                          fontSize: 12
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    InkWell(
-                      onTap: () {
-                         ScaffoldMessenger.of(context).showSnackBar(
-                           const SnackBar(content: Text('User ID copied to clipboard')), // Placeholder logic
-                         );
-                      },
-                      child: const Icon(Icons.copy, size: 14, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A2F4B),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: Colors.black87),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ============================================

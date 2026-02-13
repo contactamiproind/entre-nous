@@ -335,50 +335,167 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
         debugPrint('❌ Error checking End Game assignment: $e');
       }
       
-      // Build progress from usr_progress records ONLY (admin-assigned questions)
-      // Never query the questions table — assignments are immutable once admin creates them
-      for (final record in _userDeptRecords) {
+      // Build progress from usr_progress records grouped by actual level_number.
+      // A single usr_dept may have questions at multiple levels, so we split them
+      // into virtual records so the dashboard shows the correct level grouping.
+      final List<Map<String, dynamic>> expandedRecords = [];
+
+      for (final record in List<Map<String, dynamic>>.from(_userDeptRecords)) {
         final dept = record['departments'];
         final category = dept?['category'] as String?;
         if (category == null || category == 'End Game') continue;
 
         final usrDeptId = record['id'];
-        final totalQ = record['total_questions'] as int? ?? 0;
-        final answeredQ = record['answered_questions'] as int? ?? 0;
 
-        // Get first unanswered index from usr_progress for Continue feature
-        int firstUnansweredIndex = 0;
+        // Fetch all usr_progress for this usr_dept, grouped by level_number
+        List progressRecords = [];
         try {
-          final progressRecords = await Supabase.instance.client
+          progressRecords = await Supabase.instance.client
               .from('usr_progress')
-              .select('question_id, status')
+              .select('question_id, status, level_number, score_earned')
               .eq('usr_dept_id', usrDeptId)
               .order('created_at', ascending: true);
-
-          for (int i = 0; i < progressRecords.length; i++) {
-            if (progressRecords[i]['status'] != 'answered') {
-              firstUnansweredIndex = i;
-              break;
-            }
-          }
         } catch (e) {
           debugPrint('Error loading progress for $category: $e');
         }
 
-        final progressPercentage = totalQ > 0 ? answeredQ / totalQ : 0.0;
-        _categoryProgress[category] = {
-          'total': totalQ,
-          'answered': answeredQ,
-          'firstUnansweredIndex': firstUnansweredIndex,
-          'progress': progressPercentage,
-          'level': record['current_level'] ?? 1,
-        };
-        debugPrint('📊 $category Progress: $answeredQ/$totalQ (${(progressPercentage * 100).toStringAsFixed(0)}%)');
+        if (progressRecords.isEmpty) {
+          // No progress records — keep original record as-is
+          expandedRecords.add(record);
+          continue;
+        }
+
+        // Group by level_number
+        final Map<int, List<dynamic>> byLevel = {};
+        for (final pr in progressRecords) {
+          final lvl = pr['level_number'] is int ? pr['level_number'] as int : (record['current_level'] as int? ?? 1);
+          byLevel.putIfAbsent(lvl, () => []);
+          byLevel[lvl]!.add(pr);
+        }
+
+        if (byLevel.length <= 1) {
+          // All questions at same level — use original record, just ensure current_level matches
+          final actualLevel = byLevel.keys.first;
+          final questions = byLevel[actualLevel]!;
+          final totalQ = questions.length;
+          final answeredQ = questions.where((p) => p['status'] == 'answered').length;
+          final correctQ = questions.where((p) => p['status'] == 'answered' && (p['score_earned'] as int? ?? 0) > 0).length;
+          final totalScore = questions.fold<int>(0, (sum, p) => sum + (p['score_earned'] as int? ?? 0));
+          final maxScore = totalQ * 10;
+          int firstUnanswered = 0;
+          for (int i = 0; i < questions.length; i++) {
+            if (questions[i]['status'] != 'answered') {
+              firstUnanswered = i;
+              break;
+            }
+          }
+          final progressPct = totalQ > 0 ? answeredQ / totalQ : 0.0;
+          _categoryProgress[category] = {
+            'total': totalQ,
+            'answered': answeredQ,
+            'firstUnansweredIndex': firstUnanswered,
+            'progress': progressPct,
+            'level': actualLevel,
+          };
+          // Override current_level to the actual level from usr_progress
+          final updatedRecord = Map<String, dynamic>.from(record);
+          updatedRecord['current_level'] = actualLevel;
+          updatedRecord['total_questions'] = totalQ;
+          updatedRecord['answered_questions'] = answeredQ;
+          updatedRecord['correct_answers'] = correctQ;
+          updatedRecord['total_score'] = totalScore;
+          updatedRecord['max_possible_score'] = maxScore;
+          expandedRecords.add(updatedRecord);
+          debugPrint('📊 $category L$actualLevel: $answeredQ/$totalQ (${(progressPct * 100).toStringAsFixed(0)}%)');
+        } else {
+          // Multiple levels — create a virtual record per level
+          final sortedLevels = byLevel.keys.toList()..sort();
+          for (final lvl in sortedLevels) {
+            final questions = byLevel[lvl]!;
+            final totalQ = questions.length;
+            final answeredQ = questions.where((p) => p['status'] == 'answered').length;
+            int firstUnanswered = 0;
+            for (int i = 0; i < questions.length; i++) {
+              if (questions[i]['status'] != 'answered') {
+                firstUnanswered = i;
+                break;
+              }
+            }
+            final progressPct = totalQ > 0 ? answeredQ / totalQ : 0.0;
+
+            // Store progress keyed by category+level to avoid overwriting
+            final progressKey = '${category}_L$lvl';
+            _categoryProgress[progressKey] = {
+              'total': totalQ,
+              'answered': answeredQ,
+              'firstUnansweredIndex': firstUnanswered,
+              'progress': progressPct,
+              'level': lvl,
+            };
+
+            final correctQ = questions.where((p) => p['status'] == 'answered' && (p['score_earned'] as int? ?? 0) > 0).length;
+            final totalScore = questions.fold<int>(0, (sum, p) => sum + (p['score_earned'] as int? ?? 0));
+            final maxScore = totalQ * 10;
+
+            // Create a virtual record that looks like a usr_dept record
+            final virtualRecord = Map<String, dynamic>.from(record);
+            virtualRecord['current_level'] = lvl;
+            virtualRecord['total_questions'] = totalQ;
+            virtualRecord['answered_questions'] = answeredQ;
+            virtualRecord['correct_answers'] = correctQ;
+            virtualRecord['total_score'] = totalScore;
+            virtualRecord['max_possible_score'] = maxScore;
+            expandedRecords.add(virtualRecord);
+            debugPrint('📊 $category L$lvl: $answeredQ/$totalQ (${(progressPct * 100).toStringAsFixed(0)}%)');
+          }
+        }
       }
+
+      // Replace _userDeptRecords with the expanded set
+      _userDeptRecords = expandedRecords;
+
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Error loading category progress: $e');
     }
+  }
+
+  // Helper widget for mini stat chips (Attempted, Correct, Score)
+  Widget _buildMiniStat(IconData icon, String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.15)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 11, color: color),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // Helper method to get icon for each category
@@ -835,6 +952,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                   final category = dept?['category'] as String? ?? deptName;
                   final totalQ = assignment['total_questions'] as int? ?? 0;
                   final answeredQ = assignment['answered_questions'] as int? ?? 0;
+                  final correctQ = assignment['correct_answers'] as int? ?? 0;
+                  final totalScore = assignment['total_score'] as int? ?? 0;
+                  final maxScore = assignment['max_possible_score'] as int? ?? (totalQ * 10);
                   final progressVal = totalQ > 0 ? answeredQ / totalQ : 0.0;
                   final isCompleted = progressVal >= 1.0;
 
@@ -842,13 +962,19 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                   final bool canTap = isLevelUnlocked && !isLevelCompleted && !isCompleted;
                   final bool canContinue = canTap && answeredQ > 0 && answeredQ < totalQ;
 
+                  // Pass level number so quiz filters to correct questions
+                  final assignmentLevel = assignment['current_level'] as int? ?? level;
+
                   return InkWell(
                     onTap: canTap
                         ? () async {
                             await Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => QuizScreen(category: category),
+                                builder: (context) => QuizScreen(
+                                  category: category,
+                                  levelNumber: assignmentLevel,
+                                ),
                               ),
                             );
                             if (mounted) _loadData();
@@ -900,29 +1026,40 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                           ),
                           const SizedBox(height: 8),
                           // Progress bar
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: progressVal,
+                              backgroundColor: Colors.grey.shade200,
+                              color: isCompleted || isLevelCompleted
+                                  ? Colors.green
+                                  : const Color(0xFFFBBF24),
+                              minHeight: 6,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // Stats row: Attempted, Correct, Score
                           Row(
                             children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: LinearProgressIndicator(
-                                    value: progressVal,
-                                    backgroundColor: Colors.grey.shade200,
-                                    color: isCompleted || isLevelCompleted
-                                        ? Colors.green
-                                        : const Color(0xFFFBBF24),
-                                    minHeight: 6,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
+                              _buildMiniStat(
+                                Icons.quiz_outlined,
+                                'Attempted',
                                 '$answeredQ / $totalQ',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                const Color(0xFF1E293B),
+                              ),
+                              const SizedBox(width: 12),
+                              _buildMiniStat(
+                                Icons.check_circle_outline,
+                                'Correct',
+                                '$correctQ / $totalQ',
+                                correctQ == totalQ && totalQ > 0 ? Colors.green : Colors.orange,
+                              ),
+                              const SizedBox(width: 12),
+                              _buildMiniStat(
+                                Icons.star_outline,
+                                'Score',
+                                '$totalScore / $maxScore',
+                                totalScore >= maxScore && maxScore > 0 ? Colors.green : Colors.deepPurple,
                               ),
                             ],
                           ),
@@ -933,13 +1070,16 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                               alignment: Alignment.centerRight,
                               child: InkWell(
                                 onTap: () async {
-                                  final catProgress = _categoryProgress[category];
+                                  // Try level-specific progress key first, then category
+                                  final progressKey = '${category}_L$assignmentLevel';
+                                  final catProgress = _categoryProgress[progressKey] ?? _categoryProgress[category];
                                   final startIndex = catProgress?['firstUnansweredIndex'] ?? 0;
                                   await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => QuizScreen(
                                         category: category,
+                                        levelNumber: assignmentLevel,
                                         startQuestionIndex: startIndex,
                                       ),
                                     ),
@@ -2806,15 +2946,15 @@ class _PointsHistorySheetState extends State<_PointsHistorySheet> {
       final Map<String, List<Map<String, dynamic>>> grouped = {};
       final Map<String, int> totals = {};
 
-      // Process Progress Data
+      // Process Progress Data — group by category + level_number
       final Map<String, Map<String, Map<String, dynamic>>> categoryUniqueItems = {};
 
       for (var item in progressData) {
-        final category = item['category'] ?? 'General';
-        /* 
-           Use description if available and longer than 5 chars (to avoid empty/null), 
-           otherwise fallback to question_text (title).
-        */
+        final baseCategory = item['category'] ?? 'General';
+        final levelNum = item['level_number'] as int? ?? 1;
+        // Group key includes level so "Orientation L1" and "Orientation L2" are separate
+        final category = '$baseCategory L$levelNum';
+
         String displayText = item['question_text'] ?? 'Question';
         final qId = item['question_id'].toString();
         
@@ -2830,7 +2970,7 @@ class _PointsHistorySheetState extends State<_PointsHistorySheet> {
         
         final pointItem = {
           'text': displayText,
-          'subtext': 'Level ${item['level_number'] ?? 1}',
+          'subtext': 'Level $levelNum',
           'points': score,
           'date': item['created_at'],
           'type': 'question',
@@ -2852,7 +2992,7 @@ class _PointsHistorySheetState extends State<_PointsHistorySheet> {
       // Convert unique items to the expected list format and calculate totals
       categoryUniqueItems.forEach((category, itemsMap) {
         final itemsList = itemsMap.values.toList();
-        // Sort by date descending (optional, but good for history)
+        // Sort by date descending
         itemsList.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
         
         grouped[category] = itemsList;
@@ -3013,10 +3153,10 @@ class _PointsHistorySheetState extends State<_PointsHistorySheet> {
     categories.sort((a, b) {
        if (a == 'End Game') return 1;
        if (b == 'End Game') return -1;
-       if (a == 'Orientation') return -1;
-       if (b == 'Orientation') return 1;
-       if (a == 'Process') return -1;
-       if (b == 'Process') return 1;
+       if (a.startsWith('Orientation') && !b.startsWith('Orientation')) return -1;
+       if (b.startsWith('Orientation') && !a.startsWith('Orientation')) return 1;
+       if (a.startsWith('Process') && !b.startsWith('Process')) return -1;
+       if (b.startsWith('Process') && !a.startsWith('Process')) return 1;
        return a.compareTo(b);
     });
 
@@ -3033,14 +3173,12 @@ class _PointsHistorySheetState extends State<_PointsHistorySheet> {
         Color catColor = const Color(0xFF1A2F4B); // Default
         IconData catIcon = Icons.folder_rounded;
         
-        switch (category) {
-          case 'Orientation': catColor = const Color(0xFFF4EF8B); catIcon = Icons.school_rounded; break;
-          case 'Process': catColor = const Color(0xFF3B82F6); catIcon = Icons.settings_rounded; break;
-          case 'SOP': catColor = const Color(0xFF10B981); catIcon = Icons.description_rounded; break;
-          case 'End Game': catColor = const Color(0xFF8B5CF6); catIcon = Icons.games_rounded; break;
-          // Add others if needed
-        }
-
+        // Match base category (keys are now "Orientation L1", "Process L2", etc.)
+        if (category.startsWith('Orientation')) { catColor = const Color(0xFFF4EF8B); catIcon = Icons.school_rounded; }
+        else if (category.startsWith('Process')) { catColor = const Color(0xFF3B82F6); catIcon = Icons.settings_rounded; }
+        else if (category.startsWith('SOP')) { catColor = const Color(0xFF10B981); catIcon = Icons.description_rounded; }
+        else if (category == 'End Game') { catColor = const Color(0xFF8B5CF6); catIcon = Icons.games_rounded; }
+        
         return InkWell(
           onTap: () {
              setState(() => _selectedCategory = category);
@@ -3064,12 +3202,12 @@ class _PointsHistorySheetState extends State<_PointsHistorySheet> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: category == 'Orientation' ? catColor : catColor.withOpacity(0.1),
+                    color: category.startsWith('Orientation') ? catColor : catColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     catIcon, 
-                    color: category == 'Orientation' ? Colors.black.withOpacity(0.7) : catColor, 
+                    color: category.startsWith('Orientation') ? Colors.black.withOpacity(0.7) : catColor, 
                     size: 24
                   ),
                 ),
