@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../constants/game_types.dart';
 import '../../models/pathway.dart';
 import '../../services/pathway_service.dart';
 
@@ -260,7 +261,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Validate based on question type
-    if (_questionType == 'match_following') {
+    if (_questionType == GameType.matchFollowing) {
       if (_matchPairs.length < 3) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please add at least 3 match pairs')),
@@ -285,14 +286,8 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       // Use the selected question level
       int levelNumber = _selectedQuestionLevel;
 
-    // Map UI types to DB types
-    String dbType = _questionType ?? 'mcq';
-    if (_questionType == 'multiple_choice') dbType = 'mcq';
-    if (_questionType == 'match_following') dbType = 'match';
-    if (_questionType == 'scenario_decision') dbType = 'scenario_decision';
-    if (_questionType == 'card_match') dbType = 'card_match';
-    if (_questionType == 'sequence_builder') dbType = 'sequence_builder';
-    if (_questionType == 'simulation') dbType = 'simulation';
+    // Map UI types to DB types using centralized mapping
+    final String dbType = GameTypeDbMapping.toDbType(_questionType ?? 'mcq');
     
     // Get type_id from quest_types table
     final typeRes = await Supabase.instance.client
@@ -320,7 +315,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       questionData['level_id'] = _selectedLevel!.id;
     }
 
-    if (_questionType == 'multiple_choice') {
+    if (_questionType == GameType.multipleChoice) {
       // Prepare options array with is_correct flags
       final options = _optionControllers.asMap().entries.map((entry) {
         return {
@@ -331,15 +326,15 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       
       questionData['options'] = options;
       questionData['correct_answer'] = _optionControllers[_correctDisplayIndex].text.trim();
-    } else if (_questionType == 'match_following') {
+    } else if (_questionType == GameType.matchFollowing) {
       // Prepare match pairs
       final matchPairs = _matchPairs.map((pair) => {
         'left': pair['left']!.text.trim(),
         'right': pair['right']!.text.trim(),
       }).toList();
       
-      questionData['match_pairs'] = matchPairs;
-    } else if (_questionType == 'card_match') {
+      questionData['options'] = matchPairs;
+    } else if (_questionType == GameType.cardMatch) {
        // Card Flip (Memory Match) game format
        // Validate card pairs
        if (_cardPairs.length < 3) {
@@ -371,7 +366,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
        }
        
        questionData['options'] = pairs;
-     } else if (_questionType == 'sequence_builder') {
+     } else if (_questionType == GameType.sequenceBuilder) {
        final sentences = [];
        for (int i = 0; i < _sequenceSentences.length; i++) {
          final text = _sequenceSentences[i]['controller']!.text.trim();
@@ -386,7 +381,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
        }
        questionData['options'] = sentences;
        debugPrint('📤 Sequence Builder sentences: $sentences');
-     } else if (_questionType == 'scenario_decision') {
+     } else if (_questionType == GameType.scenarioDecision) {
       // Prepare options array with is_correct flags (same as multiple choice)
       final options = _optionControllers.asMap().entries.map((entry) {
         return {
@@ -397,7 +392,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
       
       questionData['options'] = options;
       questionData['correct_answer'] = _optionControllers[_correctDisplayIndex].text.trim();
-    } else if (_questionType == 'simulation') {
+    } else if (_questionType == GameType.simulation) {
       // Budget Simulation save logic
       if (_budgetDepartments.length < 2) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -689,57 +684,51 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Row 1: Department + Type
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: DropdownButtonFormField<Pathway>(
-                                      isExpanded: true,
-                                      decoration: _inputDeco('Department', icon: Icons.business),
-                                      style: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
-                                      value: _selectedPathway,
-                                      items: _pathways.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName, overflow: TextOverflow.ellipsis, maxLines: 1, style: const TextStyle(fontSize: 12)))).toList(),
-                                      onChanged: (v) { if (v != null) _loadLevels(v); },
-                                      validator: (v) => v == null ? 'Required' : null,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      isExpanded: true,
-                                      decoration: _inputDeco('Type', icon: Icons.quiz),
-                                      style: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
-                                      value: _questionType,
-                                      hint: const Text('Select', style: TextStyle(fontSize: 12)),
-                                      items: const [
-                                        DropdownMenuItem(value: 'multiple_choice', child: Text('Multiple Choice', style: TextStyle(fontSize: 12))),
-                                        DropdownMenuItem(value: 'match_following', child: Text('Match Following', style: TextStyle(fontSize: 12))),
-                                        DropdownMenuItem(value: 'card_match', child: Text('Card Match', style: TextStyle(fontSize: 12))),
-                                        DropdownMenuItem(value: 'scenario_decision', child: Text('Scenario Decision', style: TextStyle(fontSize: 12))),
-                                        DropdownMenuItem(value: 'sequence_builder', child: Text('Sequence Builder', style: TextStyle(fontSize: 12))),
-                                        DropdownMenuItem(value: 'simulation', child: Text('Budget Simulation', style: TextStyle(fontSize: 12))),
-                                      ],
-                                      onChanged: (value) {
-                                        if (value != null) {
-                                          setState(() {
-                                            _questionType = value;
-                                            if (value == 'sequence_builder' && _sequenceSentences.isEmpty) {
-                                              for (int i = 0; i < 3; i++) {
-                                                _sequenceSentences.add({'id': i + 1, 'controller': TextEditingController(), 'position': i + 1});
-                                              }
-                                            }
-                                            if (value == 'simulation' && _budgetDepartments.isEmpty) {
-                                              for (int i = 0; i < 3; i++) {
-                                                _budgetDepartments.add({'id': i + 1, 'name': TextEditingController(), 'amount': TextEditingController()});
-                                              }
-                                            }
-                                          });
-                                        }
-                                      },
-                                      validator: (v) => v == null ? 'Required' : null,
-                                    ),
-                                  ),
+                              // Department
+                              DropdownButtonFormField<Pathway>(
+                                isExpanded: true,
+                                decoration: _inputDeco('Department', icon: Icons.business),
+                                style: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
+                                value: _selectedPathway,
+                                items: _pathways.map((p) => DropdownMenuItem(value: p, child: Text(p.displayName, overflow: TextOverflow.ellipsis, maxLines: 1, style: const TextStyle(fontSize: 12)))).toList(),
+                                onChanged: (v) { if (v != null) _loadLevels(v); },
+                                validator: (v) => v == null ? 'Required' : null,
+                              ),
+                              const SizedBox(height: 8),
+
+                              // Type
+                              DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                decoration: _inputDeco('Type', icon: Icons.quiz),
+                                style: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
+                                value: _questionType,
+                                hint: const Text('Select type', style: TextStyle(fontSize: 12)),
+                                items: const [
+                                  DropdownMenuItem(value: GameType.multipleChoice, child: Text('Multiple Choice', style: TextStyle(fontSize: 12))),
+                                  DropdownMenuItem(value: GameType.matchFollowing, child: Text('Match Following', style: TextStyle(fontSize: 12))),
+                                  DropdownMenuItem(value: GameType.cardMatch, child: Text('Card Match', style: TextStyle(fontSize: 12))),
+                                  DropdownMenuItem(value: GameType.scenarioDecision, child: Text('Scenario Decision', style: TextStyle(fontSize: 12))),
+                                  DropdownMenuItem(value: GameType.sequenceBuilder, child: Text('Sequence Builder', style: TextStyle(fontSize: 12))),
+                                  DropdownMenuItem(value: GameType.simulation, child: Text('Budget Simulation', style: TextStyle(fontSize: 12))),
                                 ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() {
+                                      _questionType = value;
+                                      if (value == GameType.sequenceBuilder && _sequenceSentences.isEmpty) {
+                                        for (int i = 0; i < 3; i++) {
+                                          _sequenceSentences.add({'id': i + 1, 'controller': TextEditingController(), 'position': i + 1});
+                                        }
+                                      }
+                                      if (value == GameType.simulation && _budgetDepartments.isEmpty) {
+                                        for (int i = 0; i < 3; i++) {
+                                          _budgetDepartments.add({'id': i + 1, 'name': TextEditingController(), 'amount': TextEditingController()});
+                                        }
+                                      }
+                                    });
+                                  }
+                                },
+                                validator: (v) => v == null ? 'Required' : null,
                               ),
                               const SizedBox(height: 8),
 
@@ -753,10 +742,10 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                       style: const TextStyle(fontSize: 12, color: Color(0xFF1A2F4B)),
                                       value: _selectedQuestionLevel,
                                       items: const [
-                                        DropdownMenuItem(value: 1, child: Text('L1 Easy', style: TextStyle(fontSize: 12))),
-                                        DropdownMenuItem(value: 2, child: Text('L2 Medium', style: TextStyle(fontSize: 12))),
-                                        DropdownMenuItem(value: 3, child: Text('L3 Hard', style: TextStyle(fontSize: 12))),
-                                        DropdownMenuItem(value: 4, child: Text('L4 Expert', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 1, child: Text('Level 1', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 2, child: Text('Level 2', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 3, child: Text('Level 3', style: TextStyle(fontSize: 12))),
+                                        DropdownMenuItem(value: 4, child: Text('Level 4', style: TextStyle(fontSize: 12))),
                                       ],
                                       onChanged: (v) { if (v != null) setState(() => _selectedQuestionLevel = v); },
                                     ),
@@ -785,7 +774,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                 controller: _titleController,
                                 decoration: _inputDeco('Title', icon: Icons.title),
                                 style: const TextStyle(fontSize: 12),
-                                maxLines: _questionType == 'sequence_builder' ? 1 : null,
+                                maxLines: _questionType == GameType.sequenceBuilder ? 1 : null,
                                 validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                               ),
                               const SizedBox(height: 8),
@@ -795,14 +784,14 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                 controller: _descriptionController,
                                 decoration: _inputDeco('Description', icon: Icons.description),
                                 style: const TextStyle(fontSize: 12),
-                                maxLines: _questionType == 'sequence_builder' ? 1 : 2,
+                                maxLines: _questionType == GameType.sequenceBuilder ? 1 : 2,
                                 validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                               ),
                               const SizedBox(height: 4),
 
                               // === Type-specific sections ===
-                              if (_questionType == 'multiple_choice' || _questionType == 'scenario_decision') ...[
-                                _sectionHeader(_questionType == 'scenario_decision' ? 'Decision Options' : 'Options'),
+                              if (_questionType == GameType.multipleChoice || _questionType == GameType.scenarioDecision) ...[
+                                _sectionHeader(_questionType == GameType.scenarioDecision ? 'Decision Options' : 'Options'),
                                 ...List.generate(4, (i) {
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 6),
@@ -832,7 +821,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                   );
                                 }),
                                 Text('Tap radio to mark correct answer', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
-                              ] else if (_questionType == 'match_following') ...[
+                              ] else if (_questionType == GameType.matchFollowing) ...[
                                 _sectionHeader('Match Pairs', trailing: _matchPairs.length < 6 ? _addButton('Pair', _addMatchPair) : null),
                                 ...List.generate(_matchPairs.length, (i) {
                                   return Card(
@@ -877,7 +866,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                   );
                                 }),
                                 Text('3-6 pairs. Users match left to right.', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
-                              ] else if (_questionType == 'card_match') ...[
+                              ] else if (_questionType == GameType.cardMatch) ...[
                                 _sectionHeader('Card Pairs', trailing: _cardPairs.length < 8 ? _addButton('Pair', _addCardPair) : null),
                                 ...List.generate(_cardPairs.length, (i) {
                                   return Card(
@@ -922,7 +911,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                   );
                                 }),
                                 Text('3-8 pairs. Players flip cards to find matches.', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
-                              ] else if (_questionType == 'sequence_builder') ...[
+                              ] else if (_questionType == GameType.sequenceBuilder) ...[
                                 _sectionHeader('Sentences (correct order)', trailing: _sequenceSentences.length < 9 ? _addButton('Add', _addSequenceSentence) : null),
                                 ...List.generate(_sequenceSentences.length, (i) {
                                   return Card(
@@ -959,7 +948,7 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                                   );
                                 }),
                                 Text('3-9 sentences. Users drag to reorder.', style: TextStyle(fontSize: 10, color: Colors.grey[500], fontStyle: FontStyle.italic)),
-                              ] else if (_questionType == 'simulation') ...[
+                              ] else if (_questionType == GameType.simulation) ...[
                                 _sectionHeader('Budget Configuration'),
                                 TextFormField(
                                   controller: _totalBudgetController,

@@ -887,13 +887,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
       levelsWithAssignments.add(level);
     }
 
-    // Only show levels that have assignments OR are <= maxCompletedLevel + 1
-    final int maxLevelToShow = levelsWithAssignments.isEmpty
-        ? 1
-        : levelsWithAssignments.reduce((a, b) => a > b ? a : b);
-    final int levelsToDisplay = maxLevelToShow > (maxCompletedLevel + 1)
-        ? maxLevelToShow
-        : (maxCompletedLevel + 1).clamp(1, 4);
+    // Always show all 4 levels so user knows the full journey
+    const int levelsToDisplay = 4;
 
     // Determine the current active level (first unlocked, not completed)
     final int activeLevel = maxCompletedLevel + 1;
@@ -1434,7 +1429,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Assignments',
+                      'Current Assignment',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,

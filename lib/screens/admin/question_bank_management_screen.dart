@@ -242,7 +242,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
           child: LayoutBuilder(
             builder: (context, constraints) {
               return Container(
-                margin: const EdgeInsets.all(24),
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -260,10 +260,10 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                   ),
                 ),
                 child: SizedBox(
-                  width: constraints.maxWidth - 48,
+                  width: constraints.maxWidth - 32,
                   height: constraints.maxHeight - 48,
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -327,10 +327,10 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                       isDense: true,
                     ),
                     items: const [
-                      DropdownMenuItem(value: 1, child: Text('Level 1 (Easy)')),
-                      DropdownMenuItem(value: 2, child: Text('Level 2 (Medium)')),
-                      DropdownMenuItem(value: 3, child: Text('Level 3 (Hard)')),
-                      DropdownMenuItem(value: 4, child: Text('Level 4 (Expert)')),
+                      DropdownMenuItem(value: 1, child: Text('Level 1')),
+                      DropdownMenuItem(value: 2, child: Text('Level 2')),
+                      DropdownMenuItem(value: 3, child: Text('Level 3')),
+                      DropdownMenuItem(value: 4, child: Text('Level 4')),
                     ],
                     onChanged: (value) {
                       setDialogState(() {
@@ -465,9 +465,9 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 const Divider(thickness: 1),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 // Footer buttons
                 SizedBox(
                   width: double.infinity,
@@ -526,7 +526,7 @@ class _QuestionBankManagementScreenState extends State<QuestionBankManagementScr
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF3B82F6),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         ),
                         child: const Text('Save Changes'),
                       ),
