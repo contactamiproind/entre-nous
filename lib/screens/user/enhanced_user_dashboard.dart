@@ -55,6 +55,9 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
   
   // Raw usr_dept records for level-grouped display
   List<Map<String, dynamic>> _userDeptRecords = [];
+  
+  // End game assignments for this user (with config data)
+  List<Map<String, dynamic>> _endGameAssignments = [];
 
   @override
   void initState() {
@@ -304,64 +307,30 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
       
       debugPrint('📋 Assigned categories from usr_dept: $assignedCategories');
 
-      // Check for End Game assignment based on CURRENT LEVEL
+      // Load ALL end game assignments for this user (with config data)
       try {
-        debugPrint('🔍 Checking End Game assignment for user: $_userId');
+        final egResponse = await Supabase.instance.client
+            .from('end_game_assignments')
+            .select('*, end_game_configs(id, name, level, points, is_active)')
+            .eq('user_id', _userId!);
+        _endGameAssignments = List<Map<String, dynamic>>.from(egResponse);
+        debugPrint('🎮 Loaded ${_endGameAssignments.length} end game assignments');
         
-        // 1. Get user's highest level across departments
-        final userLevelData = await Supabase.instance.client
-            .from('usr_dept')
-            .select('current_level')
-            .eq('user_id', _userId!)
-            .order('current_level', ascending: false)
-            .limit(1)
-            .maybeSingle();
-            
-        final int currentLevel = userLevelData != null ? (userLevelData['current_level'] as int) : 1;
-        debugPrint('🔍 User is at Level $currentLevel. Checking for matching End Game...');
-
-        // 2. Get the active End Game Config for this level
-        final endGameConfig = await Supabase.instance.client
-            .from('end_game_configs')
-            .select('id')
-            .eq('level', currentLevel)
-            .eq('is_active', true)
-            .maybeSingle();
-            
-        if (endGameConfig != null) {
-          final endGameId = endGameConfig['id'];
-          
-          // 3. Get the assignment for THIS specific End Game
-          final assignment = await Supabase.instance.client
-              .from('end_game_assignments')
-              .select('id, completed_at, assigned_at')
-              .eq('user_id', _userId!)
-              .eq('end_game_id', endGameId)
-              .maybeSingle();
-          
-          if (assignment != null) {
-            debugPrint('🎮 User has End Game assignment for Level $currentLevel!');
-            debugPrint('🎮 Assignment details: $assignment');
-            assignedCategories.add('End Game');
-            
-            final isCompleted = assignment['completed_at'] != null;
-            
-            // Initialize progress for End Game
-            _categoryProgress['End Game'] = {
-              'total': 1, 
-              'answered': isCompleted ? 1 : 0, 
-              'firstUnansweredIndex': 0, 
-              'progress': isCompleted ? 1.0 : 0.0
-            };
-            debugPrint('✅ End Game added with progress: ${isCompleted ? "100%" : "0%"}');
-          } else {
-            debugPrint('❌ No assignment found for active End Game (Level $currentLevel)');
-          }
-        } else {
-          debugPrint('❌ No active End Game config found for Level $currentLevel');
+        // Add End Game progress entries for each assignment
+        for (final eg in _endGameAssignments) {
+          final config = eg['end_game_configs'] as Map<String, dynamic>?;
+          final egLevel = config?['level'] as int? ?? 1;
+          final isCompleted = eg['completed_at'] != null;
+          final key = 'EndGame_L$egLevel';
+          _categoryProgress[key] = {
+            'total': 1,
+            'answered': isCompleted ? 1 : 0,
+            'firstUnansweredIndex': 0,
+            'progress': isCompleted ? 1.0 : 0.0,
+          };
         }
       } catch (e) {
-        debugPrint('❌ Error checking End Game assignment: $e');
+        debugPrint('❌ Error loading end game assignments: $e');
       }
       
       // Build progress from usr_progress records grouped by actual level_number.
@@ -381,7 +350,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
         try {
           progressRecords = await Supabase.instance.client
               .from('usr_progress')
-              .select('question_id, status, level_number, score_earned')
+              .select('question_id, status, level_number, score_earned, questions(points)')
               .eq('usr_dept_id', usrDeptId)
               .order('created_at', ascending: true);
         } catch (e) {
@@ -410,7 +379,11 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
           final answeredQ = questions.where((p) => p['status'] == 'answered').length;
           final correctQ = questions.where((p) => p['status'] == 'answered' && (p['score_earned'] as int? ?? 0) > 0).length;
           final totalScore = questions.fold<int>(0, (sum, p) => sum + (p['score_earned'] as int? ?? 0));
-          final maxScore = totalQ * 10;
+          final maxScore = questions.fold<int>(0, (sum, p) {
+            final qData = p['questions'];
+            final pts = (qData is Map ? qData['points'] as int? : null) ?? 10;
+            return sum + pts;
+          });
           int firstUnanswered = 0;
           for (int i = 0; i < questions.length; i++) {
             if (questions[i]['status'] != 'answered') {
@@ -464,7 +437,11 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
 
             final correctQ = questions.where((p) => p['status'] == 'answered' && (p['score_earned'] as int? ?? 0) > 0).length;
             final totalScore = questions.fold<int>(0, (sum, p) => sum + (p['score_earned'] as int? ?? 0));
-            final maxScore = totalQ * 10;
+            final maxScore = questions.fold<int>(0, (sum, p) {
+              final qData = p['questions'];
+              final pts = (qData is Map ? qData['points'] as int? : null) ?? 10;
+              return sum + pts;
+            });
 
             // Create a virtual record that looks like a usr_dept record
             final virtualRecord = Map<String, dynamic>.from(record);
@@ -774,7 +751,10 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                     style: TextStyle(color: Colors.grey[400], fontSize: 13, fontStyle: FontStyle.italic),
                   ),
                 )
-              else if (levelAssignments.isEmpty)
+              else if (levelAssignments.isEmpty && _endGameAssignments.where((eg) {
+                final config = eg['end_game_configs'] as Map<String, dynamic>?;
+                return (config?['level'] as int? ?? 1) == level;
+              }).isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(14),
                   child: Text(
@@ -783,6 +763,7 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                   ),
                 )
               else
+                // Department courses first
                 ...levelAssignments.map((assignment) {
                   final dept = assignment['departments'];
                   final deptName = _buildUserDeptDisplayName(dept);
@@ -946,6 +927,12 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                     ),
                   );
                 }),
+              // End game assignments AFTER department courses
+              if (isLevelUnlocked)
+                ..._endGameAssignments.where((eg) {
+                  final config = eg['end_game_configs'] as Map<String, dynamic>?;
+                  return (config?['level'] as int? ?? 1) == level;
+                }).map((eg) => _buildEndGameCardForUser(eg, isLevelCompleted, isLevelUnlocked)),
             ],
           ),
         ),
@@ -953,6 +940,73 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
     }
 
     return cards;
+  }
+
+  /// Build an end game assignment card for the user dashboard
+  Widget _buildEndGameCardForUser(Map<String, dynamic> assignment, bool isLevelCompleted, bool isLevelUnlocked) {
+    final config = assignment['end_game_configs'] as Map<String, dynamic>?;
+    final name = config?['name'] ?? 'End Game';
+    final configPoints = config?['points'] as int? ?? 100;
+    final isCompleted = assignment['completed_at'] != null;
+    final score = assignment['score'] as int?;
+    final canTap = isLevelUnlocked && !isLevelCompleted && !isCompleted;
+
+    return InkWell(
+      onTap: canTap
+          ? () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const EndGameScreen()),
+              );
+              if (mounted) _loadData();
+            }
+          : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: Colors.grey.shade200)),
+          color: const Color(0xFFFFF9E6).withOpacity(0.3),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.sports_esports_rounded,
+              size: 22,
+              color: isLevelCompleted || !isLevelUnlocked
+                  ? Colors.grey
+                  : Colors.deepPurple.shade400,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: isLevelUnlocked ? const Color(0xFF1E293B) : Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isCompleted && score != null
+                        ? '$score / $configPoints pts'
+                        : '$configPoints pts',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+            if (isCompleted)
+              const Icon(Icons.check_circle, size: 18, color: Colors.green)
+            else if (canTap)
+              Icon(Icons.chevron_right_rounded, size: 22, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1212,130 +1266,8 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                     ),
                     const SizedBox(height: 14),
                   
-                  // Show only current active level on Home tab
+                  // Show only current active level on Home tab (end games included inside level cards)
                   ..._buildDynamicCategoryCards(currentLevelOnly: true),
-                  
-                  // End Game Category (only shown if assigned)
-                  if (_categoryProgress.containsKey('End Game')) ...[
-                    const SizedBox(height: 12),
-                    _buildCategoryCard(
-                      category: 'End Game',
-                      icon: Icons.games_rounded,
-                      color: const Color(0xFF8B5CF6), // Purple
-                      description: 'Final Verification Challenge',
-                      progress: _categoryProgress['End Game']?['progress'] ?? 0.0,
-                      isLocked: (_categoryProgress['SOP']?['progress'] ?? 0.0) < 1.0,
-                      isCurrent: false, 
-                      onTap: () async {
-                        // Show the introductory dialog first
-                        await showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (BuildContext dialogContext) {
-                            return Dialog(
-                              backgroundColor: Colors.transparent,
-                              child: Container(
-                                constraints: const BoxConstraints(maxWidth: 400),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(
-                                    color: const Color(0xFFF4EF8B),
-                                    width: 4,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 10),
-                                    ),
-                                  ],
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: SingleChildScrollView(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        // Title
-                                        const Text(
-                                          'What We\'ve Created Together',
-                                          style: TextStyle(
-                                            fontSize: 24,
-                                            fontWeight: FontWeight.w900,
-                                            color: Colors.black,
-                                            letterSpacing: 0.5,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 20),
-                                        
-                                        // Message
-                                        const Text(
-                                          'You\'ve laughed, played, posed, sung, and celebrated\n'
-                                          'not just an occasion, but a person.\n\n'
-                                          'Every moment tonight\n'
-                                          'from the flowers in full bloom to the music, memories, and madness\n'
-                                          'was a reflection of Deeksha and the people who love her.\n\n'
-                                          'As we head into the final game,\n'
-                                          'this is your last chance to go all in\n'
-                                          'one room, one energy, one unforgettable finish.\n\n'
-                                          'Let\'s end it the way we started.\n'
-                                          'Together. 💫',
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            height: 1.6,
-                                            color: Colors.black87,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 30),
-                                        
-                                        // Button
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: ElevatedButton(
-                                            onPressed: () {
-                                              Navigator.of(dialogContext).pop();
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => const EndGameScreen(),
-                                                ),
-                                              );
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFFF4EF8B),
-                                              foregroundColor: Colors.black,
-                                              padding: const EdgeInsets.symmetric(vertical: 16),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(12),
-                                              ),
-                                              elevation: 4,
-                                            ),
-                                            child: const Text(
-                                              'END GAME',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                                letterSpacing: 1,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      onContinue: null,
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -2318,19 +2250,6 @@ class _EnhancedUserDashboardState extends State<EnhancedUserDashboard> with Widg
                             MaterialPageRoute(builder: (context) => const EditProfileScreen()),
                           );
                           if (result == true && mounted) _loadData();
-                        },
-                      ),
-                      _profileDivider(),
-                      _buildProfileOption(
-                        icon: Icons.settings_outlined,
-                        title: 'Settings',
-                        subtitle: 'App preferences',
-                        color: const Color(0xFF6B7280),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                          );
                         },
                       ),
                       _profileDivider(),

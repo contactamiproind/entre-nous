@@ -429,8 +429,14 @@ class _QuizScreenState extends State<QuizScreen> {
   Future<void> _handleGameAnswer(Map<String, dynamic> question, String type) async {
     final isCorrect = _answeredCorrectly[_currentQuestionIndex] ?? false;
     _questionTimer?.cancel();
-    _recordScore(_currentQuestionIndex, isCorrect);
+
+    // Card match scoring is already set per-match by onGameComplete — don't overwrite
+    if (type != GameType.cardMatch) {
+      _recordScore(_currentQuestionIndex, isCorrect);
+    }
     final score = _questionPoints[_currentQuestionIndex] ?? 0;
+    final maxPts = _getQuestionPoints(_currentQuestionIndex);
+    final isPartial = type == GameType.cardMatch && score > 0 && score < maxPts;
 
     await _saveProgress(
       question: question,
@@ -439,23 +445,72 @@ class _QuizScreenState extends State<QuizScreen> {
       pointsEarned: score,
     );
 
-    _showCelebrationThenAdvance(score);
+    _showCelebrationThenAdvance(score, isPartial: isPartial);
   }
 
-  void _showCelebrationThenAdvance(int points) async {
-    await Future.delayed(const Duration(milliseconds: 300));
+  void _showCelebrationThenAdvance(int points, {bool isPartial = false}) async {
+    await Future.delayed(const Duration(milliseconds: 200));
     if (!mounted) return;
+
+    final bool hasPoints = points > 0;
+
+    // Determine title and message
+    String title;
+    String message;
+    if (hasPoints && !isPartial) {
+      title = 'Well Done!';
+      message = 'Great job! Keep it up!';
+    } else if (hasPoints && isPartial) {
+      title = 'Good Try!';
+      message = 'You got some right!';
+    } else {
+      title = 'Wrong Answer';
+      message = 'Better luck on the next one!';
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.7),
-      builder: (ctx) => CelebrationWidget(
-        show: true,
-        points: points,
-        onComplete: () {
-          Navigator.of(ctx).pop();
-          _advanceToNext();
-        },
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: hasPoints ? const Color(0xFFFFF9E6) : Colors.white,
+        title: Row(
+          children: [
+            Icon(
+              hasPoints ? Icons.celebration_rounded : Icons.sentiment_dissatisfied_rounded,
+              color: hasPoints ? const Color(0xFFE8D96F) : const Color(0xFFF08A7E),
+              size: 32,
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: hasPoints ? const Color(0xFF1E293B) : const Color(0xFFF08A7E),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _advanceToNext();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: hasPoints ? const Color(0xFFF4EF8B) : const Color(0xFF8B5CF6),
+              foregroundColor: hasPoints ? const Color(0xFF1E293B) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Continue', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
       ),
     );
   }
@@ -483,26 +538,45 @@ class _QuizScreenState extends State<QuizScreen> {
   // ─── HELPERS ─────────────────────────────────────────────
 
   bool _isFlipCardGame(Map<String, dynamic> question) {
+    // Card match uses options as a list of pair objects, or match_pairs
     final options = question['options'];
-    if (options == null || options is! List || options.isEmpty) return false;
-    if (options[0] is Map) {
+    final matchPairs = question['match_pairs'];
+    debugPrint('🃏 _isFlipCardGame check: options=${options?.runtimeType}, match_pairs=${matchPairs?.runtimeType}');
+    if (options is List && options.isNotEmpty && options[0] is Map) {
       final first = options[0] as Map;
-      return first.containsKey('question') && first.containsKey('answer');
+      debugPrint('🃏   options[0] keys: ${first.keys.toList()}');
+      // Support both key formats: question/answer OR left/right
+      return (first.containsKey('question') && first.containsKey('answer')) ||
+             (first.containsKey('left') && first.containsKey('right'));
+    }
+    if (matchPairs is List && matchPairs.isNotEmpty) {
+      debugPrint('🃏   Using match_pairs instead');
+      return true;
     }
     return false;
   }
 
   List<Map<String, dynamic>> _buildCardPairs(Map<String, dynamic> question) {
-    final options = question['options'];
-    if (options == null || options is! List) return [];
-    return options
-        .map<Map<String, dynamic>>((p) => {
-              'id': p['id'],
-              'left': p['question'],
-              'right': p['answer'],
-              'left_icon': null,
-              'right_icon': null,
-            })
+    // Try options first, then match_pairs
+    var rawPairs = question['options'];
+    if (rawPairs == null || rawPairs is! List || rawPairs.isEmpty) {
+      rawPairs = question['match_pairs'];
+    }
+    if (rawPairs == null || rawPairs is! List) return [];
+
+    return rawPairs.asMap().entries
+        .map<Map<String, dynamic>>((entry) {
+          final p = entry.value;
+          if (p is! Map) return <String, dynamic>{};
+          return {
+            'id': p['id'] ?? entry.key,
+            'left': p['question'] ?? p['left'] ?? '',
+            'right': p['answer'] ?? p['right'] ?? '',
+            'left_icon': null,
+            'right_icon': null,
+          };
+        })
+        .where((p) => p.isNotEmpty)
         .toList();
   }
 
@@ -738,29 +812,32 @@ class _QuizScreenState extends State<QuizScreen> {
     if (type == GameType.cardMatch) {
       if (_isFlipCardGame(question)) {
         final cardPairs = _buildCardPairs(question);
-        final totalPts = (question['points'] as int?) ?? 10;
-        final perMatch = cardPairs.isNotEmpty ? (totalPts / cardPairs.length).round() : totalPts;
         return SizedBox(
           height: 700,
           child: CardFlipGameWidget(
             key: ValueKey('flip_${question['id']}'),
             pairs: cardPairs,
-            pointsPerMatch: perMatch,
-            onGameComplete: (score, accuracy) {
+            onGameComplete: (matchesFound, accuracy) {
+              // Distribute total points among correct matches
+              final totalPts = (question['points'] as int?) ?? 10;
+              final pairCount = cardPairs.length;
+              final perMatch = pairCount > 0 ? totalPts / pairCount : 0.0;
+              final earnedPts = (perMatch * matchesFound).round();
+              debugPrint('🎯 CardMatch onGameComplete: totalPts=$totalPts, pairs=$pairCount, matched=$matchesFound, earned=$earnedPts');
               setState(() {
                 _isCardGameComplete = true;
-                _answeredCorrectly[_currentQuestionIndex] = accuracy >= 0.7;
+                _questionPoints[_currentQuestionIndex] = earnedPts;
+                _answeredCorrectly[_currentQuestionIndex] = matchesFound == pairCount;
               });
             },
-            onComplete: (rawScore, accuracy, timeTaken) async {
-              final isWin = accuracy >= 0.7;
-              _recordScore(_currentQuestionIndex, isWin);
-              final cappedScore = _questionPoints[_currentQuestionIndex] ?? 0;
+            onComplete: (matchesFound, accuracy, timeTaken) async {
+              final earnedPts = _questionPoints[_currentQuestionIndex] ?? 0;
+              final allCorrect = matchesFound == cardPairs.length;
               await _saveProgress(
                 question: question,
-                isCorrect: isWin,
-                userAnswer: {'type': GameType.cardMatch, 'score': cappedScore, 'accuracy': accuracy},
-                pointsEarned: cappedScore,
+                isCorrect: allCorrect,
+                userAnswer: {'type': GameType.cardMatch, 'matches': matchesFound, 'total_pairs': cardPairs.length, 'score': earnedPts},
+                pointsEarned: earnedPts,
               );
               if (_currentQuestionIndex < _questions.length - 1) {
                 setState(() {
@@ -834,17 +911,7 @@ class _QuizScreenState extends State<QuizScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          if (_currentQuestionIndex > 0)
-            OutlinedButton(
-              onPressed: () {
-                setState(() => _currentQuestionIndex--);
-                _startQuestionTimer();
-              },
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.grey[700]),
-              child: const Text('Previous'),
-            )
-          else
-            const SizedBox(),
+          const SizedBox(),
           ElevatedButton(
             onPressed: !isAnswered ? null : _onNextPressed,
             style: ElevatedButton.styleFrom(

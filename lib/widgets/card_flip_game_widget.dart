@@ -2,62 +2,58 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
 
+/// Card matching game.
+///
+/// - **Single tap** = peek (card shows briefly, flips back).
+/// - **Double-tap** = lock card open permanently.
+/// - Two locked cards = match attempt (no right/wrong feedback).
+/// - All cards look the same once locked — no green/red cues.
+/// - Game ends when all cards are locked.
 class CardFlipGameWidget extends StatefulWidget {
   final List<Map<String, dynamic>> pairs;
-  final Function(int score, double accuracy, int timeTaken) onComplete;
-  final Function(int score, double accuracy)? onGameComplete; // Pass score when game is done
-  final int pointsPerMatch;
+  final Function(int matchesFound, double accuracy, int timeTaken) onComplete;
+  final Function(int matchesFound, double accuracy)? onGameComplete;
 
   const CardFlipGameWidget({
     super.key,
     required this.pairs,
     required this.onComplete,
     this.onGameComplete,
-    this.pointsPerMatch = 10,
   });
 
   @override
   State<CardFlipGameWidget> createState() => _CardFlipGameWidgetState();
 }
 
-class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProviderStateMixin {
+class _CardFlipGameWidgetState extends State<CardFlipGameWidget>
+    with TickerProviderStateMixin {
   List<GameCard> _cards = [];
-  GameCard? _firstFlipped;
-  GameCard? _secondFlipped;
-  bool _isProcessing = false;
   int _matchesFound = 0;
-  int _totalAttempts = 0;
-  int _score = 0;
+  int _lockedCount = 0;
   Timer? _gameTimer;
   int _secondsElapsed = 0;
-  bool _isGameComplete = false; // Track if game is complete but waiting for Next
-  
+  bool _isGameComplete = false;
+  Timer? _peekTimer;
+
   @override
   void initState() {
     super.initState();
     _initializeGame();
     _startTimer();
   }
-  
+
   @override
   void dispose() {
     _gameTimer?.cancel();
+    _peekTimer?.cancel();
     super.dispose();
   }
-  
+
   void _initializeGame() {
-    debugPrint('🎮 CardFlipGameWidget._initializeGame()');
-    debugPrint('   Pairs received: ${widget.pairs.length}');
-    debugPrint('   Pairs data: ${widget.pairs}');
-    
-    // Create cards from pairs
     List<GameCard> cards = [];
     int cardId = 0;
-    
+
     for (var pair in widget.pairs) {
-      debugPrint('   Processing pair ${pair['id']}: left="${pair['left']}", right="${pair['right']}"');
-      
-      // Each pair creates 2 cards
       cards.add(GameCard(
         id: cardId++,
         pairId: pair['id'] ?? cardId ~/ 2,
@@ -71,157 +67,117 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
         icon: pair['right_icon'],
       ));
     }
-    
-    // Shuffle cards
+
     cards.shuffle(Random());
-    
-    debugPrint('   Created ${cards.length} cards total');
-    
-    setState(() {
-      _cards = cards;
-    });
-    
-    debugPrint('   ✅ Game initialized with ${_cards.length} cards');
+    setState(() => _cards = cards);
   }
-  
+
   void _startTimer() {
     _gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _secondsElapsed++;
-      });
+      setState(() => _secondsElapsed++);
     });
   }
-  
-  void _onCardTap(GameCard card) {
-    if (_isProcessing || card.isMatched || card.isFlipped) return;
-    
-    setState(() {
-      card.isFlipped = true;
+
+  // ─── SINGLE TAP = PEEK ─────────────────────────────────
+
+  void _onSingleTap(GameCard card) {
+    if (_isGameComplete || card.isLocked || card.isPeeking) return;
+
+    // Cancel any existing peek first
+    _cancelPeek();
+
+    setState(() => card.isPeeking = true);
+    _peekTimer = Timer(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      setState(() => card.isPeeking = false);
     });
-    
-    if (_firstFlipped == null) {
-      _firstFlipped = card;
-    } else if (_secondFlipped == null) {
-      _secondFlipped = card;
-      _totalAttempts++;
-      _checkMatch();
+  }
+
+  void _cancelPeek() {
+    _peekTimer?.cancel();
+    for (var c in _cards) {
+      if (c.isPeeking) c.isPeeking = false;
     }
   }
-  
-  void _checkMatch() {
-    _isProcessing = true;
-    
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (_firstFlipped!.pairId == _secondFlipped!.pairId) {
-        // Match found!
-        setState(() {
-          _firstFlipped!.isMatched = true;
-          _secondFlipped!.isMatched = true;
-          _matchesFound++;
-          _score += widget.pointsPerMatch;
-        });
-        
-        // Check if game is complete
-        if (_matchesFound == widget.pairs.length) {
-          _gameComplete();
-        }
-      } else {
-        // No match - flip back
-        setState(() {
-          _firstFlipped!.isFlipped = false;
-          _secondFlipped!.isFlipped = false;
-        });
-      }
-      
-      setState(() {
-        _firstFlipped = null;
-        _secondFlipped = null;
-        _isProcessing = false;
-      });
+
+  // ─── DOUBLE TAP = LOCK ─────────────────────────────────
+
+  void _onDoubleTap(GameCard card) {
+    if (_isGameComplete || card.isLocked) return;
+
+    _peekTimer?.cancel();
+
+    setState(() {
+      card.isPeeking = false;
+      card.isLocked = true;
+      _lockedCount++;
     });
+
+    // Check if two unpaired locked cards exist → form a match attempt
+    final unpairedLocked =
+        _cards.where((c) => c.isLocked && !c.isPaired).toList();
+
+    if (unpairedLocked.length == 2) {
+      final first = unpairedLocked[0];
+      final second = unpairedLocked[1];
+
+      first.isPaired = true;
+      second.isPaired = true;
+
+      // Silently check correctness — no visual feedback
+      if (first.pairId == second.pairId) {
+        first.isMatched = true;
+        second.isMatched = true;
+        _matchesFound++;
+      }
+
+      // Game ends when all cards are locked
+      if (_lockedCount == _cards.length) {
+        _gameComplete();
+      }
+    }
   }
-  
+
   void _gameComplete() {
     _gameTimer?.cancel();
-    setState(() {
-      _isGameComplete = true;
-    });
-    // Notify parent that game is complete with score and accuracy
-    final accuracy = _matchesFound / _totalAttempts;
-    widget.onGameComplete?.call(_score, accuracy);
+    setState(() => _isGameComplete = true);
+    final totalPairs = widget.pairs.length;
+    final accuracy = totalPairs > 0 ? _matchesFound / totalPairs : 0.0;
+    widget.onGameComplete?.call(_matchesFound, accuracy);
   }
-  
-  // Method to be called from parent when Next button is clicked
+
   void completeGame() {
     if (_isGameComplete) {
-      final accuracy = _matchesFound / _totalAttempts;
-      widget.onComplete(_score, accuracy, _secondsElapsed);
+      final totalPairs = widget.pairs.length;
+      final accuracy = totalPairs > 0 ? _matchesFound / totalPairs : 0.0;
+      widget.onComplete(_matchesFound, accuracy, _secondsElapsed);
     }
   }
-  
-  String _formatTime(int seconds) {
-    final minutes = seconds ~/ 60;
-    final secs = seconds % 60;
-    return '${minutes.toString().padLeft(1, '0')}:${secs.toString().padLeft(2, '0')}';
-  }
-  
+
+  // ─── BUILD ─────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    debugPrint('🎨 CardFlipGameWidget.build() called');
-    debugPrint('   Cards count: ${_cards.length}');
-    debugPrint('   Matches found: $_matchesFound / ${widget.pairs.length}');
-    
     final gridSize = _calculateGridSize(_cards.length);
-    
+
     return Container(
       padding: const EdgeInsets.all(4),
       child: Column(
         children: [
-          // Score and Timer Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF4EF8B).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
+          // Hint text
+          if (!_isGameComplete) ...[
+            Text(
+              'Tap to peek  •  Double-tap to lock',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.star, color: Color(0xFFE8D96F), size: 24),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Score: $_score',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFE8D96F),
-                      ),
-                    ),
-                  ],
-                ),
-                // Timer removed - using main quiz timer instead
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 4),
-          
-          // Matches Counter
-          Text(
-            'Matches: $_matchesFound/${widget.pairs.length}',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF64748B),
-            ),
-          ),
-          
-          const SizedBox(height: 4),
-          
+            const SizedBox(height: 8),
+          ],
+
           // Card Grid
-          // Removed Expanded to allow fitting in content
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -229,38 +185,65 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
               crossAxisCount: gridSize.columns,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              childAspectRatio: 1.0, // Square cards to allow more vertical space for text
+              childAspectRatio: 1.0,
             ),
             itemCount: _cards.length,
-            itemBuilder: (context, index) {
-              return _buildCard(_cards[index]);
-            },
+            itemBuilder: (context, index) => _buildCard(_cards[index]),
           ),
+
+          if (_isGameComplete) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4EF8B).withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle_rounded,
+                      color: Color(0xFF1E293B), size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'All cards locked! Tap Next to see results.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
-  
+
+  // ─── CARD WIDGET ───────────────────────────────────────
+
   Widget _buildCard(GameCard card) {
+    final bool showFace = card.isPeeking || card.isLocked;
+
     return GestureDetector(
-      onTap: () => _onCardTap(card),
+      onTap: () => _onSingleTap(card),
+      onDoubleTap: () => _onDoubleTap(card),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
         decoration: BoxDecoration(
-          color: card.isMatched
-              ? const Color(0xFF6BCB9F).withOpacity(0.3)
-              : card.isFlipped
-                  ? Colors.white
-                  : const Color(0xFFF4EF8B),
+          // No green — locked cards look the same as peeked cards (white)
+          color: showFace ? Colors.white : const Color(0xFFF4EF8B),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: card.isMatched
-                ? const Color(0xFF6BCB9F)
-                : card.isFlipped
-                    ? const Color(0xFFE8D96F)
+            color: card.isLocked
+                ? const Color(0xFFE8D96F)
+                : showFace
+                    ? const Color(0xFFE8D96F).withOpacity(0.5)
                     : Colors.transparent,
-            width: 3,
+            width: card.isLocked ? 3 : 2,
           ),
           boxShadow: [
             BoxShadow(
@@ -271,27 +254,19 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
           ],
         ),
         child: Center(
-          child: card.isFlipped || card.isMatched
+          child: showFace
               ? _buildCardContent(card)
-              : const Icon(
-                  Icons.question_mark,
-                  size: 40,
-                  color: Colors.black,
-                ),
+              : const Icon(Icons.question_mark, size: 40, color: Colors.black),
         ),
       ),
     );
   }
-  
+
   Widget _buildCardContent(GameCard card) {
     if (card.icon != null && card.icon!.isNotEmpty) {
-      // Try to parse as emoji or icon
-      return Text(
-        card.icon!,
-        style: const TextStyle(fontSize: 40),
-      );
+      return Text(card.icon!, style: const TextStyle(fontSize: 36));
     }
-    
+
     return Padding(
       padding: const EdgeInsets.all(4.0),
       child: Center(
@@ -315,15 +290,14 @@ class _CardFlipGameWidgetState extends State<CardFlipGameWidget> with TickerProv
       ),
     );
   }
-  
+
   GridSize _calculateGridSize(int cardCount) {
-    // Calculate optimal grid dimensions - prefer WIDER grids to save vertical space
     if (cardCount <= 4) return GridSize(2, 2);
-    if (cardCount <= 6) return GridSize(3, 2); // Was 2,3 (tall) -> now 3,2 (wide)
-    if (cardCount <= 8) return GridSize(4, 2); // Was 2,4 (tall) -> now 4,2 (wide)
-    if (cardCount <= 12) return GridSize(4, 3); // Was 3,4 (tall) -> now 4,3 (wide)
+    if (cardCount <= 6) return GridSize(3, 2);
+    if (cardCount <= 8) return GridSize(4, 2);
+    if (cardCount <= 12) return GridSize(4, 3);
     if (cardCount <= 16) return GridSize(4, 4);
-    return GridSize(5, 4); // Was 4,5 -> now 5,4
+    return GridSize(5, 4);
   }
 }
 
@@ -332,15 +306,19 @@ class GameCard {
   final int pairId;
   final String content;
   final String? icon;
-  bool isFlipped;
+  bool isPeeking;
+  bool isLocked;
+  bool isPaired;
   bool isMatched;
-  
+
   GameCard({
     required this.id,
     required this.pairId,
     required this.content,
     this.icon,
-    this.isFlipped = false,
+    this.isPeeking = false,
+    this.isLocked = false,
+    this.isPaired = false,
     this.isMatched = false,
   });
 }
@@ -348,6 +326,6 @@ class GameCard {
 class GridSize {
   final int columns;
   final int rows;
-  
+
   GridSize(this.columns, this.rows);
 }

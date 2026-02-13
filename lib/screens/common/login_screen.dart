@@ -25,98 +25,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _showForgotPasswordDialog() async {
-    final emailController = TextEditingController();
-    bool isLoading = false;
-    String dialogError = '';
-
-    await showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Text('Reset Password', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A2F4B))),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Enter your email address and we\'ll send you a link to reset your password.', style: TextStyle(fontSize: 14, color: Colors.black87)),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      hintText: 'Email',
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      prefixIcon: const Icon(Icons.email_rounded, color: Color(0xFFFFA726)),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFFA726), width: 2)),
-                    ),
-                  ),
-                  if (dialogError.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: const Color(0xFFF08A7E).withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFF08A7E).withOpacity(0.5))),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline, color: Color(0xFFF08A7E), size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(dialogError, style: const TextStyle(color: Color(0xFFD32F2F), fontSize: 12))),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              actions: [
-                TextButton(onPressed: isLoading ? null : () => Navigator.of(dialogContext).pop(), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
-                ElevatedButton(
-                  onPressed: isLoading ? null : () async {
-                    final email = emailController.text.trim();
-                    if (email.isEmpty || !email.contains('@')) {
-                      setDialogState(() => dialogError = 'Please enter a valid email address');
-                      return;
-                    }
-                    setDialogState(() {
-                      isLoading = true;
-                      dialogError = '';
-                    });
-                    try {
-                      await Supabase.instance.client.auth.resetPasswordForEmail(email);
-                      if (!mounted) return;
-                      Navigator.of(dialogContext).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(children: [const Icon(Icons.check_circle, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text('Password reset link sent to $email', style: const TextStyle(fontWeight: FontWeight.w600)))]),
-                          backgroundColor: const Color(0xFF6BCB9F),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          duration: const Duration(seconds: 4),
-                        ),
-                      );
-                    } catch (e) {
-                      setDialogState(() {
-                        isLoading = false;
-                        dialogError = 'Error: ${e.toString()}';
-                      });
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFA726), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text('Send Reset Link', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    emailController.dispose();
-  }
-
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -516,25 +424,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 }
                                 return null;
                               },
-                            ),
-                            const SizedBox(height: 8),
-                            // Forgot Password link
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: _showForgotPasswordDialog,
-                                style: TextButton.styleFrom(
-                                  foregroundColor: const Color(0xFFFFA726),
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                ),
-                                child: const Text(
-                                  'Forgot Password?',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
                             ),
                             const SizedBox(height: 16),
                             // Error message

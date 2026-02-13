@@ -70,6 +70,7 @@ class EndGameService {
     required Map<String, dynamic> venueData,
     required Map<String, dynamic> itemsData,
     bool isActive = false,
+    int points = 100,
   }) async {
     try {
       final data = {
@@ -78,6 +79,7 @@ class EndGameService {
         'venue_data': venueData,
         'items_data': itemsData,
         'is_active': isActive,
+        'points': points,
         'updated_at': DateTime.now().toIso8601String(),
       };
 
@@ -140,58 +142,24 @@ class EndGameService {
   }
 
   /// Mark End Game assignment as completed
+  /// Level promotion is NOT automatic — admin reviews and unlocks next level
   Future<void> markAsCompleted(String userId, String endGameId, int score) async {
     try {
       debugPrint('🎮 Marking End Game $endGameId as completed for user $userId with score $score');
       
       // Use upsert to ensure record exists (create if missing, update if exists)
-      final response = await _supabase
+      await _supabase
           .from('end_game_assignments')
           .upsert({
             'user_id': userId,
             'end_game_id': endGameId,
             'completed_at': DateTime.now().toIso8601String(),
             'score': score,
-            'assigned_at': DateTime.now().toIso8601String(), // Only used if creating new record
+            'assigned_at': DateTime.now().toIso8601String(),
           }, onConflict: 'user_id,end_game_id')
           .select();
           
-      debugPrint('🎮 Upsert response: $response');
-      
-      // Successfully marked as complete. Now check if we should level up.
-      try {
-        // Get current level
-        final profileData = await _supabase
-            .from('profiles')
-            .select('level')
-            .eq('user_id', userId)
-            .maybeSingle();
-            
-        if (profileData != null) {
-          final currentLevel = (profileData['level'] as int?) ?? 1;
-          // Get the level of the completed endgame
-          final endGameConfig = await _supabase
-              .from('end_game_configs')
-              .select('level')
-              .eq('id', endGameId)
-              .maybeSingle();
-              
-          final endGameLevel = (endGameConfig?['level'] as int?) ?? 1;
-          
-          // If the user just completed a level equal to their current level, promote them!
-          // e.g. Completed Level 1 End Game while at Level 1 -> Promote to Level 2
-          if (endGameLevel == currentLevel) {
-             await _supabase
-                .from('profiles')
-                .update({'level': currentLevel + 1})
-                .eq('user_id', userId);
-             debugPrint('🎉 Promoted user $userId to Level ${currentLevel + 1}!');
-          }
-        }
-      } catch (e) {
-        debugPrint('⚠️ Error updating user level: $e');
-        // Don't fail the whole operation if level update fails
-      }
+      debugPrint('✅ End Game saved. Awaiting admin review for level promotion.');
     } catch (e) {
       debugPrint('❌ Failed to mark End Game as completed: $e');
       throw Exception('Failed to mark End Game as completed: $e');

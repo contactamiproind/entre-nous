@@ -17,8 +17,8 @@ class BudgetAllocationWidget extends StatefulWidget {
 class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
   late int totalBudget;
   late List<Map<String, dynamic>> departments;
-  Map<int, int?> departmentAllocations = {}; // dept_id -> amount
-  List<int> availableAmounts = [];
+  Map<int, int?> departmentAllocations = {}; // dept_id -> chip index
+  List<int> chipAmounts = []; // index -> amount value
   bool isSubmitted = false;
   Map<int, bool> departmentResults = {};
   int finalScore = 0;
@@ -64,31 +64,36 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
       departmentAllocations[dept['id']] = null;
     }
 
-    // Create list of available amounts with indices (to handle duplicates)
-    // Each entry is a map with 'index' and 'amount'
-    availableAmounts = [];
+    // Create shuffled list of amounts (one per department)
+    chipAmounts = [];
     for (int i = 0; i < departments.length; i++) {
-      availableAmounts.add(departments[i]['correct_amount'] as int);
+      chipAmounts.add(departments[i]['correct_amount'] as int);
     }
-    availableAmounts.shuffle();
+    chipAmounts.shuffle();
 
     debugPrint('Budget simulation initialized: $totalBudget budget, ${departments.length} departments');
-    debugPrint('Available amounts: $availableAmounts');
+    debugPrint('Chip amounts: $chipAmounts');
   }
 
-  void _onAmountDropped(int deptId, int amount) {
+  void _onAmountDropped(int deptId, int chipIndex) {
     setState(() {
-      // Simply assign the amount to this department
-      // The display logic will automatically hide/show chips based on assignments
-      departmentAllocations[deptId] = amount;
+      // Free up any chip previously assigned to this dept
+      // Also free up this chip from any other dept
+      departmentAllocations.forEach((key, val) {
+        if (val == chipIndex) departmentAllocations[key] = null;
+      });
+      departmentAllocations[deptId] = chipIndex;
     });
   }
 
   bool get canSubmit {
-    final result = departmentAllocations.values.every((amount) => amount != null);
-    debugPrint('🔘 canSubmit check: $result');
-    debugPrint('   Allocations: $departmentAllocations');
-    return result;
+    return departmentAllocations.values.every((idx) => idx != null);
+  }
+
+  /// Get the amount assigned to a department (or null)
+  int? _getAllocatedAmount(int deptId) {
+    final idx = departmentAllocations[deptId];
+    return idx != null ? chipAmounts[idx] : null;
   }
 
   void _submitBudget() {
@@ -121,7 +126,8 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
     for (var dept in departments) {
       final deptId = dept['id'];
       final correctAmount = dept['correct_amount'];
-      final allocatedAmount = departmentAllocations[deptId];
+      final chipIdx = departmentAllocations[deptId];
+      final allocatedAmount = chipIdx != null ? chipAmounts[chipIdx] : null;
 
       bool isCorrect = allocatedAmount == correctAmount;
       departmentResults[deptId] = isCorrect;
@@ -227,7 +233,8 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
             final dept = departments[index];
             final deptId = dept['id'];
             final deptName = dept['name'];
-            final allocatedAmount = departmentAllocations[deptId];
+            final allocatedAmount = _getAllocatedAmount(deptId);
+            final chipIdx = departmentAllocations[deptId];
 
             Color cardColor = Colors.white;
             IconData? resultIcon;
@@ -249,7 +256,7 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               child: DragTarget<int>(
-                onAccept: isSubmitted ? null : (amount) => _onAmountDropped(deptId, amount),
+                onAcceptWithDetails: isSubmitted ? null : (details) => _onAmountDropped(deptId, details.data),
                 builder: (context, candidateData, rejectedData) {
                   final isHovering = candidateData.isNotEmpty;
                   
@@ -304,9 +311,9 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
                         ),
                         
                         // Allocated Amount or Drop Zone
-                        if (allocatedAmount != null)
+                        if (allocatedAmount != null && chipIdx != null)
                           Draggable<int>(
-                            data: allocatedAmount,
+                            data: chipIdx,
                             feedback: Material(
                               color: Colors.transparent,
                               child: _buildAmountChip(allocatedAmount, isDragging: true),
@@ -386,50 +393,30 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
               runSpacing: 12,
               alignment: WrapAlignment.center,
               children: () {
-                // Count how many of each amount are assigned
-                final assignedCounts = <int, int>{};
-                for (var amount in departmentAllocations.values) {
-                  if (amount != null) {
-                    assignedCounts[amount] = (assignedCounts[amount] ?? 0) + 1;
-                  }
-                }
-                
-                // Count how many of each amount we have total
-                final totalCounts = <int, int>{};
-                for (var amount in availableAmounts) {
-                  totalCounts[amount] = (totalCounts[amount] ?? 0) + 1;
-                }
-                
-                // Build chips for unassigned amounts
+                // Show chips that are NOT assigned to any department
+                final assignedIndices = departmentAllocations.values
+                    .where((idx) => idx != null)
+                    .toSet();
+
                 final chips = <Widget>[];
-                final usedAmounts = <int>[];
-                
-                for (var amount in availableAmounts) {
-                  // Count how many of this amount we've already shown
-                  final shownCount = usedAmounts.where((a) => a == amount).length;
-                  // Count how many of this amount are assigned
-                  final assignedCount = assignedCounts[amount] ?? 0;
-                  
-                  // Only show if we haven't shown all instances of this amount
-                  if (shownCount < (totalCounts[amount]! - assignedCount)) {
+                for (int i = 0; i < chipAmounts.length; i++) {
+                  if (!assignedIndices.contains(i)) {
                     chips.add(
                       Draggable<int>(
-                        data: amount,
+                        data: i,
                         feedback: Material(
                           color: Colors.transparent,
-                          child: _buildAmountChip(amount, isDragging: true),
+                          child: _buildAmountChip(chipAmounts[i], isDragging: true),
                         ),
                         childWhenDragging: Opacity(
                           opacity: 0.3,
-                          child: _buildAmountChip(amount),
+                          child: _buildAmountChip(chipAmounts[i]),
                         ),
-                        child: _buildAmountChip(amount),
+                        child: _buildAmountChip(chipAmounts[i]),
                       ),
                     );
-                    usedAmounts.add(amount);
                   }
                 }
-                
                 return chips;
               }(),
             ),
@@ -465,70 +452,29 @@ class _BudgetAllocationWidgetState extends State<BudgetAllocationWidget> {
             ),
           ),
 
-        // Score Display (only shown after submit)
-        if (isSubmitted)
+        // Feedback (only shown after submit — no score, just message)
+        if (isSubmitted && finalScore < 70)
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: finalScore >= 70
-                    ? const Color(0xFF6BCB9F).withOpacity(0.1)
-                    : const Color(0xFFF08A7E).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: finalScore >= 70
-                      ? const Color(0xFF6BCB9F)
-                      : const Color(0xFFF08A7E),
-                  width: 2,
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    isSubmitted = false;
+                    departmentResults.clear();
+                  });
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('TRY AGAIN'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3B82F6),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Your Score: $finalScore/100',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: finalScore >= 70
-                          ? const Color(0xFF6BCB9F)
-                          : const Color(0xFFF08A7E),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    finalScore >= 70
-                        ? 'Perfect! All budgets matched correctly!'
-                        : 'Some amounts don\'t match. Review the correct allocations above.',
-                    style: const TextStyle(fontSize: 14, color: Colors.black87),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (finalScore < 70) ...[
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            isSubmitted = false;
-                            departmentResults.clear();
-                            // Keep the allocations so user can see what they did wrong
-                          });
-                        },
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('TRY AGAIN'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3B82F6),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
               ),
             ),
           ),

@@ -23,14 +23,12 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
   final TextEditingController _nameController = TextEditingController();
   int _selectedLevel = 1;
   bool _isActive = false;
+  int _points = 100;
   
   // Venue & Items data (simplified JSON editing)
   final TextEditingController _venueJsonController = TextEditingController();
   final TextEditingController _itemsJsonController = TextEditingController();
   
-  // User assignments
-  List<Map<String, dynamic>> _allUsers = [];
-  List<String> _selectedUserIds = [];
   
   // Current config
   String? _currentConfigId;
@@ -75,8 +73,6 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
       // Load all configs
       await _refreshConfigList();
       
-      // Load all users
-      final users = await _service.loadAllUsers();
       
       // Load default venue and items from JSON as template
       final venue = await EndGameConfigLoader.loadActiveVenue();
@@ -85,7 +81,6 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
       const encoder = JsonEncoder.withIndent('  ');
       
       setState(() {
-        _allUsers = users;
         _currentVenue = venue;
         _itemsConfig = items;
         _venueJsonController.text = encoder.convert(venue.toJson());
@@ -107,7 +102,6 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
       final config = await _service.loadConfigById(id);
       if (config == null) return;
       
-      final assignedUsers = await _service.getAssignedUsers(id);
       
       const encoder = JsonEncoder.withIndent('  ');
       
@@ -116,9 +110,9 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
         _nameController.text = config['name'] ?? '';
         _selectedLevel = config['level'] ?? 1;
         _isActive = config['is_active'] ?? false;
+        _points = config['points'] ?? 100;
         _venueJsonController.text = encoder.convert(config['venue_data']);
         _itemsJsonController.text = encoder.convert(config['items_data']);
-        _selectedUserIds = assignedUsers;
         _currentVenue = VenueConfig.fromJson(config['venue_data']);
       });
       
@@ -153,10 +147,9 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
         venueData: venueData,
         itemsData: itemsData,
         isActive: _isActive,
+        points: _points,
       );
       
-      // Assign to users
-      await _service.assignToUsers(id, _selectedUserIds);
       
       // If set as active, update the active flag
       if (_isActive) {
@@ -196,7 +189,7 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
       _nameController.clear();
       _selectedLevel = 1;
       _isActive = false;
-      _selectedUserIds = [];
+      _points = 100;
       
       // Reset to empty venue
       _currentVenue = VenueConfig(
@@ -223,63 +216,55 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFFFDE7),
       appBar: AppBar(
-        title: const FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text('End Game Configuration'),
-        ),
+        backgroundColor: const Color(0xFFF4EF8B),
+        foregroundColor: const Color(0xFF1E293B),
+        elevation: 1,
+        title: const Text('End Game Configuration', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Color(0xFF1E293B))),
         leading: widget.onBack != null
-            ? IconButton(icon: const Icon(Icons.arrow_back), onPressed: widget.onBack)
+            ? IconButton(icon: const Icon(Icons.arrow_back, color: Color(0xFF1E293B)), onPressed: widget.onBack)
             : null,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
             onPressed: _newConfig,
+            icon: const Icon(Icons.add_circle_rounded, size: 28, color: Color(0xFF1E293B)),
             tooltip: 'New Configuration',
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B5CF6)))
           : LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth >= 900) {
-                  // Desktop / Tablet Landscape: 3-column layout
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Left panel: Config list
-                      SizedBox(
-                        width: 280,
-                        child: _buildConfigList(),
-                      ),
-                      
-                      // Middle panel: Form
-                      Expanded(
-                        child: _buildForm(),
-                      ),
-                      
-                      // Right panel: Preview  
-                      Expanded(
-                        child: _buildPreview(),
-                      ),
+                      SizedBox(width: 280, child: _buildConfigList()),
+                      Expanded(child: _buildForm()),
+                      Expanded(child: _buildPreview()),
                     ],
                   );
                 } else {
-                  // Mobile / Tablet Portrait: Tabbed layout
                   return Column(
                     children: [
                       Container(
-                        color: Colors.blue[700],
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+                        ),
                         child: TabBar(
                           controller: _tabController,
-                          indicatorColor: Colors.white,
-                          labelColor: Colors.white,
-                          unselectedLabelColor: Colors.white70,
+                          indicatorColor: const Color(0xFF1E293B),
+                          indicatorWeight: 3,
+                          labelColor: const Color(0xFF1E293B),
+                          unselectedLabelColor: Colors.grey[500],
+                          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                           tabs: const [
-                            Tab(icon: Icon(Icons.list), text: 'Configs'),
-                            Tab(icon: Icon(Icons.edit), text: 'Editor'),
-                            Tab(icon: Icon(Icons.visibility), text: 'Preview'),
+                            Tab(icon: Icon(Icons.list_alt_rounded, size: 20), text: 'Configs'),
+                            Tab(icon: Icon(Icons.edit_rounded, size: 20), text: 'Editor'),
+                            Tab(icon: Icon(Icons.visibility_rounded, size: 20), text: 'Preview'),
                           ],
                         ),
                       ),
@@ -303,89 +288,92 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
 
   Widget _buildConfigList() {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF9C4), // Yellow theme
-        border: Border(right: BorderSide(color: Colors.grey[300]!)),
-      ),
+      color: const Color(0xFFFFFDE7),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.blue[700],
-              border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+              color: const Color(0xFFF4EF8B).withOpacity(0.5),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.list, color: Colors.white),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Configurations',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
-                  ),
+                const Icon(Icons.folder_open_rounded, color: Color(0xFF8B5CF6), size: 20),
+                const SizedBox(width: 10),
+                const Text(
+                  'Saved Configs',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1E293B), fontSize: 15),
                 ),
               ],
             ),
           ),
           Expanded(
             child: _allConfigs.isEmpty
-                ? const Center(
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        'No configurations yet.\nClick + to create one.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.inbox_rounded, size: 48, color: Colors.grey[400]),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No configurations yet.\nTap + New to create one.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                          ),
+                        ],
                       ),
                     ),
                   )
-                : ListView.builder(
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: _allConfigs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 6),
                     itemBuilder: (context, index) {
                       final config = _allConfigs[index];
                       final isSelected = config['id'] == _currentConfigId;
-                      
+                      final isActive = config['is_active'] == true;
+
                       return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 10),
                         decoration: BoxDecoration(
-                          color: isSelected ? Colors.blue[50] : null,
-                          border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+                          color: isSelected ? const Color(0xFFF4EF8B).withOpacity(0.4) : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected ? const Color(0xFFE8D96F) : Colors.grey.shade200,
+                            width: isSelected ? 2 : 1,
+                          ),
                         ),
                         child: ListTile(
-                          selected: isSelected,
-                          selectedTileColor: Colors.blue[50],
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                           title: Text(
                             config['name'] ?? 'Unnamed',
                             style: TextStyle(
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: Colors.black, // Force black text
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: const Color(0xFF1E293B),
                             ),
                           ),
                           subtitle: Text(
                             'Level ${config['level']}',
-                            style: const TextStyle(color: Colors.black87), // Force black text
+                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
                           ),
-                          trailing: config['is_active'] == true
+                          trailing: isActive
                               ? Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: Colors.green,
-                                    borderRadius: BorderRadius.circular(12),
+                                    color: const Color(0xFF6BCB9F),
+                                    borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: const Text(
                                     'ACTIVE',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
                                   ),
                                 )
-                              : null,
+                              : Icon(Icons.chevron_right_rounded, color: Colors.grey[400], size: 20),
                           onTap: () => _loadConfig(config['id']),
                         ),
                       );
@@ -399,259 +387,316 @@ class _EndGameConfigScreenState extends State<EndGameConfigScreen> with SingleTi
 
   Widget _buildForm() {
     return Container(
-      color: const Color(0xFFFFF9C4), // Yellow theme
+      color: const Color(0xFFFFFDE7),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Text(
-                _currentConfigId == null ? 'New Configuration' : 'Edit Configuration',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const Divider(height: 32),
-              
-              // Basic Info Section
-              const Text(
-                'Basic Information',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              
-              // Name
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Configuration Name',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.label),
+              // ─── Basic Info Card ───────────────────────
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
                 ),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-            
-            // Level
-            DropdownButtonFormField<int>(
-              value: _selectedLevel,
-              decoration: const InputDecoration(
-                labelText: 'Level',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 1, child: Text('Level 1 (Easy)')),
-                DropdownMenuItem(value: 2, child: Text('Level 2 (Medium)')),
-                DropdownMenuItem(value: 3, child: Text('Level 3 (Hard)')),
-                DropdownMenuItem(value: 4, child: Text('Level 4 (Expert)')),
-              ],
-              onChanged: (v) => setState(() => _selectedLevel = v!),
-            ),
-            const SizedBox(height: 16),
-            
-            // Active checkbox
-            CheckboxListTile(
-              title: const Text('Set as Active Configuration'),
-              value: _isActive,
-              onChanged: (v) => setState(() => _isActive = v!),
-            ),
-            const SizedBox(height: 24),
-            
-              // Visual Editor
-            const Divider(),
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8.0,
-              runSpacing: 8.0,
-              children: [
-                const Text(
-                  'Venue & Items Configuration',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.settings_rounded, color: Color(0xFF8B5CF6), size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          _currentConfigId == null ? 'New Configuration' : 'Edit Configuration',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Name
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Configuration Name',
+                        labelStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        prefixIcon: const Icon(Icons.label_rounded, size: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 2),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Level
+                    DropdownButtonFormField<int>(
+                      value: _selectedLevel,
+                      decoration: InputDecoration(
+                        labelText: 'Level',
+                        labelStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('Level 1')),
+                        DropdownMenuItem(value: 2, child: Text('Level 2')),
+                        DropdownMenuItem(value: 3, child: Text('Level 3')),
+                        DropdownMenuItem(value: 4, child: Text('Level 4')),
+                      ],
+                      onChanged: (v) => setState(() => _selectedLevel = v!),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Points
+                    TextFormField(
+                      initialValue: _points.toString(),
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Points',
+                        labelStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        prefixIcon: const Icon(Icons.star_rounded, size: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF1E293B), width: 2),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        helperText: 'Total points for this end game',
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Required';
+                        final n = int.tryParse(v);
+                        if (n == null || n <= 0) return 'Must be a positive number';
+                        return null;
+                      },
+                      onChanged: (v) {
+                        final n = int.tryParse(v);
+                        if (n != null && n > 0) _points = n;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Active toggle
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _isActive ? const Color(0xFF6BCB9F).withOpacity(0.1) : Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _isActive ? const Color(0xFF6BCB9F) : Colors.grey.shade300),
+                      ),
+                      child: SwitchListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          'Active Configuration',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: _isActive ? const Color(0xFF6BCB9F) : Colors.grey[600],
+                          ),
+                        ),
+                        value: _isActive,
+                        activeColor: const Color(0xFF6BCB9F),
+                        onChanged: (v) => setState(() => _isActive = v),
+                      ),
+                    ),
+                  ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: _showAddElementDialog,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Element', style: TextStyle(fontSize: 12)),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ─── Visual Editor Card ────────────────────
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.map_rounded, color: Color(0xFFE8D96F), size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Venue & Items',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: _showAddElementDialog,
+                          icon: const Icon(Icons.add_rounded, size: 16),
+                          label: const Text('Add Element', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E293B),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (_currentVenue != null)
+                      SizedBox(
+                        height: 950,
+                        child: EndGameVisualEditor(
+                          initialVenue: _currentVenue!,
+                          itemConfig: _itemsConfig,
+                          onAddCustomZone: () => _showAddElementDialog(initialType: 'zone'),
+                          onUpdate: (updatedVenue, updatedItems) {
+                            _currentVenue = updatedVenue;
+                            const encoder = JsonEncoder.withIndent('  ');
+                            _venueJsonController.text = encoder.convert(updatedVenue.toJson());
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Save button
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _saveConfig,
+                  icon: _isSaving
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.save_rounded, size: 20),
+                  label: Text(
+                    _isSaving ? 'Saving...' : 'Save Configuration',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
+                    backgroundColor: const Color(0xFF1E293B),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    minimumSize: Size.zero, 
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            if (_currentVenue != null)
-              SizedBox(
-                height: 950, // Increased height to match taller visual editor
-                child: EndGameVisualEditor(
-                  initialVenue: _currentVenue!,
-                  itemConfig: _itemsConfig,
-                  onAddCustomZone: () => _showAddElementDialog(initialType: 'zone'),
-                  onUpdate: (updatedVenue, updatedItems) {
-                     // We update the local state. updatedItems is List<ItemConfig>.
-                     // We need to sync this back to _itemsConfig if items order changed?
-                     // Currently Editor only changes Venue (Placement).
-                     // But if we wanted to re-order items, we might need this.
-                     
-                     _currentVenue = updatedVenue;
-                     const encoder = JsonEncoder.withIndent('  ');
-                     _venueJsonController.text = encoder.convert(updatedVenue.toJson());
-                  },
-                ),
               ),
-            const SizedBox(height: 24),
-
-            // User Assignment Section
-            const Divider(),
-            const Text(
-              'User Assignments',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const Text(
-              'Select which users should see this End Game configuration',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              height: 200,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: ListView.builder(
-                itemCount: _allUsers.length,
-                itemBuilder: (context, index) {
-                  final user = _allUsers[index];
-                  final userId = user['user_id'];
-                  final isSelected = _selectedUserIds.contains(userId);
-                  
-                  return CheckboxListTile(
-                    title: Text(user['full_name'] ?? user['email'] ?? 'Unknown'),
-                    subtitle: Text(user['email'] ?? ''),
-                    value: isSelected,
-                    onChanged: (v) {
-                      setState(() {
-                        if (v!) {
-                          _selectedUserIds.add(userId);
-                        } else {
-                          _selectedUserIds.remove(userId);
-                        }
-                      });
-                    },
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 32),
-            
-            // Save button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _saveConfig,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                ),
-                child: _isSaving
-                    ? const CircularProgressIndicator()
-                    : const Text('Save Configuration'),
-              ),
-            ),
-          ],
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
   Widget _buildPreview() {
     return Container(
-      color: Colors.grey[50],
+      color: const Color(0xFFFFFDE7),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.blue[700],
-              border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+              color: const Color(0xFFF4EF8B).withOpacity(0.5),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
             ),
             child: const Row(
               children: [
-                Icon(Icons.visibility, color: Colors.white),
-                SizedBox(width: 8),
-                Text(
-                  'Venue Preview',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                Icon(Icons.visibility_rounded, color: Color(0xFF8B5CF6), size: 20),
+                SizedBox(width: 10),
+                Text('Venue Preview', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
               ],
             ),
           ),
           Expanded(
             child: _currentVenue == null
-                ? const Center(
-                    child: Text(
-                      'No preview available',
-                      style: TextStyle(color: Colors.grey),
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.preview_rounded, size: 48, color: Colors.grey[400]),
+                        const SizedBox(height: 12),
+                        Text('No preview available', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                      ],
                     ),
                   )
                 : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.black, width: 2),
-                    ),
-                    child: AspectRatio(
-                      aspectRatio: 1.0,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return Stack(
-                            children: [
-                              // Background
-                              Container(color: Colors.white),
-                              
-                              // Zones
-                              ..._currentVenue!.zones.map((zone) {
-                                final left = zone.x * constraints.maxWidth;
-                                final top = zone.y * constraints.maxHeight;
-                                final width = zone.width * constraints.maxWidth;
-                                final height = zone.height * constraints.maxHeight;
-                                
-                                return Positioned(
-                                  left: left,
-                                  top: top,
-                                  width: width,
-                                  height: height,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: zone.getColor().withOpacity(0.3),
-                                      border: Border.all(color: Colors.black, width: 1),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        zone.label,
-                                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                    padding: const EdgeInsets.all(16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300, width: 2),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: AspectRatio(
+                          aspectRatio: 1.0,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              return Stack(
+                                children: [
+                                  Container(color: Colors.white),
+                                  ..._currentVenue!.zones.map((zone) {
+                                    return Positioned(
+                                      left: zone.x * constraints.maxWidth,
+                                      top: zone.y * constraints.maxHeight,
+                                      width: zone.width * constraints.maxWidth,
+                                      height: zone.height * constraints.maxHeight,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: zone.getColor().withOpacity(0.3),
+                                          border: Border.all(color: zone.getColor().withOpacity(0.6), width: 1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            zone.label,
+                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: zone.getColor()),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ],
-                          );
-                        },
+                                    );
+                                  }),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
           ),
         ],
       ),

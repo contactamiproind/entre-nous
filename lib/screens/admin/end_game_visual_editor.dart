@@ -202,63 +202,64 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
     _notifyUpdate();
   }
 
+  Widget _iconBtn(IconData icon, VoidCallback? onPressed, String tooltip) {
+    return IconButton(
+      icon: Icon(icon, color: onPressed == null ? Colors.grey[400] : const Color(0xFF1E293B), size: 20),
+      onPressed: onPressed,
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      splashRadius: 18,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         // Toolbar
         Container(
-          padding: const EdgeInsets.all(8),
-          color: const Color(0xFFFFF9C4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+          ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                IconButton(
-                  icon: Icon(Icons.undo, color: _undoStack.isEmpty ? Colors.grey : Colors.black),
-                  onPressed: _undoStack.isEmpty ? null : _undo,
-                  tooltip: 'Undo',
-                ),
-                IconButton(
-                  icon: Icon(Icons.redo, color: _redoStack.isEmpty ? Colors.grey : Colors.black),
-                  onPressed: _redoStack.isEmpty ? null : _redo,
-                  tooltip: 'Redo',
-                ),
-                const SizedBox(width: 16),
-                const Text('Add Zone:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                _ToolButton(
-                  label: 'Stage',
-                  color: Colors.purple[100]!,
-                  onTap: () => _addZone('STAGE', const Color(0xFF9C27B0)),
-                ),
-                _ToolButton(
-                  label: 'Lawn',
-                  color: Colors.green[100]!,
-                  onTap: () => _addZone('LAWN', const Color(0xFF4CAF50)),
-                ),
-                _ToolButton(
-                  label: 'Bar',
-                  color: Colors.orange[100]!,
-                  onTap: () => _addZone('BAR', const Color(0xFFFF9800)),
-                ),
-                _ToolButton(
-                  label: 'Buffet',
-                  color: Colors.blue[100]!,
-                  onTap: () => _addZone('BUFFET', const Color(0xFF2196F3)),
-                ),
-                _ToolButton(
-                  label: 'Custom',
-                  color: Colors.grey[300]!,
-                  onTap: () => widget.onAddCustomZone?.call(),
-                ),
-                const SizedBox(width: 24),
-                if (_selectedZone != null || _selectedPlacement != null)
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: _deleteSelected,
-                    tooltip: 'Delete Selected',
+                _iconBtn(Icons.undo_rounded, _undoStack.isEmpty ? null : _undo, 'Undo'),
+                _iconBtn(Icons.redo_rounded, _redoStack.isEmpty ? null : _redo, 'Redo'),
+                Container(width: 1, height: 24, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 8)),
+                Text('Zones:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.grey[700])),
+                const SizedBox(width: 6),
+                _ToolButton(label: 'Stage', color: const Color(0xFFE1BEE7), onTap: () => _addZone('STAGE', const Color(0xFF9C27B0))),
+                _ToolButton(label: 'Lawn', color: const Color(0xFFC8E6C9), onTap: () => _addZone('LAWN', const Color(0xFF4CAF50))),
+                _ToolButton(label: 'Bar', color: const Color(0xFFFFE0B2), onTap: () => _addZone('BAR', const Color(0xFFFF9800))),
+                _ToolButton(label: 'Buffet', color: const Color(0xFFBBDEFB), onTap: () => _addZone('BUFFET', const Color(0xFF2196F3))),
+                _ToolButton(label: 'Custom', color: Colors.grey.shade200, onTap: () => widget.onAddCustomZone?.call()),
+                if (_selectedZone != null || _selectedPlacement != null) ...[
+                  Container(width: 1, height: 24, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 8)),
+                  InkWell(
+                    onTap: _deleteSelected,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF08A7E).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFF08A7E).withOpacity(0.3)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.delete_rounded, color: Color(0xFFF08A7E), size: 16),
+                          SizedBox(width: 4),
+                          Text('Delete', style: TextStyle(color: Color(0xFFF08A7E), fontSize: 11, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
                   ),
+                ],
               ],
             ),
           ),
@@ -592,42 +593,43 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
 
   Widget _buildZoneWidget(ZoneConfig zone, BoxConstraints constraints) {
     final isSelected = _selectedZone?.key == zone.key;
-    
+    final zoneColor = zone.getColor();
+
     return Positioned(
       key: ValueKey('zone_${zone.key}'),
       left: zone.x * constraints.maxWidth,
       top: zone.y * constraints.maxHeight,
       width: zone.width * constraints.maxWidth,
       height: zone.height * constraints.maxHeight,
-      child: GestureDetector(
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        onTap: () {
+        onPointerDown: (_) {
+          _saveForUndo();
           setState(() {
             _selectedZone = zone;
             _selectedPlacement = null;
           });
         },
-        onPanStart: (_) {
-           _saveForUndo();
-           setState(() {
-            _selectedZone = zone;
-            _selectedPlacement = null;
-           });
-        },
-        onPanEnd: (_) {
-           _notifyUpdate();
-        },
-        onPanUpdate: (details) {
-          setState(() {
-             double dx = details.delta.dx / constraints.maxWidth;
-             double dy = details.delta.dy / constraints.maxHeight;
-             
-             final index = _venue.zones.indexWhere((z) => z.key == zone.key);
-             if (index != -1) {
+        onPointerUp: (_) => _notifyUpdate(),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            setState(() {
+              _selectedZone = zone;
+              _selectedPlacement = null;
+            });
+          },
+          onPanUpdate: (details) {
+            setState(() {
+              double dx = details.delta.dx / constraints.maxWidth;
+              double dy = details.delta.dy / constraints.maxHeight;
+
+              final index = _venue.zones.indexWhere((z) => z.key == zone.key);
+              if (index != -1) {
                 final current = _venue.zones[index];
                 final newX = (current.x + dx).clamp(0.0, 1.0 - current.width);
                 final newY = (current.y + dy).clamp(0.0, 1.0 - current.height);
-                
+
                 _venue.zones[index] = ZoneConfig(
                   key: current.key,
                   label: current.label,
@@ -637,23 +639,40 @@ class _EndGameVisualEditorState extends State<EndGameVisualEditor> {
                   height: current.height,
                   color: current.color,
                 );
-                
+
                 _selectedZone = _venue.zones[index];
-             }
-          });
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            color: Color(int.parse(zone.color.substring(1), radix: 16)).withOpacity(0.5),
-            border: Border.all(
-              color: isSelected ? Colors.blue : Colors.black,
-              width: isSelected ? 2 : 1,
+              }
+            });
+          },
+          onPanEnd: (_) => _notifyUpdate(),
+          child: Container(
+            decoration: BoxDecoration(
+              color: zoneColor.withOpacity(0.35),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isSelected ? const Color(0xFF1E293B) : zoneColor.withOpacity(0.7),
+                width: isSelected ? 3 : 1.5,
+              ),
             ),
-          ),
-          child: Center(
-            child: Text(
-              zone.label,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+            child: Stack(
+              children: [
+                Center(
+                  child: Text(
+                    zone.label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                      color: zoneColor.withOpacity(0.9),
+                    ),
+                  ),
+                ),
+                if (isSelected)
+                  const Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Icon(Icons.open_with_rounded, size: 14, color: Color(0xFF8B5CF6)),
+                  ),
+              ],
             ),
           ),
         ),

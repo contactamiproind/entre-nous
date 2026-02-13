@@ -5,7 +5,6 @@ import 'game_models.dart';
 import '../../models/end_game_config.dart';
 import '../../services/end_game_config_loader.dart';
 import '../../services/end_game_service.dart';
-import '../../services/progress_service.dart';
 
 class EndGameScreen extends StatefulWidget {
   const EndGameScreen({super.key});
@@ -16,8 +15,8 @@ class EndGameScreen extends StatefulWidget {
 
 class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateMixin {
   final EndGameService _endGameService = EndGameService();
-  final ProgressService _progressService = ProgressService();
   String? _activeEndGameId;
+  int _maxPoints = 100; // Loaded from config
 
   // Game State
   final List<PlacedObject> _placedObjects = [];
@@ -101,6 +100,7 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
         final config = await _endGameService.getActiveConfigForUser(userId);
         if (config != null) {
           _activeEndGameId = config['id'];
+          _maxPoints = (config['points'] as int?) ?? 100;
           if (config['venue_data'] != null) {
              venue = VenueConfig.fromJson(config['venue_data']);
           }
@@ -143,25 +143,12 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null && _activeEndGameId != null) {
        try {
-         // 1. Mark End Game as completed
+         // Mark End Game as completed with score
+         // Level promotion is NOT automatic — admin reviews and unlocks next level
          await _endGameService.markAsCompleted(user.id, _activeEndGameId!, score);
-         debugPrint('✅ End Game marked as completed!');
-         
-         // 2. Attempt Level Promotion
-         // We must promote EACH restricted department individually because
-         // each department has its own 'current_level' in the usr_dept table.
-         
-         final userDepts = await Supabase.instance.client
-             .from('usr_dept')
-             .select('dept_id')
-             .eq('user_id', user.id);
-             
-         for (var row in userDepts) {
-           await _progressService.attemptLevelPromotion(user.id, row['dept_id']);
-         }
-         
+         debugPrint('✅ End Game marked as completed with score $score. Awaiting admin review.');
        } catch (e) {
-         debugPrint('❌ Error marking game complete/promoting: $e');
+         debugPrint('❌ Error marking game complete: $e');
        }
     }
   }
@@ -526,17 +513,17 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
     // 1. Calculate Event Readiness (based on config total)
     int totalItems = _venueConfig?.placements.length ?? 40;
     if (totalItems == 0) totalItems = 1; // Prevent division by zero
-    final readinessScore = (_placedObjects.length / totalItems * 100).clamp(0, 100).toInt();
+    final readinessPercent = (_placedObjects.length / totalItems * 100).clamp(0, 100).toInt();
 
     // 2. Normalize Placement Score (Exact Match)
     // Max Placement Score = totalItems * 10.
-    // Normalized = (current / max) * 100
+    // Normalized to percentage first, then scale to _maxPoints
     int maxPlacementScore = totalItems * 10;
     if (maxPlacementScore == 0) maxPlacementScore = 1;
-    final normalizedPlacementScore = ((_placementScore / maxPlacementScore) * 100).clamp(0, 100).toInt();
+    final placementPercent = ((_placementScore / maxPlacementScore) * 100).clamp(0, 100).toInt();
     
-    // 3. Calculate Final Score (Based ONLY on Exact Match as requested)
-    final finalScore = normalizedPlacementScore;
+    // 3. Calculate Final Score scaled to config points
+    final finalScore = (placementPercent * _maxPoints / 100).round();
 
     showDialog(
       context: context,
@@ -564,8 +551,8 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
              // _buildSummaryRow('Safety', _safetyScore.toInt()),
              // _buildSummaryRow('Budget Control', _budgetScore.toInt()),
              // _buildSummaryRow('Aesthetics', _aestheticsScore.toInt()),
-             _buildSummaryRow('Exact Match', normalizedPlacementScore), // Display normalized score (0-100)
-             _buildSummaryRow('Event Readiness', readinessScore),
+             _buildSummaryRow('Exact Match', '$placementPercent%'),
+             _buildSummaryRow('Event Readiness', '$readinessPercent%'),
              const Divider(color: Colors.grey),
              Container(
                margin: const EdgeInsets.only(top: 10),
@@ -583,7 +570,7 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerRight,
-                        child: Text('$finalScore/100', style: const TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.w900)),
+                        child: Text('$finalScore/$_maxPoints', style: const TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.w900)),
                       ),
                     ),
                   ],
@@ -600,32 +587,24 @@ class _EndGameScreenState extends State<EndGameScreen> with TickerProviderStateM
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: () async {
-                if (finalScore == 100) {
-                  // Save navigator reference before closing dialog
-                  final navigator = Navigator.of(context);
-                  // Close dialog
-                  navigator.pop();
-                  // Mark as completed and wait for promotion
-                  await _markGameAsCompleted(finalScore);
-                  // Return to dashboard using saved navigator reference
-                  if (mounted) {
-                    navigator.pop(true); // Pass true to indicate refresh needed
-                  }
-                } else {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (c) => const EndGameScreen())
-                  );
+                final navigator = Navigator.of(context);
+                // Close dialog
+                navigator.pop();
+                // Mark as completed and wait for promotion
+                await _markGameAsCompleted(finalScore);
+                // Return to dashboard
+                if (mounted) {
+                  navigator.pop(true);
                 }
               },
-              child: Text(finalScore == 100 ? 'RETURN TO DASHBOARD' : 'PLAY AGAIN', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              child: const Text('DONE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           )
         ],
       ),
     );
   }
 
-  Widget _buildSummaryRow(String label, int value) {
+  Widget _buildSummaryRow(String label, String value) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),

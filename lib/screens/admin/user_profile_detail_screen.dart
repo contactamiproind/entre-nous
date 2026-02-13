@@ -20,6 +20,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
   Map<String, dynamic>? _userProfile;
   List<Map<String, dynamic>> _pathwayAssignments = [];
   List<Map<String, dynamic>> _availablePathways = [];
+  List<Map<String, dynamic>> _endGameAssignments = [];
 
   @override
   void initState() {
@@ -86,10 +87,24 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
       // A single usr_dept may have questions at multiple levels
       final expandedAssignments = await _expandAssignmentsByLevel(assignmentsResponse);
 
+      // Load end game assignments for this user
+      List<Map<String, dynamic>> endGameAssignments = [];
+      try {
+        final egResponse = await Supabase.instance.client
+            .from('end_game_assignments')
+            .select('*, end_game_configs(*)')
+            .eq('user_id', widget.userId);
+        endGameAssignments = List<Map<String, dynamic>>.from(egResponse);
+        debugPrint('End game assignments: ${endGameAssignments.length}');
+      } catch (e) {
+        debugPrint('Error loading end game assignments: $e');
+      }
+
       setState(() {
         _userProfile = profileResponse;
         _pathwayAssignments = expandedAssignments;
         _availablePathways = pathwaysResponse;
+        _endGameAssignments = endGameAssignments;
         _isLoading = false;
       });
       
@@ -703,6 +718,213 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
     );
   }
 
+  // ─── END GAME ASSIGNMENT METHODS ─────────────────────────
+
+  void _showAssignEndGameDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => _AssignEndGameDialog(
+        userId: widget.userId,
+        existingAssignments: _endGameAssignments,
+        onAssigned: () {
+          Navigator.pop(dialogContext);
+          _loadUserData();
+        },
+      ),
+    );
+  }
+
+  Future<void> _removeEndGameAssignment(Map<String, dynamic> assignment) async {
+    final configName = assignment['end_game_configs']?['name'] ?? 'this end game';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove End Game'),
+        content: Text('Remove "$configName" from this user?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await Supabase.instance.client
+            .from('end_game_assignments')
+            .delete()
+            .eq('user_id', widget.userId)
+            .eq('end_game_id', assignment['end_game_id']);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('End game assignment removed'), backgroundColor: Colors.green),
+          );
+        }
+        _loadUserData();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _resetEndGameAssignment(Map<String, dynamic> assignment) async {
+    final configName = assignment['end_game_configs']?['name'] ?? 'this end game';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset End Game'),
+        content: Text('Reset progress for "$configName"? The user will need to replay it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await Supabase.instance.client
+            .from('end_game_assignments')
+            .update({
+              'completed_at': null,
+              'score': null,
+            })
+            .eq('user_id', widget.userId)
+            .eq('end_game_id', assignment['end_game_id']);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('End game progress reset'), backgroundColor: Colors.green),
+          );
+        }
+        _loadUserData();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  /// Build an end game assignment card for display inside a level section
+  Widget _buildEndGameCard(Map<String, dynamic> assignment, bool isLevelCompleted, bool isLevelUnlocked) {
+    final config = assignment['end_game_configs'] as Map<String, dynamic>?;
+    final name = config?['name'] ?? 'Unknown End Game';
+    final configPoints = config?['points'] as int? ?? 100;
+    final isCompleted = assignment['completed_at'] != null;
+    final score = assignment['score'] as int?;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+        color: const Color(0xFFFFF9E6).withOpacity(0.3),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.sports_esports_rounded, size: 20, color: Colors.deepPurple.shade400),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text(
+                      isCompleted && score != null ? '$score / $configPoints pts' : '$configPoints pts',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              if (isCompleted)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade300),
+                  ),
+                  child: const Text(
+                    'DONE',
+                    style: TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.purple.shade300),
+                  ),
+                  child: const Text(
+                    'PENDING',
+                    style: TextStyle(color: Colors.purple, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (!isLevelCompleted)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (isCompleted && isLevelUnlocked)
+                  InkWell(
+                    onTap: () => _resetEndGameAssignment(assignment),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.restart_alt, size: 14, color: Colors.orange.shade700),
+                          const SizedBox(width: 3),
+                          Text('Reset', style: TextStyle(fontSize: 11, color: Colors.orange.shade700)),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (isCompleted && isLevelUnlocked) const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => _removeEndGameAssignment(assignment),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.delete_outline, size: 14, color: Colors.red.shade400),
+                        const SizedBox(width: 3),
+                        Text('Remove', style: TextStyle(fontSize: 11, color: Colors.red.shade400)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   void _showAssignDepartmentDialog() {
     showDialog(
       context: context,
@@ -913,7 +1135,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                             children: [
                               const Expanded(
                                 child: Text(
-                                  'Departments',
+                                  'Assignments',
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.bold,
@@ -921,14 +1143,35 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                                   ),
                                 ),
                               ),
-                              SizedBox(
-                                height: 28,
-                                width: 28,
-                                child: FloatingActionButton(
-                                  onPressed: _showAssignDepartmentDialog,
-                                  backgroundColor: Colors.green,
-                                  elevation: 1,
-                                  child: const Icon(Icons.add, color: Colors.white, size: 16),
+                              // Assign End Game
+                              Tooltip(
+                                message: 'Assign End Game',
+                                child: SizedBox(
+                                  height: 28,
+                                  width: 28,
+                                  child: FloatingActionButton(
+                                    heroTag: 'assign_endgame',
+                                    onPressed: _showAssignEndGameDialog,
+                                    backgroundColor: Colors.deepPurple,
+                                    elevation: 1,
+                                    child: const Icon(Icons.sports_esports, color: Colors.white, size: 14),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Assign Department
+                              Tooltip(
+                                message: 'Assign Department',
+                                child: SizedBox(
+                                  height: 28,
+                                  width: 28,
+                                  child: FloatingActionButton(
+                                    heroTag: 'assign_dept',
+                                    onPressed: _showAssignDepartmentDialog,
+                                    backgroundColor: Colors.green,
+                                    elevation: 1,
+                                    child: const Icon(Icons.add, color: Colors.white, size: 16),
+                                  ),
                                 ),
                               ),
                             ],
@@ -1039,8 +1282,11 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                                         ],
                                       ),
                                     ),
-                                    // Assignments under this level
-                                    if (levelAssignments.isEmpty && isLevelUnlocked)
+                                    // Department assignments under this level
+                                    if (levelAssignments.isEmpty && _endGameAssignments.where((eg) {
+                                      final config = eg['end_game_configs'] as Map<String, dynamic>?;
+                                      return (config?['level'] as int? ?? 1) == level;
+                                    }).isEmpty && isLevelUnlocked)
                                       Padding(
                                         padding: const EdgeInsets.all(12),
                                         child: Text(
@@ -1057,6 +1303,7 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                                         ),
                                       )
                                     else
+                                      // Department courses first
                                       ...levelAssignments.map((assignment) {
                                         final dept = assignment['departments'];
                                         final deptName = _buildDeptDisplayName(dept);
@@ -1198,6 +1445,12 @@ class _UserProfileDetailScreenState extends State<UserProfileDetailScreen> {
                                           ),
                                         );
                                       }),
+                                    // End game assignments AFTER department courses
+                                    if (isLevelUnlocked)
+                                      ..._endGameAssignments.where((eg) {
+                                        final config = eg['end_game_configs'] as Map<String, dynamic>?;
+                                        return (config?['level'] as int? ?? 1) == level;
+                                      }).map((eg) => _buildEndGameCard(eg, isLevelCompleted, isLevelUnlocked)),
                                   ],
                                 ),
                               );
@@ -1615,6 +1868,291 @@ class _AssignDepartmentDialogState extends State<_AssignDepartmentDialog> {
           child: _isAssigning
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Text('Assign'),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================
+// ASSIGN END GAME DIALOG
+// ============================================
+class _AssignEndGameDialog extends StatefulWidget {
+  final String userId;
+  final List<Map<String, dynamic>> existingAssignments;
+  final VoidCallback onAssigned;
+
+  const _AssignEndGameDialog({
+    required this.userId,
+    required this.existingAssignments,
+    required this.onAssigned,
+  });
+
+  @override
+  State<_AssignEndGameDialog> createState() => _AssignEndGameDialogState();
+}
+
+class _AssignEndGameDialogState extends State<_AssignEndGameDialog> {
+  final _supabase = Supabase.instance.client;
+
+  int? _selectedLevel;
+  List<Map<String, dynamic>> _availableConfigs = [];
+  bool _isLoadingConfigs = false;
+  bool _isAssigning = false;
+  int _maxCompletedLevel = 0;
+  bool _isLoadingProgress = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProgress();
+  }
+
+  Future<void> _loadUserProgress() async {
+    try {
+      final response = await _supabase
+          .from('usr_dept')
+          .select('completed_levels')
+          .eq('user_id', widget.userId);
+
+      int maxCompleted = 0;
+      for (final record in (response as List)) {
+        final cl = record['completed_levels'] as int? ?? 0;
+        if (cl > maxCompleted) maxCompleted = cl;
+      }
+      setState(() {
+        _maxCompletedLevel = maxCompleted;
+        _isLoadingProgress = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading user progress: $e');
+      setState(() => _isLoadingProgress = false);
+    }
+  }
+
+  Future<void> _onLevelSelected(int level) async {
+    setState(() {
+      _selectedLevel = level;
+      _availableConfigs = [];
+      _isLoadingConfigs = true;
+    });
+
+    try {
+      final configs = await _supabase
+          .from('end_game_configs')
+          .select('id, name, level, is_active, points')
+          .eq('level', level)
+          .order('name');
+
+      setState(() {
+        _availableConfigs = List<Map<String, dynamic>>.from(configs);
+        _isLoadingConfigs = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading end game configs: $e');
+      setState(() => _isLoadingConfigs = false);
+    }
+  }
+
+  bool _isAlreadyAssigned(String configId) {
+    return widget.existingAssignments.any((a) => a['end_game_id'] == configId);
+  }
+
+  Future<void> _assignConfig(Map<String, dynamic> config) async {
+    setState(() => _isAssigning = true);
+
+    try {
+      await _supabase.from('end_game_assignments').upsert({
+        'user_id': widget.userId,
+        'end_game_id': config['id'],
+        'assigned_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'user_id,end_game_id');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Assigned "${config['name']}" successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      widget.onAssigned();
+    } catch (e) {
+      debugPrint('Error assigning end game: $e');
+      setState(() => _isAssigning = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.sports_esports_rounded, color: Colors.deepPurple, size: 22),
+          SizedBox(width: 8),
+          Text('Assign End Game'),
+        ],
+      ),
+      content: SizedBox(
+        width: 360,
+        child: _isLoadingProgress
+            ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+            : SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Step 1: Level selection (locked based on progression)
+              const Text('Select Level', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 6),
+              ...List.generate(4, (index) {
+                final level = index + 1;
+                final nextAssignableLevel = _maxCompletedLevel + 1;
+                final isEnabled = level <= nextAssignableLevel;
+                final isSelected = _selectedLevel == level;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Material(
+                    color: isSelected
+                        ? const Color(0xFF1A2F4B)
+                        : isEnabled
+                            ? Colors.white
+                            : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: isEnabled ? () => _onLevelSelected(level) : null,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: isSelected
+                                ? const Color(0xFF1A2F4B)
+                                : isEnabled
+                                    ? Colors.grey[400]!
+                                    : Colors.grey[300]!,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                              size: 20,
+                              color: isSelected
+                                  ? Colors.white
+                                  : isEnabled
+                                      ? const Color(0xFF1A2F4B)
+                                      : Colors.grey[400],
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Level $level',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: isSelected
+                                    ? Colors.white
+                                    : isEnabled
+                                        ? Colors.black87
+                                        : Colors.grey[400],
+                              ),
+                            ),
+                            const Spacer(),
+                            if (!isEnabled)
+                              Icon(Icons.lock, size: 16, color: Colors.grey[400]),
+                            if (level <= _maxCompletedLevel)
+                              const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 16),
+
+              // Step 2: Available configs
+              const Text('Available End Games', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 6),
+              if (_selectedLevel == null)
+                const Text('Select a level first', style: TextStyle(color: Colors.grey, fontSize: 12))
+              else if (_isLoadingConfigs)
+                const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+              else if (_availableConfigs.isEmpty)
+                const Text('No end game configs at this level', style: TextStyle(color: Colors.orange, fontSize: 12))
+              else
+                ...(_availableConfigs.map((config) {
+                  final alreadyAssigned = _isAlreadyAssigned(config['id']);
+                  final isActive = config['is_active'] == true;
+                  final pts = config['points'] as int? ?? 100;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    decoration: BoxDecoration(
+                      color: alreadyAssigned ? Colors.grey.shade100 : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: alreadyAssigned ? Colors.grey.shade300 : Colors.deepPurple.shade200,
+                      ),
+                    ),
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      leading: Icon(
+                        Icons.sports_esports_rounded,
+                        color: alreadyAssigned ? Colors.grey : Colors.deepPurple,
+                        size: 22,
+                      ),
+                      title: Text(
+                        config['name'] ?? 'Unnamed',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: alreadyAssigned ? Colors.grey : const Color(0xFF1A2F4B),
+                        ),
+                      ),
+                      subtitle: Row(
+                        children: [
+                          Text('$pts pts', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                          const SizedBox(width: 6),
+                          if (isActive)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('ACTIVE', style: TextStyle(fontSize: 8, color: Colors.green, fontWeight: FontWeight.bold)),
+                            ),
+                          if (alreadyAssigned)
+                            const Text('Already assigned', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
+                      trailing: alreadyAssigned
+                          ? const Icon(Icons.check_circle, color: Colors.green, size: 20)
+                          : _isAssigning
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              : IconButton(
+                                  icon: const Icon(Icons.add_circle_rounded, color: Colors.deepPurple),
+                                  onPressed: () => _assignConfig(config),
+                                  tooltip: 'Assign',
+                                ),
+                    ),
+                  );
+                })),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
         ),
       ],
     );
